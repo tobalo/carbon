@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  documentTransactionTypeEnum,
+  EnumValue
+} from "@carbon/database/schema";
 
 import type { getDocumentLabels, getDocuments } from "./documents.service";
 
@@ -11,4 +14,4 @@ export type DocumentLabel = NonNullable<
 >[number];
 
 export type DocumentTransactionType =
-  Database["public"]["Enums"]["documentTransactionType"];
+  EnumValue<typeof documentTransactionTypeEnum>;

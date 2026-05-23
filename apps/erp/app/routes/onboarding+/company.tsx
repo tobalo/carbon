@@ -1,6 +1,6 @@
 import { assertIsPost, CarbonEdition } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { setCompanyId } from "@carbon/auth/company.server";
 import { updateCompanySession } from "@carbon/auth/session.server";
 import { ValidatedForm, validationError, validator } from "@carbon/form";
@@ -68,11 +68,10 @@ export async function action({ request }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  const serviceRole = getCarbonServiceRole();
-
   const { next, ...d } = validation.data;
 
   let companyId: string | undefined;
+  let companyLookupClient = client;
 
   const companies = await getCompanies(client, userId);
   const company = companies?.data?.[0];
@@ -81,14 +80,20 @@ export async function action({ request }: ActionFunctionArgs) {
   const location = locations?.data?.[0];
 
   if (company && location) {
+    if (!company.id) {
+      throw new Error("Fatal: failed to get company ID");
+    }
+    const existingCompanyId = company.id;
+    companyId = existingCompanyId;
     const [companyUpdate, locationUpdate] = await Promise.all([
-      updateCompany(serviceRole, company.id!, {
+      updateCompany(client, existingCompanyId, {
         ...d,
         updatedBy: userId
       }),
-      upsertLocation(serviceRole, {
+      upsertLocation(client, {
         ...location,
         ...d,
+        companyId: existingCompanyId,
         timezone: getLocalTimeZone(),
         updatedBy: userId
       })
@@ -102,9 +107,11 @@ export async function action({ request }: ActionFunctionArgs) {
       throw new Error("Fatal: failed to update location");
     }
   } else {
+    const serviceClient = getCarbonServiceClient();
+    companyLookupClient = serviceClient;
     if (!companyId) {
       const [companyInsert] = await Promise.all([
-        insertCompany(serviceRole, d)
+        insertCompany(serviceClient, d)
       ]);
       if (companyInsert.error) {
         console.error(companyInsert.error);
@@ -118,7 +125,7 @@ export async function action({ request }: ActionFunctionArgs) {
       throw new Error("Fatal: failed to get company ID");
     }
 
-    const seed = await seedCompany(serviceRole, companyId, userId);
+    const seed = await seedCompany(serviceClient, companyId, userId);
     if (seed.error) {
       console.error(seed.error);
       throw new Error("Fatal: failed to seed company");
@@ -137,7 +144,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     // TODO: move all of this to transaction
     const [locationInsert] = await Promise.all([
-      upsertLocation(serviceRole, {
+      upsertLocation(serviceClient, {
         ...locationData,
         name: "Headquarters",
         companyId,
@@ -157,7 +164,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const [job] = await Promise.all([
-      insertEmployeeJob(serviceRole, {
+      insertEmployeeJob(serviceClient, {
         id: userId,
         companyId,
         locationId
@@ -170,7 +177,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
-  const { data: companyRecord } = await serviceRole
+  const { data: companyRecord } = await companyLookupClient
     .from("company")
     .select("companyGroupId")
     .eq("id", companyId!)

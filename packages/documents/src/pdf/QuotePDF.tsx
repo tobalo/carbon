@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { JSONContent } from "@carbon/react";
 import { formatDate, isEoriCountry, pluralize } from "@carbon/utils";
 import { getLocalTimeZone, today } from "@internationalized/date";
@@ -10,22 +10,22 @@ import { getLineDescription, getLineDescriptionDetails } from "../utils/quote";
 import { AddressBlock, Header, Note, Template } from "./components";
 
 type QuoteCustomerDetails =
-  Database["public"]["Views"]["quoteCustomerDetails"]["Row"] & {
+  TableRow<"quoteCustomerDetails"> & {
     customerTaxId?: string | null;
     customerVatNumber?: string | null;
   };
 
 interface QuotePDFProps extends PDF {
   exchangeRate: number;
-  quote: Database["public"]["Views"]["quotes"]["Row"];
-  quoteLines: Database["public"]["Views"]["quoteLines"]["Row"][];
+  quote: TableRow<"quotes">;
+  quoteLines: TableRow<"quoteLines">[];
   quoteCustomerDetails: QuoteCustomerDetails;
-  quoteLinePrices: Database["public"]["Tables"]["quoteLinePrice"]["Row"][];
-  payment?: Database["public"]["Tables"]["quotePayment"]["Row"] | null;
-  shipment?: Database["public"]["Tables"]["quoteShipment"]["Row"] | null;
+  quoteLinePrices: TableRow<"quoteLinePrice">[];
+  payment?: TableRow<"quotePayment"> | null;
+  shipment?: TableRow<"quoteShipment"> | null;
   accountsReceivableBillingAddress?: AccountsReceivableBillingAddress | null;
   companySettings?:
-    | Database["public"]["Tables"]["companySettings"]["Row"]
+    | TableRow<"companySettings">
     | null;
   paymentTerms: { id: string; name: string }[];
   shippingMethods: { id: string; name: string }[];
@@ -102,7 +102,7 @@ const QuotePDF = ({
   });
 
   const pricesByLine = quoteLinePrices.reduce<
-    Record<string, Database["public"]["Tables"]["quoteLinePrice"]["Row"][]>
+    Record<string, TableRow<"quoteLinePrice">[]>
   >((acc, price) => {
     if (!acc[price.quoteLineId]) {
       acc[price.quoteLineId] = [];
@@ -125,7 +125,7 @@ const QuotePDF = ({
     const lineQuantity = line.quantity ?? [];
     const prices = line.id != null ? (pricesByLine[line.id] ?? []) : [];
     const price = prices.find(
-      (p: Database["public"]["Tables"]["quoteLinePrice"]["Row"]) =>
+      (p: TableRow<"quoteLinePrice">) =>
         p.quantity === lineQuantity[0]
     );
     return price && price.leadTime > 0;
@@ -157,7 +157,7 @@ const QuotePDF = ({
       const lineQuantity = line.quantity ?? [];
       const prices = line.id != null ? (pricesByLine[line.id] ?? []) : [];
       const price = prices.find(
-        (p: Database["public"]["Tables"]["quoteLinePrice"]["Row"]) =>
+        (p: TableRow<"quoteLinePrice">) =>
           p.quantity === lineQuantity[0]
       );
       return total + (price?.convertedNetExtendedPrice ?? 0);
@@ -170,7 +170,7 @@ const QuotePDF = ({
       const lineQuantity = line.quantity ?? [];
       const prices = line.id != null ? (pricesByLine[line.id] ?? []) : [];
       const price = prices.find(
-        (p: Database["public"]["Tables"]["quoteLinePrice"]["Row"]) =>
+        (p: TableRow<"quoteLinePrice">) =>
           p.quantity === lineQuantity[0]
       );
       return total + (price?.convertedShippingCost ?? 0);
@@ -201,7 +201,7 @@ const QuotePDF = ({
       const lineQuantity = line.quantity ?? [];
       const prices = line.id != null ? (pricesByLine[line.id] ?? []) : [];
       const price = prices.find(
-        (p: Database["public"]["Tables"]["quoteLinePrice"]["Row"]) =>
+        (p: TableRow<"quoteLinePrice">) =>
           p.quantity === lineQuantity[0]
       );
       const netExtendedPrice = price?.convertedNetExtendedPrice ?? 0;
@@ -415,7 +415,7 @@ const QuotePDF = ({
                     line.id != null ? (pricesByLine[line.id] ?? []) : [];
                   const price = prices.find(
                     (
-                      p: Database["public"]["Tables"]["quoteLinePrice"]["Row"]
+                      p: TableRow<"quoteLinePrice">
                     ) => p.quantity === quantity
                   );
                   const unitPrice = price?.convertedUnitPrice ?? 0;

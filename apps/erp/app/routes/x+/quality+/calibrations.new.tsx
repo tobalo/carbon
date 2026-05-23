@@ -4,7 +4,7 @@ import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { useUrlParams } from "@carbon/react";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "@carbon/storage";
 import { nanoid } from "nanoid";
 import { useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";

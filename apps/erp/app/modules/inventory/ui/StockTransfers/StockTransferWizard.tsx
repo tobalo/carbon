@@ -171,7 +171,7 @@ function TransferGrid({ locationId }: { locationId: string }) {
       setAllTransferToData([]);
     } else {
       const mappedData =
-        data?.map((item) => ({
+        data?.map((item: any) => ({
           itemId: item.itemId,
           itemReadableId: item.itemReadableId,
           description: item.description,
@@ -225,8 +225,8 @@ function TransferGrid({ locationId }: { locationId: string }) {
       // Filter out the selected "to" storage unit
       return (
         data
-          ?.filter((item) => item.storageUnitId !== toItem.storageUnitId)
-          .map((item) => ({
+          ?.filter((item: any) => item.storageUnitId !== toItem.storageUnitId)
+          .map((item: any) => ({
             itemId: item.itemId,
             itemReadableId: item.itemReadableId,
             description: item.description,

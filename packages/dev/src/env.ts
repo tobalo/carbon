@@ -1,19 +1,19 @@
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "pathe";
 import { APP_CHOICES } from "./constants.js";
-import { type JwtCreds, type PortMap, SHARED_REDIS_PORT } from "./worktree.js";
+import { type AuthSecret, type PortMap, SHARED_REDIS_PORT } from "./worktree.js";
 
 export function renderEnv(opts: {
   slug: string;
   ports: PortMap;
   redisDb: number;
-  jwt: JwtCreds;
+  auth: AuthSecret;
   /** When true, write portless hostnames; when false, write http://localhost:PORT URLs. */
   portless: boolean;
   /** Required when portless is true. e.g. "dev" for branch "dev". */
   branchPrefix?: string;
 }): string {
-  const { slug, ports, redisDb, jwt, portless, branchPrefix } = opts;
+  const { slug, ports, redisDb, auth, portless, branchPrefix } = opts;
 
   const host = (sub: string) => `${sub}.${branchPrefix}.dev`;
   const local = (port: number) => `http://localhost:${port}`;
@@ -44,32 +44,45 @@ export function renderEnv(opts: {
   lines.push(
     `VERCEL_URL=${portless ? `https://${host("erp")}` : local(ports.PORT_ERP)}`
   );
+  lines.push(
+    `CARBON_API_URL=${portless ? `https://${host("erp")}` : local(ports.PORT_ERP)}`
+  );
   if (portless) lines.push(`GTM_URL=https://${host("starter")}`);
   lines.push("");
-  lines.push(
-    "# Supabase (per-worktree dev keys, minted from random JWT_SECRET)"
-  );
-  lines.push(
-    `SUPABASE_URL=${portless ? `https://${host("api")}` : local(ports.PORT_API)}`
-  );
-  lines.push(
-    `SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:${ports.PORT_DB}/postgres`
-  );
+  lines.push("# Database");
+  const migrationDatabaseUrl = `postgresql://carbon:carbon@localhost:${ports.PORT_DB}/carbon`;
+  const appDatabaseUrl = `postgresql://carbon_app:carbon_app@localhost:${ports.PORT_DB}/carbon`;
+  const serviceDatabaseUrl = `postgresql://carbon_service:carbon_service@localhost:${ports.PORT_DB}/carbon`;
+  lines.push(`DATABASE_MIGRATION_URL=${migrationDatabaseUrl}`);
+  lines.push(`DATABASE_URL=${appDatabaseUrl}`);
+  lines.push(`DATABASE_SERVICE_URL=${serviceDatabaseUrl}`);
+  lines.push(`JOBS_DATABASE_URL=${serviceDatabaseUrl}`);
   lines.push("PGSSLMODE=disable");
-  lines.push(`SUPABASE_JWT_SECRET=${jwt.secret}`);
-  lines.push(`SUPABASE_ANON_KEY=${jwt.anonKey}`);
-  lines.push(`SUPABASE_SERVICE_ROLE_KEY=${jwt.serviceKey}`);
-  // OAuth callback: portless uses the shared api.carbon.dev alias; localhost
-  // mode uses the well-known Supabase default port so the redirect URI is
-  // predictable and can be registered in Google/Azure console once.
-  const oauthBase = portless
-    ? "https://api.carbon.dev"
-    : "http://localhost:54321";
+  lines.push("");
+  lines.push("# Auth");
+  lines.push("AUTH_PROVIDER=better_auth");
+  lines.push(`BETTER_AUTH_SECRET=${auth.secret}`);
+  lines.push("");
+  lines.push("# S3-compatible storage");
+  const s3Endpoint = portless
+    ? `https://${host("storage")}`
+    : local(ports.PORT_STORAGE);
+  const publicBucket = `carbon-public-${slug}`;
+  const privateBucket = `carbon-private-${slug}`;
+  lines.push("S3_REGION=us-east-1");
+  lines.push(`S3_ENDPOINT=${s3Endpoint}`);
+  lines.push("S3_ACCESS_KEY_ID=carbon");
+  lines.push("S3_SECRET_ACCESS_KEY=carbon-password");
+  lines.push(`S3_PRIVATE_BUCKET=${privateBucket}`);
+  lines.push(`S3_PUBLIC_BUCKET=${publicBucket}`);
+  lines.push(`S3_PUBLIC_BASE_URL=${s3Endpoint}/${publicBucket}`);
+  lines.push("");
+  lines.push("# MinIO service aliases");
   lines.push(
-    `SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI=${oauthBase}/auth/v1/callback`
+    `MINIO_URL=${portless ? `https://${host("storage")}` : local(ports.PORT_STORAGE)}`
   );
   lines.push(
-    `SUPABASE_AUTH_EXTERNAL_AZURE_REDIRECT_URI=${oauthBase}/auth/v1/callback`
+    `MINIO_CONSOLE_URL=${portless ? `https://${host("console")}` : local(ports.PORT_CONSOLE)}`
   );
   lines.push("");
   lines.push("# Aux services");

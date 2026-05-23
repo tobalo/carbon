@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Hidden,
   Submit,
@@ -28,6 +27,7 @@ import { useFetcher, useLocation } from "react-router";
 import type { action } from "~/routes/x+/feedback";
 import { feedbackValidator } from "~/services/models";
 import { path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 
@@ -41,7 +41,6 @@ const Feedback = () => {
     name: string;
     path: string;
   } | null>(null);
-  const { carbon } = useCarbon();
 
   useEffect(() => {
     if (fetcher.data?.success) {
@@ -53,7 +52,7 @@ const Feedback = () => {
   }, [fetcher.data]);
 
   const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       const file = e.target.files[0];
       const fileExtension = file.name.substring(file.name.lastIndexOf(".") + 1);
 
@@ -62,12 +61,11 @@ const Feedback = () => {
         return;
       }
 
-      const imageUpload = await carbon.storage
-        .from("feedback")
-        .upload(`${nanoid()}.${fileExtension}`, file, {
-          cacheControl: `${12 * 60 * 60}`,
-          upsert: true
-        });
+      const imageUpload = await uploadStorageObject({
+        bucket: "feedback",
+        path: `${nanoid()}.${fileExtension}`,
+        file
+      });
 
       if (imageUpload.error) {
         console.error(imageUpload.error);

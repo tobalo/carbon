@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import {
   DatePicker,
   InputControlled,
@@ -100,7 +100,7 @@ const IssueProperties = () => {
       const formData = new FormData();
 
       formData.append("ids", id);
-      formData.append("field", field);
+      formData.append("field", String(field));
 
       formData.append("value", value?.toString() ?? "");
       fetcher.submit(formData, {

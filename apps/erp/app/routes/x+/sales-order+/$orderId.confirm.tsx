@@ -1,6 +1,5 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validator } from "@carbon/form";
 import { getSalesOrderStatus } from "@carbon/utils";
 import { getLocalTimeZone, today } from "@internationalized/date";
@@ -37,9 +36,7 @@ export async function action(args: ActionFunctionArgs) {
       };
     }
 
-    const serviceRole = getCarbonServiceRole();
-
-    const salesOrder = await getSalesOrder(serviceRole, orderId);
+    const salesOrder = await getSalesOrder(client, orderId);
     if (salesOrder.error) {
       return {
         success: false,
@@ -70,7 +67,7 @@ export async function action(args: ActionFunctionArgs) {
         opportunityId: salesOrder.data.opportunityId!,
         companyId,
         userId,
-        serviceRole,
+        client,
         pdfLoader
       });
       fileName = result.fileName;
@@ -114,7 +111,7 @@ export async function action(args: ActionFunctionArgs) {
             cc: ccSelections,
             documentFilePath,
             fileName,
-            serviceRole,
+            client,
             locales
           });
 
@@ -142,7 +139,7 @@ export async function action(args: ActionFunctionArgs) {
         };
     }
 
-    const orderLines = await getSalesOrderLines(serviceRole, orderId);
+    const orderLines = await getSalesOrderLines(client, orderId);
     const { status } = getSalesOrderStatus(orderLines.data || []);
 
     const confirm = await client
@@ -154,7 +151,8 @@ export async function action(args: ActionFunctionArgs) {
         updatedAt: today(getLocalTimeZone()).toString(),
         updatedBy: userId
       })
-      .eq("id", orderId);
+      .eq("id", orderId)
+      .eq("companyId", companyId);
 
     if (confirm.error) {
       return {
@@ -163,7 +161,7 @@ export async function action(args: ActionFunctionArgs) {
       };
     }
 
-    await runMRP(getCarbonServiceRole(), {
+    await runMRP(client, {
       type: "salesOrder",
       id: orderId,
       companyId: companyId,

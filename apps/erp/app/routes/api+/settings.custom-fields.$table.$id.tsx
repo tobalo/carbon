@@ -29,7 +29,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     );
   }
 
-  const options = values.data.map((value) => ({
+  const options = values.data.map((value: any) => ({
     id: value.value,
     name: value.value
   }));

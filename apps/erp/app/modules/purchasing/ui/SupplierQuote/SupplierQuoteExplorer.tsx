@@ -331,7 +331,6 @@ function SupplierQuoteLineItem({
                   <Trans>Delete Line</Trans>
                 </DropdownMenuItem>
 
-                {/* @ts-expect-error */}
                 {methodItemType.includes(line.supplierQuoteLineType ?? "") && (
                   <DropdownMenuItem
                     asChild

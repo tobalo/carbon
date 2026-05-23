@@ -41,6 +41,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const updateApiKey = await upsertApiKey(client, {
     id,
+    companyId,
     ...d,
     scopes,
     expiresAt: expiresAt || undefined

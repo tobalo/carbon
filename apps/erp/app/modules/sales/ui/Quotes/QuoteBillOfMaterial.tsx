@@ -1,6 +1,9 @@
 "use client";
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  itemTrackingTypeEnum
+} from "@carbon/database/schema";
 import { ValidatedForm } from "@carbon/form";
 import {
   Badge,
@@ -79,7 +82,7 @@ import type { Quotation } from "../../types";
 type Material = z.infer<typeof quoteMaterialValidator> & {
   item: {
     name: string;
-    itemTrackingType: Database["public"]["Enums"]["itemTrackingType"];
+    itemTrackingType: EnumValue<typeof itemTrackingTypeEnum>;
     replenishmentSystem: string | null;
   };
 };

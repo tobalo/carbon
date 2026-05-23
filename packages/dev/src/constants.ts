@@ -10,7 +10,12 @@ export const APP_CHOICES = [
 export type AppId = (typeof APP_CHOICES)[number]["value"];
 
 /** Compose services that get registered as portless aliases (host TCP). */
-export const ALIAS_SERVICES = ["api", "studio", "mail", "inngest"] as const;
+export const ALIAS_SERVICES = [
+  "storage",
+  "console",
+  "mail",
+  "inngest"
+] as const;
 
 /** Minimum portless version that supports bare invocation + package.json config. */
 export const PORTLESS_MIN_VERSION = "0.11.0";

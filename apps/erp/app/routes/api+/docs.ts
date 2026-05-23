@@ -1,4 +1,4 @@
-import swaggerDocsSchema from "@carbon/database/swagger-docs-schema";
+import apiDocsSchema from "@carbon/database/api-docs-schema";
 import { Ratelimit, redis } from "@carbon/kv";
 import {
   type ClientLoaderFunctionArgs,
@@ -20,7 +20,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     throw data({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
-  return swaggerDocsSchema;
+  return apiDocsSchema;
 }
 
 export async function clientLoader({ serverLoader }: ClientLoaderFunctionArgs) {

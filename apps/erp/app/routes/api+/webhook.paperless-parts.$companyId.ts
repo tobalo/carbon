@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import crypto from "crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -26,6 +26,15 @@ function createHmacSignature(
     .digest("hex");
 }
 
+function signaturesMatch(signature: string, expectedSignature: string): boolean {
+  const actual = Buffer.from(signature, "hex");
+  const expected = Buffer.from(expectedSignature, "hex");
+
+  return (
+    actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
+  );
+}
+
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { companyId } = params;
   if (!companyId) {
@@ -43,14 +52,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return data({ success: false }, { status: 400 });
   }
 
-  const serviceRole = await getCarbonServiceRole();
+  const serviceClient = await getCarbonServiceClient();
   const paperlessPartsIntegration = await getIntegration(
-    serviceRole,
+    serviceClient,
     "paperless-parts",
     companyId
   );
 
   if (paperlessPartsIntegration.error || !paperlessPartsIntegration.data) {
+    return data({ success: false }, { status: 400 });
+  }
+
+  if (!paperlessPartsIntegration.data.active) {
     return data({ success: false }, { status: 400 });
   }
 
@@ -79,6 +92,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     // Parse timestamp and signature from header
     const [timestampPart, signaturePart] = signatureHeader.split(",");
+    if (!timestampPart || !signaturePart) {
+      return data({ success: false }, { status: 401 });
+    }
+
     const timestamp = Number(timestampPart.replace("t=", ""));
     const signature = signaturePart.replace("v1=", "");
 
@@ -92,7 +109,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       timestamp
     );
 
-    if (signature !== expectedSignature) {
+    if (!signaturesMatch(signature, expectedSignature)) {
       return data({ success: false }, { status: 401 });
     }
 

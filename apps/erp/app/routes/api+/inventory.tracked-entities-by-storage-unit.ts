@@ -35,7 +35,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Filter to only include entities from the specific storageUnit
   const storageUnitEntities =
     result.data?.filter(
-      (entity) =>
+      (entity: any) =>
         entity.storageUnitId === storageUnitId && entity.trackedEntityId
     ) || [];
 

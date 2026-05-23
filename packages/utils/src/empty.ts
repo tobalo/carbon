@@ -1,2 +1,2 @@
-// Empty stub file for modules that need to be excluded from edge function builds
+// Empty stub for modules that need to be excluded from server bundles.
 export default {};

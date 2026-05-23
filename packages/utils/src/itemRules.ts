@@ -2,6 +2,12 @@
 // Used server-side on transactions (receipt, shipment, stock transfer,
 // inventory adjustment) to enforce per-item validation/guideline rules.
 
+import type {
+  EnumValue,
+  QueryDatabase,
+  transactionSurfaceEnum
+} from "@carbon/database/schema";
+
 export type Operator =
   | "eq"
   | "neq"
@@ -16,13 +22,8 @@ export type Severity = "error" | "warn";
 
 /**
  * Transaction surfaces a rule may opt into. Mirrors the Postgres ENUM
- * `transactionSurface`. After `bun run db:types` regenerates the database
- * types, tighten this to:
- *
- *   import type { Database } from "@carbon/database";
- *   ...as const satisfies readonly Database["public"]["Enums"]["transactionSurface"][];
- *
- * The runtime array stays the source of truth for the validator's `z.enum`.
+ * `transactionSurface`. The runtime array stays the source of truth for the
+ * validator's `z.enum`, while the Drizzle enum declaration checks drift.
  */
 export const TRANSACTION_SURFACES = [
   "receipt",
@@ -30,7 +31,7 @@ export const TRANSACTION_SURFACES = [
   "stockTransfer",
   "warehouseTransfer",
   "inventoryAdjustment"
-] as const;
+] as const satisfies readonly EnumValue<typeof transactionSurfaceEnum>[];
 export type TransactionSurface = (typeof TRANSACTION_SURFACES)[number];
 
 export type Condition = {
@@ -475,11 +476,10 @@ export const evaluateRules = (
 // Field resolver registry — single source of truth for builder UI + evaluator
 // ---------------------------------------------------------------------------
 
-// Pull DB row shapes from the generated Supabase types so the registry stays
+// Pull DB row shapes from the generated schema types so the registry stays
 // in sync with the schema. Type-only import — no runtime dependency.
-import type { Database } from "@carbon/database";
 
-type Tables = Database["public"]["Tables"];
+type Tables = QueryDatabase["public"]["Tables"];
 
 /**
  * Compile-time check: returns `true` if the column type accepts `null`,
@@ -542,7 +542,7 @@ export const isOperatorAllowed = (def: FieldDef, op: Operator): boolean =>
  *
  * - `fields.database({ table, column, nullable, ... })` — maps 1:1 to a real
  *   DB column. Nullability is **enforced at compile time** against
- *   `Database["public"]["Tables"][T]["Row"][C]`. Schema drift = TS error.
+ *   `QueryDatabase["public"]["Tables"][T]["Row"][C]`. Schema drift = TS error.
  *   Path is derived as `${ctxKey ?? table}.${column}`.
  *
  * - `fields.synthetic({ path, derivedFrom, nullable, ... })` — no direct DB

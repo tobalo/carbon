@@ -1,6 +1,6 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { pluckUnique } from "@carbon/utils";
 import type { ActionFunctionArgs } from "react-router";
 import { flattenTree } from "~/components/TreeView";
@@ -24,6 +24,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .from("activeMakeMethods")
     .select("id")
     .eq("itemId", itemId)
+    .eq("companyId", companyId)
     .maybeSingle();
 
   if (makeMethodResult.error || !makeMethodResult.data) {
@@ -36,7 +37,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   // Get the method tree
-  const methodTree = await getMethodTree(client, makeMethodId);
+  const methodTree = await getMethodTree(client, makeMethodId, companyId);
   if (methodTree.error) {
     return { success: false, message: "Failed to load method tree" };
   }
@@ -90,7 +91,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   let operationsByMakeMethodId: Record<
     string,
     Array<
-      Database["public"]["Tables"]["methodOperation"]["Row"] & {
+      TableRow<"methodOperation"> & {
         processName: string;
         workCenterName: string | null;
         laborRate: number | null;
@@ -143,9 +144,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // Calculate costs using the same logic as the CSV export
   const computedCosts = calculateMadePartCosts(
-    methods,
+    methods as any[],
     bomOperationsByKey,
-    (node) => node.data.materialMakeMethodId,
+    (node: any) => node.data.materialMakeMethodId,
     lotSizesByItemId
   );
 

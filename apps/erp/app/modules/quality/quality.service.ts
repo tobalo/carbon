@@ -1,12 +1,16 @@
-import type { Database, Json } from "@carbon/database";
+import type {
+  Json,
+  QueryDatabase
+} from "@carbon/database/schema";
 import { fetchAllFromTable } from "@carbon/database";
 import type { JSONContent } from "@carbon/react";
+import { listObjects, toStorageFileObject } from "@carbon/storage";
 import { parseDate } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { z } from "zod";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 
 import type { inspectionStatus } from "../shared";
 import type {
@@ -27,7 +31,7 @@ import type {
   riskStatus
 } from "./quality.models";
 export async function activateGauge(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeId: string
 ) {
   return client
@@ -37,7 +41,7 @@ export async function activateGauge(
 }
 
 export async function deactivateGauge(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeId: string
 ) {
   return client
@@ -47,14 +51,14 @@ export async function deactivateGauge(
 }
 
 export async function deleteGauge(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeId: string
 ) {
   return client.from("gauges").delete().eq("id", gaugeId);
 }
 
 export async function deleteGaugeCalibrationRecord(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeCalibrationRecordId: string
 ) {
   return client
@@ -64,21 +68,21 @@ export async function deleteGaugeCalibrationRecord(
 }
 
 export async function deleteGaugeType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeTypeId: string
 ) {
   return client.from("gaugeType").delete().eq("id", gaugeTypeId);
 }
 
 export async function deleteIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceId: string
 ) {
   return client.from("nonConformance").delete().eq("id", nonConformanceId);
 }
 
 export async function deleteIssueAssociation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   type: string,
   associationId: string
 ) {
@@ -139,7 +143,7 @@ export async function deleteIssueAssociation(
 }
 
 export async function deleteIssueType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceTypeId: string
 ) {
   return client
@@ -149,7 +153,7 @@ export async function deleteIssueType(
 }
 
 export async function deleteIssueWorkflow(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceWorkflowId: string
 ) {
   return client
@@ -159,7 +163,7 @@ export async function deleteIssueWorkflow(
 }
 
 export async function deleteRequiredAction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   requiredActionId: string
 ) {
   return client
@@ -169,14 +173,14 @@ export async function deleteRequiredAction(
 }
 
 export async function deleteQualityDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   qualityDocumentId: string
 ) {
   return client.from("qualityDocument").delete().eq("id", qualityDocumentId);
 }
 
 export async function deleteQualityDocumentStep(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   qualityDocumentStepId: string,
   companyId: string
 ) {
@@ -188,32 +192,56 @@ export async function deleteQualityDocumentStep(
 }
 
 export async function deleteRisk(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   riskId: string
 ) {
   return client.from("riskRegister").delete().eq("id", riskId);
 }
 
 export async function getIssueFromExternalLink(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId?: string
 ) {
-  return client
+  let query = client
     .from("nonConformanceSupplier")
-    .select("*, nonConformance(*)")
-    .eq("id", id)
+    .select("*")
+    .eq("id", id);
+
+  if (companyId) {
+    query = query.eq("companyId", companyId);
+  }
+
+  const supplierIssue = await query.single();
+  if (supplierIssue.error || !supplierIssue.data) {
+    return supplierIssue;
+  }
+
+  const issue = await client
+    .from("nonConformance")
+    .select("*")
+    .eq("id", supplierIssue.data.nonConformanceId)
+    .eq("companyId", supplierIssue.data.companyId)
     .single();
+
+  return {
+    ...supplierIssue,
+    data: {
+      ...supplierIssue.data,
+      nonConformance: issue.data
+    }
+  };
 }
 
 export async function getGauge(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeId: string
 ) {
   return client.from("gauges").select("*").eq("id", gaugeId).single();
 }
 
 export async function getGauges(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -238,7 +266,7 @@ export async function getGauges(
 }
 
 export async function getGaugesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -252,7 +280,7 @@ export async function getGaugesList(
 }
 
 export async function getGaugeCalibrationRecord(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client
@@ -263,7 +291,7 @@ export async function getGaugeCalibrationRecord(
 }
 
 export async function getGaugeCalibrationRecords(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -289,7 +317,7 @@ export async function getGaugeCalibrationRecords(
 }
 
 export async function getGaugeCalibrationRecordsByGaugeId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeId: string
 ) {
   return client
@@ -300,7 +328,7 @@ export async function getGaugeCalibrationRecordsByGaugeId(
 }
 
 export async function getGaugeTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -311,14 +339,14 @@ export async function getGaugeTypesList(
 }
 
 export async function getGaugeType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeTypeId: string
 ) {
   return client.from("gaugeType").select("*").eq("id", gaugeTypeId).single();
 }
 
 export async function getGaugeTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -341,7 +369,7 @@ export async function getGaugeTypes(
 }
 
 export async function getIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceId: string
 ) {
   return client
@@ -352,7 +380,7 @@ export async function getIssue(
 }
 
 export async function getIssues(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -377,7 +405,7 @@ export async function getIssues(
 }
 
 export async function getIssueWorkflow(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceWorkflowId: string
 ) {
   return client
@@ -388,18 +416,37 @@ export async function getIssueWorkflow(
 }
 
 export async function getIssueAction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
-  return client
+  const action = await client
     .from("nonConformanceActionTask")
-    .select("id,notes,nonConformanceId,nonConformance(id,nonConformanceId)")
+    .select("id,notes,nonConformanceId,companyId")
     .eq("id", id)
     .single();
+
+  if (action.error || !action.data) {
+    return action;
+  }
+
+  const issue = await client
+    .from("nonConformance")
+    .select("id, nonConformanceId")
+    .eq("id", action.data.nonConformanceId)
+    .eq("companyId", action.data.companyId)
+    .single();
+
+  return {
+    ...action,
+    data: {
+      ...action.data,
+      nonConformance: issue.data
+    }
+  };
 }
 
 export async function getIssueActionTasks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string,
   supplierId?: string
@@ -462,7 +509,7 @@ export async function getIssueActionTasks(
 }
 
 export async function getIssueApprovalTasks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -475,20 +522,45 @@ export async function getIssueApprovalTasks(
 }
 
 export async function getIssueItems(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
-  return client
+  const items = await client
     .from("nonConformanceItem")
-    .select("*, ...item(name)")
+    .select("*")
     .eq("nonConformanceId", id)
     .eq("companyId", companyId)
     .order("createdAt", { ascending: true });
+
+  if (items.error || !items.data) {
+    return items;
+  }
+
+  const itemIds = [...new Set(items.data.map((item) => item.itemId))];
+  const itemRows =
+    itemIds.length > 0
+      ? await client
+          .from("item")
+          .select("id, name")
+          .eq("companyId", companyId)
+          .in("id", itemIds)
+      : { data: [] };
+  const itemsById = new Map(
+    itemRows.data?.map((item) => [item.id, item] as const) ?? []
+  );
+
+  return {
+    ...items,
+    data: items.data.map((item) => ({
+      ...item,
+      name: itemsById.get(item.itemId)?.name ?? null
+    }))
+  };
 }
 
 export async function getIssueAssociations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceId: string,
   companyId: string
 ) {
@@ -812,7 +884,7 @@ export async function getIssueAssociations(
 }
 
 export async function getIssueReviewers(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -825,7 +897,7 @@ export async function getIssueReviewers(
 }
 
 export async function getIssueSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -838,7 +910,7 @@ export async function getIssueSuppliers(
 }
 
 export async function getIssueTasks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -859,7 +931,7 @@ export async function getIssueTasks(
 }
 
 export async function getIssueType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceTypeId: string
 ) {
   return client
@@ -870,7 +942,7 @@ export async function getIssueType(
 }
 
 export async function getIssueTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -893,7 +965,7 @@ export async function getIssueTypes(
 }
 
 export async function getIssueWorkflows(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -917,7 +989,7 @@ export async function getIssueWorkflows(
 }
 
 export async function getIssueWorkflowsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -929,7 +1001,7 @@ export async function getIssueWorkflowsList(
 }
 
 export async function getIssueTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -940,7 +1012,7 @@ export async function getIssueTypesList(
 }
 
 export async function getQualityActions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -965,18 +1037,36 @@ export async function getQualityActions(
 }
 
 export async function getQualityDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
-  return client
+  const document = await client
     .from("qualityDocument")
-    .select("*, qualityDocumentStep(*)")
+    .select("*")
     .eq("id", id)
     .single();
+
+  if (document.error || !document.data) {
+    return document;
+  }
+
+  const steps = await client
+    .from("qualityDocumentStep")
+    .select("*")
+    .eq("qualityDocumentId", id)
+    .eq("companyId", document.data.companyId);
+
+  return {
+    ...document,
+    data: {
+      ...document.data,
+      qualityDocumentStep: steps.data ?? []
+    }
+  };
 }
 
 export async function getQualityDocumentSteps(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   qualityDocumentId: string
 ) {
   return client
@@ -986,7 +1076,7 @@ export async function getQualityDocumentSteps(
 }
 
 export async function getQualityDocumentVersions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   qualityDocument: { name: string; version: number },
   companyId: string
 ) {
@@ -1000,7 +1090,7 @@ export async function getQualityDocumentVersions(
 }
 
 export async function getQualityDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -1025,7 +1115,7 @@ export async function getQualityDocuments(
 }
 
 export async function getQualityDocumentsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -1047,18 +1137,19 @@ export async function getQualityDocumentsList(
 }
 
 export async function getQualityFiles(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/quality/${id}`);
-  return result.data || [];
+  const objects = await listObjects({
+    companyId,
+    prefix: `${companyId}/quality/${id}`
+  });
+  return objects.map((object) => toStorageFileObject(object, "private"));
 }
 
 export async function getRequiredActionsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -1070,7 +1161,7 @@ export async function getRequiredActionsList(
 }
 
 export async function getRequiredActions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -1093,7 +1184,7 @@ export async function getRequiredActions(
 }
 
 export async function getRequiredAction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   requiredActionId: string
 ) {
   return client
@@ -1104,14 +1195,14 @@ export async function getRequiredAction(
 }
 
 export async function getRisk(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   riskId: string
 ) {
   return client.from("riskRegister").select("*").eq("id", riskId).single();
 }
 
 export async function getRisks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & {
     search: string | null;
@@ -1156,7 +1247,7 @@ export async function getRisks(
 }
 
 export async function insertIssueReviewer(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   reviewer: z.infer<typeof nonConformanceReviewerValidator> & {
     nonConformanceId: string;
     companyId: string;
@@ -1167,7 +1258,7 @@ export async function insertIssueReviewer(
 }
 
 export async function updateIssueActionProcesses(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     actionTaskId: string;
     processIds: string[];
@@ -1202,7 +1293,7 @@ export async function updateIssueActionProcesses(
 }
 
 export async function updateIssueStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   update: {
     id: string;
     status: (typeof nonConformanceStatus)[number];
@@ -1215,16 +1306,28 @@ export async function updateIssueStatus(
 }
 
 export async function updateIssueTaskStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     status: "Pending" | "Completed" | "Skipped" | "In Progress";
     type: "investigation" | "action" | "approval" | "review";
     userId?: string;
     assignee?: string | null;
+    companyId?: string;
+    nonConformanceId?: string;
+    supplierId?: string | null;
   }
 ) {
-  const { id, status, type, userId, assignee } = args;
+  const {
+    id,
+    status,
+    type,
+    userId,
+    assignee,
+    companyId,
+    nonConformanceId,
+    supplierId
+  } = args;
   const table =
     type === "action" || type === "investigation"
       ? "nonConformanceActionTask"
@@ -1246,23 +1349,38 @@ export async function updateIssueTaskStatus(
     updateData.completedDate = new Date().toISOString().split("T")[0];
   }
 
-  return client
+  let query = client
     .from(table)
     .update(updateData)
-    .eq("id", id)
-    .select("nonConformanceId")
-    .single();
+    .eq("id", id);
+
+  if (companyId) {
+    query = query.eq("companyId", companyId);
+  }
+
+  if (nonConformanceId) {
+    query = query.eq("nonConformanceId", nonConformanceId);
+  }
+
+  if (supplierId && table === "nonConformanceActionTask") {
+    query = query.eq("supplierId", supplierId);
+  }
+
+  return query.select("nonConformanceId").single();
 }
 
 export async function updateIssueTaskContent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     type: "action" | "approval" | "review";
     content: JSONContent;
+    companyId?: string;
+    nonConformanceId?: string;
+    supplierId?: string | null;
   }
 ) {
-  const { id, content, type } = args;
+  const { id, content, type, companyId, nonConformanceId, supplierId } = args;
   const table =
     type === "action"
       ? "nonConformanceActionTask"
@@ -1270,16 +1388,28 @@ export async function updateIssueTaskContent(
         ? "nonConformanceReviewer"
         : "nonConformanceApprovalTask";
 
-  return client
+  let query = client
     .from(table)
     .update({ notes: content })
-    .eq("id", id)
-    .select("nonConformanceId")
-    .single();
+    .eq("id", id);
+
+  if (companyId) {
+    query = query.eq("companyId", companyId);
+  }
+
+  if (nonConformanceId) {
+    query = query.eq("nonConformanceId", nonConformanceId);
+  }
+
+  if (supplierId && table === "nonConformanceActionTask") {
+    query = query.eq("supplierId", supplierId);
+  }
+
+  return query.select("nonConformanceId").single();
 }
 
 export async function updateQualityDocumentStepOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -1296,7 +1426,7 @@ export async function updateQualityDocumentStepOrder(
 }
 
 export async function updateRiskStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   riskId: string,
   status: (typeof riskStatus)[number]
 ) {
@@ -1304,7 +1434,7 @@ export async function updateRiskStatus(
 }
 
 export async function upsertGauge(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gauge:
     | (Omit<z.infer<typeof gaugeValidator>, "id" | "gaugeId"> & {
         gaugeId: string;
@@ -1329,7 +1459,7 @@ export async function upsertGauge(
 }
 
 export async function upsertGaugeCalibrationRecord(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeCalibrationRecord:
     | (Omit<z.infer<typeof gaugeCalibrationRecordValidator>, "id"> & {
         companyId: string;
@@ -1413,7 +1543,7 @@ export async function upsertGaugeCalibrationRecord(
 }
 
 export async function upsertGaugeType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   gaugeType:
     | (Omit<z.infer<typeof gaugeTypeValidator>, "id"> & {
         companyId: string;
@@ -1437,7 +1567,7 @@ export async function upsertGaugeType(
 }
 
 export async function upsertIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformance:
     | (Omit<z.infer<typeof issueValidator>, "id" | "nonConformanceId"> & {
         nonConformanceId: string;
@@ -1531,10 +1661,16 @@ export async function upsertIssue(
       if (salesOrderLineId) {
         const salesOrderLine = await client
           .from("salesOrderLine")
-          .select("*, salesOrder(salesOrderId)")
+          .select("*")
           .eq("id", salesOrderLineId)
           .single();
         if (salesOrderLine.data) {
+          const salesOrder = await client
+            .from("salesOrder")
+            .select("salesOrderId")
+            .eq("id", salesOrderLine.data.salesOrderId)
+            .eq("companyId", nonConformance.companyId)
+            .single();
           const salesOrderLineInsert = await client
             .from("nonConformanceSalesOrderLine")
             .insert([
@@ -1543,8 +1679,7 @@ export async function upsertIssue(
                 createdBy: nonConformance.createdBy,
                 salesOrderLineId: salesOrderLineId,
                 salesOrderId: salesOrderLine.data.salesOrderId,
-                salesOrderReadableId:
-                  salesOrderLine.data.salesOrder.salesOrderId,
+                salesOrderReadableId: salesOrder.data?.salesOrderId,
                 nonConformanceId: result.data.id
               }
             ]);
@@ -1592,7 +1727,7 @@ export async function upsertIssue(
 }
 
 export async function upsertIssueWorkflow(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceWorkflow:
     | (Omit<z.infer<typeof issueWorkflowValidator>, "id"> & {
         companyId: string;
@@ -1618,7 +1753,7 @@ export async function upsertIssueWorkflow(
 }
 
 export async function upsertIssueType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   nonConformanceType:
     | (Omit<z.infer<typeof issueTypeValidator>, "id"> & {
         companyId: string;
@@ -1645,7 +1780,7 @@ export async function upsertIssueType(
 }
 
 export async function upsertRequiredAction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   requiredAction:
     | (Omit<z.infer<typeof issueTypeValidator>, "id"> & {
         companyId: string;
@@ -1672,7 +1807,7 @@ export async function upsertRequiredAction(
 }
 
 export async function upsertQualityDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   qualityDocument:
     | (Omit<z.infer<typeof qualityDocumentValidator>, "id"> & {
         companyId: string;
@@ -1704,7 +1839,7 @@ export async function upsertQualityDocument(
   if (copyFromId) {
     const qualityDocument = await client
       .from("qualityDocument")
-      .select("*, qualityDocumentStep(*)")
+      .select("*")
       .eq("id", copyFromId)
       .single();
 
@@ -1712,7 +1847,12 @@ export async function upsertQualityDocument(
       return qualityDocument;
     }
 
-    const steps = qualityDocument.data.qualityDocumentStep ?? [];
+    const qualityDocumentSteps = await client
+      .from("qualityDocumentStep")
+      .select("*")
+      .eq("qualityDocumentId", copyFromId)
+      .eq("companyId", rest.companyId);
+    const steps = qualityDocumentSteps.data ?? [];
     const workInstruction = (qualityDocument.data.content ?? {}) as JSONContent;
 
     const [updateWorkInstructions, insertSteps] = await Promise.all([
@@ -1725,7 +1865,7 @@ export async function upsertQualityDocument(
         .eq("id", insert.data.id),
       steps.length > 0
         ? client.from("qualityDocumentStep").insert(
-            steps.map((step) => {
+            steps.map((step: any) => {
               // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
               const { id, qualityDocumentId, ...rest } = step;
               return {
@@ -1749,7 +1889,7 @@ export async function upsertQualityDocument(
 }
 
 export async function upsertQualityDocumentStep(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   qualityDocumentStep:
     | (Omit<z.infer<typeof qualityDocumentStepValidator>, "id"> & {
         companyId: string;
@@ -1776,7 +1916,7 @@ export async function upsertQualityDocumentStep(
 }
 
 export async function upsertRisk(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   risk:
     | (Omit<
         z.infer<typeof riskRegisterValidator>,
@@ -1827,7 +1967,7 @@ export async function upsertRisk(
 // -------------------------------------------------------------
 
 export async function getItemSamplingPlan(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   itemId: string,
   companyId: string
 ) {
@@ -1840,7 +1980,7 @@ export async function getItemSamplingPlan(
 }
 
 export async function upsertItemSamplingPlan(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   plan: z.infer<typeof itemSamplingPlanValidator> & {
     companyId: string;
     updatedBy: string;
@@ -1883,7 +2023,7 @@ export async function upsertItemSamplingPlan(
 }
 
 export async function getInboundInspections(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & {
     search: string | null;
@@ -1919,7 +2059,7 @@ export async function getInboundInspections(
 }
 
 export async function getInboundInspection(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return (client as any)
@@ -1932,7 +2072,7 @@ export async function getInboundInspection(
 }
 
 export async function getInboundInspectionLotTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   receiptLineId: string,
   companyId: string
 ) {

@@ -177,7 +177,7 @@ const PeopleTable = memo(
 
       attributeCategories.forEach((category) => {
         if (category.userAttribute && Array.isArray(category.userAttribute)) {
-          category.userAttribute.forEach((attribute) => {
+          category.userAttribute.forEach((attribute: any) => {
             additionalColumns.push({
               id: attribute.id,
               header: attribute?.name ?? "",

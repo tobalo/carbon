@@ -1,5 +1,5 @@
 import type { ValidationErrorResponseData } from "@carbon/form";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "@carbon/storage";
 import type { ReactElement, ReactNode } from "react";
 import type { IconType } from "react-icons";
 import type { useSettings } from "~/hooks";

@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
@@ -14,7 +13,7 @@ import { path } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
 
   const formData = await request.formData();
   const validation = await validator(maintenanceDispatchValidator).validate(
@@ -25,10 +24,8 @@ export async function action({ request }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
   // Get the next sequence for maintenance dispatch
-  const nextSequence = await serviceRole.rpc("get_next_sequence", {
+  const nextSequence = await client.rpc("get_next_sequence", {
     sequence_name: "maintenanceDispatch",
     company_id: companyId
   });
@@ -60,17 +57,18 @@ export async function action({ request }: ActionFunctionArgs) {
   // Get locationId from work center
   let locationId: string | undefined;
   if (validation.data.workCenterId) {
-    const workCenter = await serviceRole
+    const workCenter = await client
       .from("workCenter")
       .select("locationId")
       .eq("id", validation.data.workCenterId)
+      .eq("companyId", companyId)
       .single();
     if (!workCenter.error && workCenter.data?.locationId) {
       locationId = workCenter.data.locationId;
     }
   }
 
-  const insertDispatch = await serviceRole
+  const insertDispatch = await client
     .from("maintenanceDispatch")
     .insert([
       {
@@ -109,7 +107,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // End all production events for the work center if oeeImpact is Down
   if (validation.data.oeeImpact === "Down") {
-    await endProductionEventsByWorkCenter(serviceRole, {
+    await endProductionEventsByWorkCenter(client, {
       workCenterId: validation.data.workCenterId,
       companyId,
       endTime: now(getLocalTimeZone()).toAbsoluteString()
@@ -120,7 +118,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (insertDispatch.data?.id) {
     try {
       // Get company settings
-      const companySettings = await serviceRole
+      const companySettings = await client
         .from("companySettings")
         .select(
           "maintenanceDispatchNotificationGroup, qualityDispatchNotificationGroup, operationsDispatchNotificationGroup, otherDispatchNotificationGroup"
@@ -133,10 +131,11 @@ export async function action({ request }: ActionFunctionArgs) {
 
         // If there's a suspected failure mode, look up its type
         if (validation.data.suspectedFailureModeId) {
-          const failureMode = await serviceRole
+          const failureMode = await client
             .from("maintenanceFailureMode")
             .select("type")
             .eq("id", validation.data.suspectedFailureModeId)
+            .eq("companyId", companyId)
             .single();
 
           if (!failureMode.error && failureMode.data?.type) {

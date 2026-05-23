@@ -4,7 +4,7 @@ import { fetchJobStepRecords } from "~/modules/inventory/lineage.server";
 import type { StepRecord } from "~/modules/inventory/ui/Traceability/utils";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "inventory",
     bypassRls: true
   });
@@ -20,6 +20,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .from("trackedActivity")
     .select("attributes")
     .eq("id", activityId)
+    .eq("companyId", companyId)
     .maybeSingle();
 
   const jobId = (activityRes.data?.attributes as Record<string, unknown> | null)
@@ -29,6 +30,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return Response.json({ stepRecords: [] as StepRecord[] });
   }
 
-  const stepRecords = await fetchJobStepRecords(client, jobId);
+  const stepRecords = await fetchJobStepRecords(client, jobId, companyId);
   return Response.json({ stepRecords });
 }

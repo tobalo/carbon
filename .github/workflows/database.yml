@@ -1,0 +1,33 @@
+name: Deploy Database Migrations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/database/drizzle.config.ts"
+      - "packages/database/src/schema/**"
+      - "packages/database/src/seed.ts"
+  workflow_dispatch:
+
+jobs:
+  database:
+    name: Database Sync
+    runs-on: ubuntu-latest
+
+    env:
+      CARBON_CONTROL_DATABASE_URL: ${{ secrets.CARBON_CONTROL_DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run migrations
+        run: pnpm --filter ci ci:migrations

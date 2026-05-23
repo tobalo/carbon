@@ -1,4 +1,4 @@
-import { SUPABASE_URL, useCarbon } from "@carbon/auth";
+import { TRANSCRIPTION_SERVICE_URL, useCarbon } from "@carbon/auth";
 import { useCallback, useRef, useState } from "react";
 import { useUser } from "~/hooks";
 
@@ -119,9 +119,11 @@ export function useAudioRecording(): UseAudioRecordingReturn {
           )
         );
 
-        // Get authenticated session
-        const transcriptionUrl = `${SUPABASE_URL}/functions/v1/transcription`;
-        const response = await fetch(transcriptionUrl, {
+        if (!TRANSCRIPTION_SERVICE_URL) {
+          throw new Error("TRANSCRIPTION_SERVICE_URL is not set");
+        }
+
+        const response = await fetch(TRANSCRIPTION_SERVICE_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

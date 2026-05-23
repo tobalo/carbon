@@ -7131,9 +7131,6 @@ msgstr ""
 msgid "Submitted By"
 msgstr ""
 
-msgid "Subscribe to changes"
-msgstr ""
-
 msgid "Substance"
 msgstr ""
 
@@ -7173,10 +7170,7 @@ msgstr ""
 msgid "Sunday"
 msgstr ""
 
-msgid "Supabase provides a wide range of filters."
-msgstr ""
-
-msgid "Supabase provides realtime functionality and broadcasts database changes to authorized users depending on Row Level Security (RLS) policies."
+msgid "Carbon provides a wide range of filters."
 msgstr ""
 
 msgid "Supplier"

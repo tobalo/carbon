@@ -1,22 +1,27 @@
 import type { Result } from "@carbon/auth";
-import { error, getClaims, getPermissionCacheKey, success } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import {
+  error,
+  getClaims,
+  getLegacyPermissionCacheKey,
+  getPermissionCacheKey,
+  success
+} from "@carbon/auth";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "../../client";
+import type { JobQueryClient } from "../../../lib/query-client";
 
 export const updatePermissionsFunction = inngest.createFunction(
   { id: "update-permissions", retries: 3 },
   { event: "carbon/update-permissions" },
   async ({ event, step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
     const payload = event.data;
 
     const result = await step.run("update-permissions", async () => {
       console.info(`Permission Update for ${payload.id}`);
       const { success, message } = await updatePermissions(
-        serviceRole,
+        serviceClient,
         payload
       );
       if (success) {
@@ -32,7 +37,7 @@ export const updatePermissionsFunction = inngest.createFunction(
 );
 
 export async function updatePermissions(
-  client: SupabaseClient<Database>,
+  client: JobQueryClient,
   {
     id,
     permissions,
@@ -49,7 +54,22 @@ export async function updatePermissions(
   }
 ): Promise<Result> {
   if (await client.rpc("is_claims_admin")) {
-    const claims = await getClaims(client, id);
+    const membership = await client
+      .from("userToCompany")
+      .select("userId")
+      .eq("userId", id)
+      .eq("companyId", companyId)
+      .maybeSingle();
+
+    if (membership.error) {
+      return error(membership.error, "Failed to verify user company access");
+    }
+
+    if (!membership.data) {
+      return error(null, "User is not a member of the requested company");
+    }
+
+    const claims = await getClaims(client, id, companyId);
 
     if (claims.error) return error(claims.error, "Failed to get claims");
 
@@ -164,14 +184,17 @@ export async function updatePermissions(
       });
     }
 
-    const permissionsUpdate = await getCarbonServiceRole()
+    const permissionsUpdate = await client
       .from("userPermission")
       .update({ permissions: updatedPermissions })
       .eq("id", id);
     if (permissionsUpdate.error)
       return error(permissionsUpdate.error, "Failed to update claims");
 
-    await redis.del(getPermissionCacheKey(id));
+    await redis.del(
+      getPermissionCacheKey(id, companyId),
+      getLegacyPermissionCacheKey(id)
+    );
 
     return success("Permissions updated");
   } else {

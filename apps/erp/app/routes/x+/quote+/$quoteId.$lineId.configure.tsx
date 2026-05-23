@@ -1,6 +1,5 @@
 import { error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -28,8 +27,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
           updatedAt: new Date().toISOString(),
           updatedBy: userId
         })
-        .eq("id", lineId),
-      client.from("quoteLine").select("itemId").eq("id", lineId).single(),
+        .eq("id", lineId)
+        .eq("companyId", companyId),
+      client
+        .from("quoteLine")
+        .select("itemId")
+        .eq("id", lineId)
+        .eq("companyId", companyId)
+        .single(),
       client.from("quoteLinePrice").delete().eq("quoteLineId", lineId)
     ]);
 
@@ -47,8 +52,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    const serviceRole = await getCarbonServiceRole();
-    const upsertMethod = await upsertQuoteLineMethod(serviceRole, {
+    const upsertMethod = await upsertQuoteLineMethod(client, {
       quoteId,
       quoteLineId: lineId,
       itemId: quoteLine.data.itemId,
@@ -65,17 +69,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
 
     // Fix BOM material costs: replace average cost with price break values
-    const buyMaterials = await serviceRole
+    const buyMaterials = await client
       .from("quoteMaterial")
       .select("id, itemId, unitCost")
       .eq("quoteLineId", lineId)
+      .eq("companyId", companyId)
       .eq("methodType", "Purchase to Order");
 
     const buyItemIds = [
       ...new Set((buyMaterials.data ?? []).map((m) => m.itemId))
     ];
     const priceMap = await getSupplierPriceBreaksForItems(
-      serviceRole,
+      client,
       buyItemIds
     );
 
@@ -87,10 +92,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
         mat.unitCost
       );
       if (price !== mat.unitCost) {
-        await serviceRole
+        await client
           .from("quoteMaterial")
           .update({ unitCost: price })
-          .eq("id", mat.id);
+          .eq("id", mat.id)
+          .eq("companyId", companyId);
       }
     }
   } else {

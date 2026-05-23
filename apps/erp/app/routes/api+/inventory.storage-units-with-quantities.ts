@@ -38,8 +38,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     // Filter storageUnits to only include those with quantities > 0
-    const quantitiesMap = new Map(
-      quantitiesResult.data?.map((q) => [q.storageUnitId, q.quantity]) ?? []
+    const quantitiesMap = new Map<string, number>(
+      quantitiesResult.data?.map((q: any) => [q.storageUnitId, q.quantity]) ?? []
     );
 
     const shelvesWithQuantities =

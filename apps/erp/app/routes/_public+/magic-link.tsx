@@ -1,22 +1,56 @@
-import { CONTROLLED_ENVIRONMENT, SUPABASE_URL } from "@carbon/auth";
+import { assertIsPost, CONTROLLED_ENVIRONMENT, error } from "@carbon/auth";
+import { signInWithMagicLinkToken } from "@carbon/auth/auth.server";
+import { setCompanyId } from "@carbon/auth/company.server";
+import { flash, setAuthSession } from "@carbon/auth/session.server";
 import { Button, Heading, VStack } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useNavigate, useSearchParams } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { Form, redirect, useLoaderData } from "react-router";
+import { path } from "~/utils/path";
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const token = new URL(request.url).searchParams.get("token");
+  if (!token) throw redirect(path.to.root);
+
+  return { token };
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  assertIsPost(request);
+
+  const formData = await request.formData();
+  const token = formData.get("token");
+  if (typeof token !== "string" || !token) {
+    return redirect(
+      path.to.login,
+      await flash(request, error(null, "Invalid magic link"))
+    );
+  }
+
+  try {
+    const authSession = await signInWithMagicLinkToken(token);
+    if (!authSession) throw new Error("Magic link did not create a session");
+
+    const sessionCookie = await setAuthSession(request, { authSession });
+    const companyIdCookie = setCompanyId(authSession.companyId);
+
+    return redirect(path.to.authenticatedRoot, {
+      headers: [
+        ["Set-Cookie", sessionCookie],
+        ["Set-Cookie", companyIdCookie]
+      ]
+    });
+  } catch (cause) {
+    return redirect(
+      path.to.login,
+      await flash(request, error(cause, "Invalid or expired magic link"))
+    );
+  }
+}
 
 export default function ConfirmMagicLink() {
   const { t } = useLingui();
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-
-  const token = params.get("token");
-  if (!token) {
-    navigate("/");
-    return null;
-  }
-
-  const getConfirmationURL = (token: string) => {
-    return `${SUPABASE_URL}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${window?.location.origin}/callback`;
-  };
+  const { token } = useLoaderData<typeof loader>();
 
   return (
     <>
@@ -32,14 +66,12 @@ export default function ConfirmMagicLink() {
           <Heading size="h3">
             <Trans>Let's build something</Trans> 🚀
           </Heading>
-          <Button
-            size="lg"
-            onClick={() => {
-              window.location.href = getConfirmationURL(token);
-            }}
-          >
-            <Trans>Log In</Trans>
-          </Button>
+          <Form method="post">
+            <input type="hidden" name="token" value={token} />
+            <Button size="lg" type="submit">
+              <Trans>Log In</Trans>
+            </Button>
+          </Form>
         </VStack>
       </div>
     </>

@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { getAppUrl } from "@carbon/env";
 import { formatDate } from "@carbon/utils";
 import {
@@ -20,7 +20,7 @@ import {
 } from "./components/Theme";
 
 interface QuoteEmailProps extends Email {
-  quote: Database["public"]["Tables"]["quote"]["Row"];
+  quote: TableRow<"quote">;
   companySettings: CompanySettings;
 }
 

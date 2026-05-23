@@ -1,8 +1,11 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  salesInvoiceStatusEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 
 type SalesInvoicingStatusProps = {
-  status?: Database["public"]["Enums"]["salesInvoiceStatus"] | null;
+  status?: EnumValue<typeof salesInvoiceStatusEnum> | null;
 };
 
 const SalesInvoicingStatus = ({ status }: SalesInvoicingStatusProps) => {

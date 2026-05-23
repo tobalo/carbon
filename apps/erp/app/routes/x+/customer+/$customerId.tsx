@@ -1,5 +1,8 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { cn } from "@carbon/react";
 import { msg } from "@lingui/core/macro";
@@ -23,12 +26,14 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "sales"
   });
+  const { client, companyId } = auth;
 
   const { customerId } = params;
   if (!customerId) throw new Error("Could not find customerId");
+  assertCustomerAccountScope(auth, customerId);
 
   const [customer, contacts, locations, tags, customerTax] = await Promise.all([
     getCustomer(client, customerId),

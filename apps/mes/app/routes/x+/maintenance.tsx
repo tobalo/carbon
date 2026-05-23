@@ -40,7 +40,7 @@ import { getWorkCentersByLocation } from "~/services/operations.service";
 import { path } from "~/utils/path";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const { client, userId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
   const locationId = context.get(userContext)?.locationId;
 
   const url = new URL(request.url);
@@ -88,7 +88,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
     await Promise.all([
       getActiveMaintenanceDispatchesByLocation(client, locationId),
       getMaintenanceDispatchesAssignedTo(client, userId),
-      getWorkCentersByLocation(client, locationId)
+      getWorkCentersByLocation(client, locationId, companyId)
     ]);
 
   let filteredDispatches = allDispatches?.data ?? [];

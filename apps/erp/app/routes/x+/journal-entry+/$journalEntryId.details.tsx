@@ -97,7 +97,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (intent === "post") {
-    const postResult = await postJournalEntry(client, journalEntryId, userId);
+    const postResult = await postJournalEntry(
+      client,
+      journalEntryId,
+      companyId,
+      userId
+    );
     if (postResult.error) {
       return data(
         {},
@@ -137,7 +142,7 @@ export default function JournalEntryDetailsRoute() {
   const isPosted = routeData.journalEntry.status !== "Draft";
 
   const initialLines = (routeData.journalEntry.journalLine ?? []).map(
-    (line) => {
+    (line: any) => {
       const amount = Number(line.amount);
       const accountClass = line.account?.class ?? "Asset";
       return {

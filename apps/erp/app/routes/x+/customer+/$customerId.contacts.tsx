@@ -1,5 +1,8 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type { LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData } from "react-router";
@@ -8,12 +11,14 @@ import { CustomerContacts } from "~/modules/sales/ui/Customer";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "sales"
   });
+  const { client } = auth;
 
   const { customerId } = params;
   if (!customerId) throw new Error("Could not find customerId");
+  assertCustomerAccountScope(auth, customerId);
 
   const contacts = await getCustomerContacts(client, customerId);
   if (contacts.error) {

@@ -28,7 +28,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const { currencyId } = params;
   if (!currencyId) throw notFound("currencyId not found");
 
-  const currency = await getCurrency(client, currencyId);
+  const currency = await getCurrency(client, currencyId, companyGroupId);
   const exchangeRateHistory =
     currency.data && currency.data.code
       ? await getExchangeRateHistory(client, companyGroupId, currency.data.code)

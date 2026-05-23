@@ -1,9 +1,9 @@
 import { openai } from "@ai-sdk/openai";
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { trigger } from "@carbon/jobs";
+import { moveObject } from "@carbon/storage";
 import { supportedModelTypes } from "@carbon/utils";
 import { generateObject } from "ai";
 import { nanoid } from "nanoid";
@@ -48,14 +48,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const { name: fileName, path: documentPath, size, lineId } = validation.data;
 
-  const serviceRole = getCarbonServiceRole();
-
-  const quote = await getQuote(serviceRole, quoteId);
+  const quote = await getQuote(client, quoteId);
   if (quote.error || !quote.data) {
     throw redirect(
       path.to.quote(quoteId),
       await flash(request, error(quote.error, "Failed to get quote details"))
     );
+  }
+
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.quote(quoteId));
   }
 
   let targetLineId = lineId;
@@ -94,7 +96,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     // Check for uniqueness and append a suffix if necessary
     while (true) {
-      const existingItem = await serviceRole
+      const existingItem = await client
         .from("item")
         .select("id")
         .eq("readableId", readableId)
@@ -125,7 +127,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       createdBy: userId
     };
 
-    const part = await upsertPart(serviceRole, partData);
+    const part = await upsertPart(client, partData);
     if (part.error || !part.data?.id) {
       throw redirect(
         path.to.quote(quoteId),
@@ -152,7 +154,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     };
 
     const createQuotationLine = await upsertQuoteLine(
-      serviceRole,
+      client,
       quoteLineData
     );
     if (createQuotationLine.error || !createQuotationLine.data) {
@@ -165,12 +167,19 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    targetLineId = createQuotationLine.data.id;
+    const createdLineId = createQuotationLine.data.id;
+    if (!createdLineId) {
+      throw redirect(
+        path.to.quote(quoteId),
+        await flash(request, error(null, "Failed to create quote line."))
+      );
+    }
+    targetLineId = createdLineId;
 
     // Create quote line method for Make items
-    const upsertMethod = await upsertQuoteLineMethod(serviceRole, {
+    const upsertMethod = await upsertQuoteLineMethod(client, {
       quoteId,
-      quoteLineId: targetLineId,
+      quoteLineId: createdLineId,
       itemId: partId ?? "",
       configuration: undefined,
       companyId,
@@ -179,7 +188,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     if (upsertMethod.error) {
       throw redirect(
-        path.to.quoteLine(quoteId, targetLineId),
+        path.to.quoteLine(quoteId, createdLineId),
         await flash(
           request,
           error(upsertMethod.error, "Failed to create quote line method.")
@@ -187,7 +196,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
   } else {
-    const existingLine = await serviceRole
+    const existingLine = await client
       .from("quoteLine")
       .select("itemId")
       .eq("id", targetLineId)
@@ -205,6 +214,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
 
     partId = existingLine.data.itemId;
+  }
+  if (!targetLineId) {
+    throw redirect(
+      path.to.quote(quoteId),
+      await flash(request, error(null, "Quote line is required."))
+    );
   }
 
   const extension = fileName.split(".").pop();
@@ -240,6 +255,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         .from("quoteLine")
         .update({ modelUploadId: modelId })
         .eq("id", targetLineId)
+        .eq("companyId", companyId)
     ];
 
     if (partId && modelId) {
@@ -249,6 +265,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           .from("item")
           .update({ modelUploadId: modelId })
           .eq("id", partId)
+          .eq("companyId", companyId)
       );
     }
 
@@ -261,15 +278,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    // Move the file to the new path
-    const move = await client.storage
-      .from("private")
-      .move(documentPath, newPath);
-
-    if (move.error) {
+    try {
+      await moveObject({ companyId, fromKey: documentPath, toKey: newPath });
+    } catch (moveError) {
       throw redirect(
         path.to.quote(quoteId),
-        await flash(request, error(move.error, "Failed to move file"))
+        await flash(request, error(moveError, "Failed to move file"))
       );
     }
 
@@ -279,15 +293,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     });
   } else {
     newPath = `${companyId}/opportunity-line/${targetLineId}/${fileName}`;
-    // Move the file to the new path
-    const move = await client.storage
-      .from("private")
-      .move(documentPath, newPath);
-
-    if (move.error) {
+    try {
+      await moveObject({ companyId, fromKey: documentPath, toKey: newPath });
+    } catch (moveError) {
       throw redirect(
         path.to.quote(quoteId),
-        await flash(request, error(move.error, "Failed to move file"))
+        await flash(request, error(moveError, "Failed to move file"))
       );
     }
   }

@@ -1,4 +1,8 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  salesInvoiceLineTypeEnum,
+  salesInvoiceStatusEnum
+} from "@carbon/database/schema";
 import type {
   purchaseInvoiceLineType,
   purchaseInvoiceStatusType
@@ -41,7 +45,7 @@ export type SalesInvoiceLine = NonNullable<
 >[number];
 
 export type SalesInvoiceLineType =
-  Database["public"]["Enums"]["salesInvoiceLineType"];
+  EnumValue<typeof salesInvoiceLineTypeEnum>;
 
 export type SalesInvoiceStatus =
-  Database["public"]["Enums"]["salesInvoiceStatus"];
+  EnumValue<typeof salesInvoiceStatusEnum>;

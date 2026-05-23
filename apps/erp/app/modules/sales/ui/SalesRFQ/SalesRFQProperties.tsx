@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { DatePicker, InputControlled, ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -56,7 +56,7 @@ const SalesRFQProperties = () => {
       const formData = new FormData();
 
       formData.append("ids", rfqId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value ?? "");
       fetcher.submit(formData, {
         method: "post",

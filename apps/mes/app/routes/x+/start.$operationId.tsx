@@ -1,6 +1,5 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { getLocalTimeZone, now } from "@internationalized/date";
 import type { LoaderFunctionArgs } from "react-router";
@@ -13,7 +12,7 @@ import {
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { userId, companyId } = await requirePermissions(request, {});
+  const { client, userId, companyId } = await requirePermissions(request, {});
   const { operationId } = params;
   if (!operationId) throw new Error("Operation ID is required");
 
@@ -28,20 +27,21 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     type = "Labor";
   }
 
-  const serviceRole = await getCarbonServiceRole();
   const [jobOperation] = await Promise.all([
-    serviceRole
+    client
       .from("jobOperation")
       .select("*")
       .eq("id", operationId)
+      .eq("companyId", companyId)
       .maybeSingle(),
-    serviceRole
+    client
       .from("productionEvent")
       .update({
         endTime: null,
         updatedBy: userId
       })
       .eq("jobOperationId", operationId)
+      .eq("companyId", companyId)
       .is("endTime", null)
   ]);
 
@@ -68,7 +68,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Check if work center is blocked for maintenance
   if (jobOperation.data.workCenterId) {
     const workCenterStatus = await getWorkCenterWithBlockingStatus(
-      serviceRole,
+      client,
       jobOperation.data.workCenterId
     );
 
@@ -89,8 +89,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Get tracked entities if jobMakeMethodId exists
   if (!trackedEntityId && jobOperation.data.jobMakeMethodId) {
     const trackedEntities = await getTrackedEntitiesByMakeMethodId(
-      serviceRole,
-      jobOperation.data.jobMakeMethodId
+      client,
+      jobOperation.data.jobMakeMethodId,
+      companyId
     );
 
     if (trackedEntities.data && trackedEntities.data.length > 0) {
@@ -104,7 +105,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (type === "Machine") {
     const currentTime = now(getLocalTimeZone()).toAbsoluteString();
 
-    await serviceRole
+    await client
       .from("productionEvent")
       .update({
         endTime: currentTime,
@@ -112,12 +113,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         updatedBy: userId
       })
       .eq("jobOperationId", operationId)
+      .eq("companyId", companyId)
       .in("type", ["Setup", "Labor"])
       .is("endTime", null);
   }
 
   const startEvent = await startProductionEvent(
-    serviceRole,
+    client,
     {
       type,
       jobOperationId: operationId,

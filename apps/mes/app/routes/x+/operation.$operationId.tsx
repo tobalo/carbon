@@ -1,7 +1,7 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
+import type { QuerySingleResponse } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData, useParams } from "react-router";
 import { JobOperation } from "~/components/JobOperation";
@@ -30,7 +30,7 @@ import { makeDurations } from "~/utils/durations";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { userId, companyId } = await requirePermissions(request, {});
+  const { client, userId, companyId } = await requirePermissions(request, {});
 
   const { operationId } = params;
   if (!operationId) throw new Error("Operation ID is required");
@@ -38,16 +38,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const trackedEntityId = url.searchParams.get("trackedEntityId");
 
-  const serviceRole = await getCarbonServiceRole();
-
   const [events, quantities, job, operation] = await Promise.all([
-    getProductionEventsForJobOperation(serviceRole, {
+    getProductionEventsForJobOperation(client, {
       operationId,
-      userId
+      userId,
+      companyId
     }),
-    getProductionQuantitiesForJobOperation(serviceRole, operationId),
-    getJobByOperationId(serviceRole, operationId),
-    getJobOperationById(serviceRole, operationId)
+    getProductionQuantitiesForJobOperation(client, operationId, companyId),
+    getJobByOperationId(client, operationId, companyId),
+    getJobOperationById(client, operationId, companyId)
   ]);
 
   if (job.error) {
@@ -61,6 +60,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw redirect(
       path.to.operations,
       await flash(request, error(operation.error, "Failed to fetch operation"))
+    );
+  }
+
+  if (
+    job.data.companyId !== companyId ||
+    operation.data?.[0]?.companyId !== companyId
+  ) {
+    throw redirect(
+      path.to.operations,
+      await flash(
+        request,
+        error("You are not authorized to view this operation", "Unauthorized")
+      )
     );
   }
 
@@ -79,15 +91,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     bomIdMap,
     companySettings
   ] = await Promise.all([
-    getThumbnailPathByItemId(serviceRole, operation.data?.[0].itemId),
+    getThumbnailPathByItemId(client, operation.data?.[0].itemId, companyId),
     getTrackedEntitiesByMakeMethodId(
-      serviceRole,
-      operation.data?.[0].jobMakeMethodId
+      client,
+      operation.data?.[0].jobMakeMethodId,
+      companyId
     ),
-    getJobMakeMethod(serviceRole, operation.data?.[0].jobMakeMethodId),
-    getKanbanByJobId(serviceRole, job.data.id),
-    getJobMethodBomIdMap(serviceRole, job.data.id!),
-    getCompanySettings(serviceRole, companyId)
+    getJobMakeMethod(client, operation.data?.[0].jobMakeMethodId, companyId),
+    getKanbanByJobId(client, job.data.id),
+    getJobMethodBomIdMap(client, job.data.id!, companyId),
+    getCompanySettings(client, companyId)
   ]);
 
   const inventoryShelfLife = (companySettings.data?.inventoryShelfLife ??
@@ -133,27 +146,33 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     job: job.data,
     jobMakeMethod: jobMakeMethod.data,
     kanban: kanban.data,
-    files: getJobFiles(serviceRole, companyId, job.data, operation.data),
-    materials: getJobMaterialsByOperationId(serviceRole, {
+    files: getJobFiles(client, companyId, job.data, operation.data),
+    materials: getJobMaterialsByOperationId(client, {
       operation: operation.data?.[0],
       trackedEntityId: trackedEntityId ?? trackedEntities?.data?.[0]?.id,
       requiresSerialTracking:
-        jobMakeMethod.data?.requiresSerialTracking ?? false
+        jobMakeMethod.data?.requiresSerialTracking ?? false,
+      companyId
     }),
     trackedEntities: trackedEntities.data ?? [],
-    nonConformanceActions: getNonConformanceActions(serviceRole, {
+    nonConformanceActions: getNonConformanceActions(client, {
       itemId: operation.data?.[0].itemId,
       processId: operation.data?.[0].processId,
       companyId
     }),
     operation: makeDurations(operation.data?.[0]) as OperationWithDetails,
     expiredEntityPolicy,
-    procedure: getJobOperationProcedure(serviceRole, operation.data?.[0].id),
+    procedure: getJobOperationProcedure(
+      client,
+      operation.data?.[0].id,
+      companyId
+    ),
     workCenter: getWorkCenter(
-      serviceRole,
-      operation.data?.[0].workCenterId
+      client,
+      operation.data?.[0].workCenterId,
+      companyId
     ) as Promise<
-      import("@supabase/supabase-js").PostgrestSingleResponse<{
+      QuerySingleResponse<{
         name: string;
         id: string;
         isBlocked: boolean | null;

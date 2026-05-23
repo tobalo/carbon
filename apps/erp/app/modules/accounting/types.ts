@@ -1,4 +1,11 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  accountTypeEnum,
+  glAccountClassEnum,
+  glConsolidatedRateEnum,
+  glIncomeBalanceEnum,
+  paymentTermCalculationMethodEnum
+} from "@carbon/database/schema";
 import type {
   getAccount,
   getAccountsList,
@@ -17,18 +24,18 @@ export type Account = NonNullable<
 >;
 
 export type AccountConsolidatedRate =
-  Database["public"]["Enums"]["glConsolidatedRate"];
+  EnumValue<typeof glConsolidatedRateEnum>;
 
 export type AccountListItem = NonNullable<
   NonNullable<Awaited<ReturnType<typeof getAccountsList>>>["data"]
 >[number];
 
 export type AccountIncomeBalance =
-  Database["public"]["Enums"]["glIncomeBalance"];
+  EnumValue<typeof glIncomeBalanceEnum>;
 
-export type AccountClass = Database["public"]["Enums"]["glAccountClass"];
+export type AccountClass = EnumValue<typeof glAccountClassEnum>;
 
-export type AccountType = Database["public"]["Enums"]["accountType"];
+export type AccountType = EnumValue<typeof accountTypeEnum>;
 
 export type Chart = Account & Transaction;
 
@@ -364,7 +371,7 @@ export const currencyCodes = [
 export type CurrencyCode = (typeof currencyCodes)[number];
 
 export type PaymentTermCalculationMethod =
-  Database["public"]["Enums"]["paymentTermCalculationMethod"];
+  EnumValue<typeof paymentTermCalculationMethodEnum>;
 
 export type PaymentTerm = NonNullable<
   Awaited<ReturnType<typeof getPaymentTerms>>["data"]

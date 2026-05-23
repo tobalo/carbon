@@ -11,7 +11,7 @@ import {
 /**
  * Server-side hooks registry for integrations.
  *
- * Hooks that depend on server-only modules (like getCarbonServiceRole)
+ * Hooks that depend on server-only modules (like getCarbonServiceClient)
  * cannot live in the integration config files because those are bundled
  * for both client and server. This registry maps integration IDs to
  * their server-only lifecycle hooks.

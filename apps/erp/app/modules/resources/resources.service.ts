@@ -1,9 +1,12 @@
-import type { Database, Json } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  Json,
+  QueryDatabase
+} from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { z } from "zod";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import type {
   failureModeValidator,
   locationValidator,
@@ -22,14 +25,14 @@ import type {
 } from "./resources.models";
 
 export async function activateWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("workCenter").update({ active: true }).eq("id", id);
 }
 
 export async function deleteAbility(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   abilityId: string,
   hardDelete = true
 ) {
@@ -39,14 +42,14 @@ export async function deleteAbility(
 }
 
 export async function deleteContractor(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   contractorId: string
 ) {
   return client.from("contractor").delete().eq("id", contractorId);
 }
 
 export async function deleteEmployeeAbility(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeAbilityId: string
 ) {
   return client
@@ -56,49 +59,49 @@ export async function deleteEmployeeAbility(
 }
 
 export async function deleteFailureMode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   failureModeId: string
 ) {
   return client.from("maintenanceFailureMode").delete().eq("id", failureModeId);
 }
 
 export async function deleteLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string
 ) {
   return client.from("location").delete().eq("id", locationId);
 }
 
 export async function deleteMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client.from("maintenanceDispatch").delete().eq("id", dispatchId);
 }
 
 export async function deleteMaintenanceDispatchComment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   commentId: string
 ) {
   return client.from("maintenanceDispatchComment").delete().eq("id", commentId);
 }
 
 export async function deleteMaintenanceDispatchEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   eventId: string
 ) {
   return client.from("maintenanceDispatchEvent").delete().eq("id", eventId);
 }
 
 export async function deleteMaintenanceDispatchItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   itemId: string
 ) {
   return client.from("maintenanceDispatchItem").delete().eq("id", itemId);
 }
 
 export async function deleteMaintenanceDispatchWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   workCenterId: string
 ) {
   return client
@@ -108,49 +111,49 @@ export async function deleteMaintenanceDispatchWorkCenter(
 }
 
 export async function deleteMaintenanceSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scheduleId: string
 ) {
   return client.from("maintenanceSchedule").delete().eq("id", scheduleId);
 }
 
 export async function deleteMaintenanceScheduleItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   itemId: string
 ) {
   return client.from("maintenanceScheduleItem").delete().eq("id", itemId);
 }
 
 export async function deletePartner(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   partnerId: string
 ) {
   return client.from("partner").delete().eq("id", partnerId);
 }
 
 export async function activateProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   processId: string
 ) {
   return client.from("process").update({ active: true }).eq("id", processId);
 }
 
 export async function processDeactivate(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   processId: string
 ) {
   return client.from("process").update({ active: false }).eq("id", processId);
 }
 
 export async function deleteProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   processId: string
 ) {
   return client.from("process").delete().eq("id", processId);
 }
 
 export async function deleteShift(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   shiftId: string
 ) {
   // TODO: Set all employeeShifts to null
@@ -158,28 +161,28 @@ export async function deleteShift(
 }
 
 export async function deleteSuggestion(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   suggestionId: string
 ) {
   return client.from("suggestion").delete().eq("id", suggestionId);
 }
 
 export async function deleteTraining(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   trainingId: string
 ) {
   return client.from("training").delete().eq("id", trainingId);
 }
 
 export async function deleteTrainingAssignment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   assignmentId: string
 ) {
   return client.from("trainingAssignment").delete().eq("id", assignmentId);
 }
 
 export async function deleteTrainingQuestion(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   trainingQuestionId: string,
   companyId: string
 ) {
@@ -191,14 +194,14 @@ export async function deleteTrainingQuestion(
 }
 
 export async function deleteWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("workCenter").update({ active: false }).eq("id", id);
 }
 
 export async function getAbilities(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -222,7 +225,7 @@ export async function getAbilities(
 }
 
 export async function getAbilitiesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -233,7 +236,7 @@ export async function getAbilitiesList(
 }
 
 export async function getAbility(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   abilityId: string
 ) {
   return client
@@ -251,7 +254,7 @@ export async function getAbility(
 }
 
 export async function getContractor(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   contractorId: string
 ) {
   return client
@@ -262,7 +265,7 @@ export async function getContractor(
 }
 
 export async function getContractors(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -288,7 +291,7 @@ export async function getContractors(
 }
 
 export async function getEmployeeAbilities(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeId: string
 ) {
   return client
@@ -299,7 +302,7 @@ export async function getEmployeeAbilities(
 }
 
 export async function getFailureMode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   failureModeId: string
 ) {
   return client
@@ -310,7 +313,7 @@ export async function getFailureMode(
 }
 
 export async function getFailureModes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -333,7 +336,7 @@ export async function getFailureModes(
 }
 
 export async function getFailureModesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -344,14 +347,14 @@ export async function getFailureModesList(
 }
 
 export async function getLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string
 ) {
   return client.from("location").select("*").eq("id", locationId).single();
 }
 
 export async function getLocations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -374,7 +377,7 @@ export async function getLocations(
 }
 
 export async function getLocationsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -385,7 +388,7 @@ export async function getLocationsList(
 }
 
 export async function getMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -403,7 +406,7 @@ export async function getMaintenanceDispatch(
 }
 
 export async function getMaintenanceDispatchComments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -417,7 +420,7 @@ export async function getMaintenanceDispatchComments(
 }
 
 export async function getMaintenanceDispatchEvents(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -432,7 +435,7 @@ export async function getMaintenanceDispatchEvents(
 }
 
 export async function getMaintenanceDispatchItems(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -445,7 +448,7 @@ export async function getMaintenanceDispatchItems(
 }
 
 export async function getMaintenanceDispatchItemTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   maintenanceDispatchItemId: string
 ) {
   return client
@@ -460,7 +463,7 @@ export async function getMaintenanceDispatchItemTrackedEntities(
 }
 
 export async function getMaintenanceDispatches(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null; status?: string }
 ) {
@@ -483,7 +486,7 @@ export async function getMaintenanceDispatches(
 }
 
 export async function getMaintenanceDispatchesByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   locationId: string,
   args?: GenericQueryFilters & { search: string | null; status?: string }
@@ -511,7 +514,7 @@ export async function getMaintenanceDispatchesByLocation(
 }
 
 export async function getMaintenanceDispatchWorkCenters(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -524,7 +527,7 @@ export async function getMaintenanceDispatchWorkCenters(
 }
 
 export async function getMaintenanceSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scheduleId: string
 ) {
   return client
@@ -538,7 +541,7 @@ export async function getMaintenanceSchedule(
 }
 
 export async function getMaintenanceScheduleItems(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scheduleId: string
 ) {
   return client
@@ -551,7 +554,7 @@ export async function getMaintenanceScheduleItems(
 }
 
 export async function getMaintenanceSchedules(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null; active?: boolean }
 ) {
@@ -578,7 +581,7 @@ export async function getMaintenanceSchedules(
 }
 
 export async function getMaintenanceSchedulesByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   locationId: string,
   args?: GenericQueryFilters & { search: string | null; active?: boolean }
@@ -610,7 +613,7 @@ export async function getMaintenanceSchedulesByLocation(
 }
 
 export async function getOutstandingTrainingsForUser(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   employeeId: string
 ) {
@@ -623,11 +626,11 @@ export async function getOutstandingTrainingsForUser(
   // Filter to this employee's pending/overdue trainings
   const filteredData = (data ?? [])
     .filter(
-      (d) =>
+      (d: any) =>
         d.employeeId === employeeId &&
         (d.status === "Pending" || d.status === "Overdue")
     )
-    .sort((a, b) => {
+    .sort((a: any, b: any) => {
       // Overdue first
       if (a.status === "Overdue" && b.status !== "Overdue") return -1;
       if (a.status !== "Overdue" && b.status === "Overdue") return 1;
@@ -638,7 +641,7 @@ export async function getOutstandingTrainingsForUser(
 }
 
 export async function getPartner(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   partnerId: string,
   abilityId: string
 ) {
@@ -651,7 +654,7 @@ export async function getPartner(
 }
 
 export async function getPartnerBySupplierId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   partnerId: string
 ) {
   return client
@@ -662,7 +665,7 @@ export async function getPartnerBySupplierId(
 }
 
 export async function getPartners(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -686,14 +689,14 @@ export async function getPartners(
 }
 
 export async function getProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   processId: string
 ) {
   return client.from("processes").select("*").eq("id", processId).single();
 }
 
 export async function getProcesses(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -716,7 +719,7 @@ export async function getProcesses(
 }
 
 export async function getProcessesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -728,14 +731,14 @@ export async function getProcessesList(
 }
 
 export async function getSuggestion(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   suggestionId: string
 ) {
   return client.from("suggestions").select("*").eq("id", suggestionId).single();
 }
 
 export async function getSuggestions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -758,70 +761,157 @@ export async function getSuggestions(
 }
 
 export async function getTraining(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
-  return client
+  const training = await client
     .from("training")
-    .select("*, trainingQuestion(*)")
+    .select("*")
     .eq("id", id)
     .single();
+
+  if (training.error || !training.data) {
+    return training;
+  }
+
+  const questions = await client
+    .from("trainingQuestion")
+    .select("*")
+    .eq("trainingId", id)
+    .eq("companyId", training.data.companyId ?? "")
+    .order("sortOrder");
+
+  return {
+    ...training,
+    data: {
+      ...training.data,
+      trainingQuestion: questions.data ?? []
+    }
+  };
 }
 
 export async function getTrainingAssignment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   assignmentId: string
 ) {
-  return client
+  const assignment = await client
     .from("trainingAssignment")
-    .select("*, training(id, name, frequency, type, status)")
+    .select("*")
     .eq("id", assignmentId)
     .single();
+
+  if (assignment.error || !assignment.data) {
+    return assignment;
+  }
+
+  const training = await client
+    .from("training")
+    .select("id, name, frequency, type, status")
+    .eq("id", assignment.data.trainingId)
+    .eq("companyId", assignment.data.companyId)
+    .single();
+
+  return {
+    ...assignment,
+    data: {
+      ...assignment.data,
+      training: training.data
+    }
+  };
 }
 
 export async function getTrainingAssignmentForCompletion(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   assignmentId: string
 ) {
-  return client
+  const assignment = await client
     .from("trainingAssignment")
-    .select(
-      `*,
-      training(
-        id,
-        name,
-        description,
-        content,
-        frequency,
-        type,
-        status,
-        estimatedDuration,
-        trainingQuestion(*)
-      )`
-    )
+    .select("*")
     .eq("id", assignmentId)
     .single();
+
+  if (assignment.error || !assignment.data) {
+    return assignment;
+  }
+
+  const training = await client
+    .from("training")
+    .select(
+      "id, name, description, content, frequency, type, status, estimatedDuration"
+    )
+    .eq("id", assignment.data.trainingId)
+    .eq("companyId", assignment.data.companyId)
+    .single();
+
+  const questions =
+    training.data?.id && assignment.data.companyId
+      ? await client
+          .from("trainingQuestion")
+          .select("*")
+          .eq("trainingId", training.data.id)
+          .eq("companyId", assignment.data.companyId)
+          .order("sortOrder")
+      : { data: [] };
+
+  return {
+    ...assignment,
+    data: {
+      ...assignment.data,
+      training: training.data
+        ? {
+            ...training.data,
+            trainingQuestion: questions.data ?? []
+          }
+        : null
+    }
+  };
 }
 
 export async function getTrainingAssignments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   trainingId?: string
 ) {
   let query = client
     .from("trainingAssignment")
-    .select("*, training(id, name, frequency)")
+    .select("*")
     .eq("companyId", companyId);
 
   if (trainingId) {
     query = query.eq("trainingId", trainingId);
   }
 
-  return query;
+  const assignments = await query;
+  if (assignments.error || !assignments.data) {
+    return assignments;
+  }
+
+  const trainingIds = [
+    ...new Set(assignments.data.map((assignment) => assignment.trainingId))
+  ];
+  const trainings =
+    trainingIds.length > 0
+      ? await client
+          .from("training")
+          .select("id, name, frequency")
+          .eq("companyId", companyId)
+          .in("id", trainingIds)
+      : { data: [] };
+  const trainingsById = new Map(
+    trainings.data?.map((training) => [training.id, training] as const) ?? []
+  );
+
+  return {
+    ...assignments,
+    data: assignments.data.map((assignment) => ({
+      ...assignment,
+      training: trainingsById.get(assignment.trainingId) ?? null
+    }))
+  };
 }
 
 export async function getTrainingAssignmentStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: {
     trainingId?: string;
@@ -839,15 +929,15 @@ export async function getTrainingAssignmentStatus(
 
   // Apply filters in memory since we're using an RPC function
   if (args?.trainingId) {
-    filteredData = filteredData.filter((d) => d.trainingId === args.trainingId);
+    filteredData = filteredData.filter((d: any) => d.trainingId === args.trainingId);
   }
   if (args?.status) {
-    filteredData = filteredData.filter((d) => d.status === args.status);
+    filteredData = filteredData.filter((d: any) => d.status === args.status);
   }
   if (args?.search) {
     const searchLower = args.search.toLowerCase();
     filteredData = filteredData.filter(
-      (d) =>
+      (d: any) =>
         d.trainingName?.toLowerCase().includes(searchLower) ||
         d.employeeName?.toLowerCase().includes(searchLower)
     );
@@ -856,7 +946,7 @@ export async function getTrainingAssignmentStatus(
   // Apply sorting
   const sortColumn = args?.sorts?.[0]?.sortBy ?? "employeeName";
   const sortAsc = args?.sorts?.[0]?.sortAsc ?? true;
-  filteredData.sort((a, b) => {
+  filteredData.sort((a: any, b: any) => {
     const aVal = a[sortColumn as keyof typeof a] ?? "";
     const bVal = b[sortColumn as keyof typeof b] ?? "";
     if (aVal < bVal) return sortAsc ? -1 : 1;
@@ -875,7 +965,7 @@ export async function getTrainingAssignmentStatus(
 }
 
 export async function getTrainingAssignmentSummary(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.rpc("get_training_assignment_summary", {
@@ -884,7 +974,7 @@ export async function getTrainingAssignmentSummary(
 }
 
 export async function getTrainingQuestions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   trainingId: string
 ) {
   return client
@@ -895,7 +985,7 @@ export async function getTrainingQuestions(
 }
 
 export async function getTrainings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -920,7 +1010,7 @@ export async function getTrainings(
 }
 
 export async function getTrainingsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -932,7 +1022,7 @@ export async function getTrainingsList(
 }
 
 export async function getWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client
@@ -944,7 +1034,7 @@ export async function getWorkCenter(
 }
 
 export async function getWorkCenters(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -969,7 +1059,7 @@ export async function getWorkCenters(
 }
 
 export async function getWorkCentersByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string
 ) {
   // Query both views and merge - workCenters has processes, workCentersWithBlockingStatus has blocking info
@@ -1011,7 +1101,7 @@ export async function getWorkCentersByLocation(
 }
 
 export async function getWorkCentersList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -1023,7 +1113,7 @@ export async function getWorkCentersList(
 }
 
 export async function getWorkCentersListWithBlockingStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -1035,7 +1125,7 @@ export async function getWorkCentersListWithBlockingStatus(
 }
 
 export async function insertAbility(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   ability: {
     name: string;
     curve: {
@@ -1053,7 +1143,7 @@ export async function insertAbility(
 }
 
 export async function insertEmployeeAbilities(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   abilityId: string,
   employeeIds: string[],
   companyId: string
@@ -1073,7 +1163,7 @@ export async function insertEmployeeAbilities(
 }
 
 export async function insertTrainingCompletion(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   completion: {
     trainingAssignmentId: string;
     employeeId: string;
@@ -1094,7 +1184,7 @@ export async function insertTrainingCompletion(
 }
 
 export async function updateAbility(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   ability: Partial<{
     name: string;
@@ -1111,7 +1201,7 @@ export async function updateAbility(
 }
 
 export async function updateSuggestionEmoji(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   suggestionId: string,
   emoji: string
 ) {
@@ -1119,7 +1209,7 @@ export async function updateSuggestionEmoji(
 }
 
 export async function updateSuggestionTags(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   suggestionId: string,
   tags: string[]
 ) {
@@ -1127,7 +1217,7 @@ export async function updateSuggestionTags(
 }
 
 export async function updateTrainingQuestionOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -1144,7 +1234,7 @@ export async function updateTrainingQuestionOrder(
 }
 
 export async function upsertContractor(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   contractorWithAbilities:
     | {
         id: string;
@@ -1200,7 +1290,7 @@ export async function upsertContractor(
 }
 
 export async function upsertEmployeeAbility(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeAbility: {
     id?: string;
     abilityId: string;
@@ -1238,7 +1328,7 @@ export async function upsertEmployeeAbility(
 }
 
 export async function upsertFailureMode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   failureMode:
     | (Omit<z.infer<typeof failureModeValidator>, "id"> & {
         companyId: string;
@@ -1265,7 +1355,7 @@ export async function upsertFailureMode(
 }
 
 export async function upsertLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   location:
     | (Omit<z.infer<typeof locationValidator>, "id"> & {
         companyId: string;
@@ -1274,21 +1364,27 @@ export async function upsertLocation(
       })
     | (Omit<z.infer<typeof locationValidator>, "id"> & {
         id: string;
+        companyId?: string;
         updatedBy: string;
         customFields?: Json;
       })
 ) {
   if ("id" in location) {
-    return client
+    const { companyId, ...data } = location;
+    let query = client
       .from("location")
-      .update(sanitize(location))
+      .update(sanitize(data))
       .eq("id", location.id);
+    if (companyId) {
+      query = query.eq("companyId", companyId);
+    }
+    return query;
   }
   return client.from("location").insert([location]).select("*").single();
 }
 
 export async function upsertMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatch:
     | (Omit<z.infer<typeof maintenanceDispatchValidator>, "id"> & {
         maintenanceDispatchId: string;
@@ -1307,7 +1403,6 @@ export async function upsertMaintenanceDispatch(
     return (
       client
         .from("maintenanceDispatch")
-        // @ts-expect-error TS2769 - TODO: fix type
         .insert([dispatch])
         .select("id")
         .single()
@@ -1321,7 +1416,7 @@ export async function upsertMaintenanceDispatch(
 }
 
 export async function upsertMaintenanceDispatchComment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   comment:
     | (Omit<z.infer<typeof maintenanceDispatchCommentValidator>, "id"> & {
         companyId: string;
@@ -1347,7 +1442,7 @@ export async function upsertMaintenanceDispatchComment(
 }
 
 export async function upsertMaintenanceDispatchEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   event:
     | (Omit<z.infer<typeof maintenanceDispatchEventValidator>, "id"> & {
         companyId: string;
@@ -1373,7 +1468,7 @@ export async function upsertMaintenanceDispatchEvent(
 }
 
 export async function upsertMaintenanceDispatchItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   item:
     | (Omit<z.infer<typeof maintenanceDispatchItemValidator>, "id"> & {
         companyId: string;
@@ -1399,7 +1494,7 @@ export async function upsertMaintenanceDispatchItem(
 }
 
 export async function upsertMaintenanceDispatchWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   workCenter:
     | (Omit<z.infer<typeof maintenanceDispatchWorkCenterValidator>, "id"> & {
         companyId: string;
@@ -1425,7 +1520,7 @@ export async function upsertMaintenanceDispatchWorkCenter(
 }
 
 export async function upsertMaintenanceSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   schedule:
     | (Omit<z.infer<typeof maintenanceScheduleValidator>, "id"> & {
         companyId: string;
@@ -1451,7 +1546,7 @@ export async function upsertMaintenanceSchedule(
 }
 
 export async function upsertMaintenanceScheduleItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   item:
     | (Omit<z.infer<typeof maintenanceScheduleItemValidator>, "id"> & {
         companyId: string;
@@ -1477,7 +1572,7 @@ export async function upsertMaintenanceScheduleItem(
 }
 
 export async function upsertPartner(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   partner:
     | (Omit<z.infer<typeof partnerValidator>, "supplierId"> & {
         companyId: string;
@@ -1495,13 +1590,12 @@ export async function upsertPartner(
       .update(sanitize(partner))
       .eq("id", partner.id);
   } else {
-    // @ts-expect-error TS2769 - TODO: fix type
     return await client.from("partner").insert([partner]);
   }
 }
 
 export async function upsertProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   process:
     | (Omit<z.infer<typeof processValidator>, "id"> & {
         companyId: string;
@@ -1588,7 +1682,7 @@ export async function upsertProcess(
 }
 
 export async function upsertTraining(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   training:
     | (Omit<z.infer<typeof trainingValidator>, "id"> & {
         companyId: string;
@@ -1612,7 +1706,7 @@ export async function upsertTraining(
 }
 
 export async function upsertTrainingAssignment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   assignment: {
     id?: string;
     trainingId: string;
@@ -1646,7 +1740,7 @@ export async function upsertTrainingAssignment(
 }
 
 export async function upsertTrainingQuestion(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   trainingQuestion:
     | (Omit<z.infer<typeof trainingQuestionValidator>, "id"> & {
         companyId: string;
@@ -1673,7 +1767,7 @@ export async function upsertTrainingQuestion(
 }
 
 export async function upsertWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   workCenter:
     | (Omit<z.infer<typeof workCenterValidator>, "id"> & {
         companyId: string;

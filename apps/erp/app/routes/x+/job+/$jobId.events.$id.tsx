@@ -1,6 +1,6 @@
 import { assertIsPost, error, notFound, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -27,7 +27,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const [jobOperations, workCenters, productionEvent] = await Promise.all([
     getJobOperations(client, jobId),
     getWorkCentersList(client, companyId),
-    getProductionEvent(client, id)
+    getProductionEvent(client, id, companyId)
   ]);
 
   const operationOptions = jobOperations.data?.map((operation) => ({
@@ -84,8 +84,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (d.endTime) {
-    const serviceRole = await getCarbonServiceRole();
-    await serviceRole.functions.invoke("post-production-event", {
+    await invokeFunction("post-production-event", {
       body: {
         productionEventId: id,
         userId,

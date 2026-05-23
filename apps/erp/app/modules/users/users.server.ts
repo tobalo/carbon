@@ -1,16 +1,20 @@
 import { error, success } from "@carbon/auth";
 import { deleteAuthAccount } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import { authProvider } from "@carbon/auth/provider";
 import { flash, requireAuthSession } from "@carbon/auth/session.server";
 import {
   deactivateCustomer,
   deactivateEmployee,
   deactivateSupplier
 } from "@carbon/auth/users.server";
-import type { Database, Json } from "@carbon/database";
+import type {
+  Json,
+  QueryDatabase
+} from "@carbon/database/schema";
 import { redis } from "@carbon/kv";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { redirect } from "react-router";
 import { getSupplierContact } from "~/modules/purchasing";
 import { getCustomerContact } from "~/modules/sales";
@@ -28,12 +32,36 @@ import type { Result } from "~/types";
 import { path } from "~/utils/path";
 import { insertEmployeeJob } from "../people/people.service";
 
+async function createAuthUser(args: {
+  email: string;
+  password?: string;
+  id?: string;
+}) {
+  try {
+    const user = await authProvider.createUser({
+      email: args.email.toLowerCase(),
+      password: args.password ?? crypto.randomUUID(),
+      emailVerified: true,
+      id: args.id
+    });
+
+    return { data: { user: { id: user.userId } }, error: null };
+  } catch (err) {
+    return {
+      data: { user: null },
+      error: {
+        message: err instanceof Error ? err.message : "Failed to create user"
+      }
+    };
+  }
+}
+
 export async function acceptInvite(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: CarbonDatabaseClient<QueryDatabase>,
   code: string,
   email?: string
 ) {
-  const invite = await serviceRole
+  const invite = await serviceClient
     .from("invite")
     .select("*")
     .eq("code", code)
@@ -71,25 +99,26 @@ export async function acceptInvite(
   }
 
   const [activate, addUser, setPermissions] = await Promise.all([
-    activationFunction(serviceRole, {
+    activationFunction(serviceClient, {
       userId: user.data.id,
       companyId: invite.data.companyId
     }),
-    addUserToCompany(serviceRole, {
+    addUserToCompany(serviceClient, {
       userId: user.data.id,
       companyId: invite.data.companyId,
       role: invite.data.role
     }),
     setUserPermissions(
-      serviceRole,
+      serviceClient,
       user.data.id,
+      invite.data.companyId,
       invite.data.permissions as Record<string, string[]>
     )
   ]);
 
   if (activate.error) {
     console.error(activate.error);
-    await rollbackInvite(serviceRole, {
+    await rollbackInvite(serviceClient, {
       userId: user.data.id,
       companyId: invite.data.companyId
     });
@@ -98,7 +127,7 @@ export async function acceptInvite(
 
   if (addUser.error) {
     console.error(addUser.error);
-    await rollbackInvite(serviceRole, {
+    await rollbackInvite(serviceClient, {
       userId: user.data.id,
       companyId: invite.data.companyId
     });
@@ -107,23 +136,26 @@ export async function acceptInvite(
 
   if (setPermissions.error) {
     console.error(setPermissions.error);
-    await rollbackInvite(serviceRole, {
+    await rollbackInvite(serviceClient, {
       userId: user.data.id,
       companyId: invite.data.companyId
     });
     return setPermissions;
   }
 
-  return serviceRole
+  return serviceClient
     .from("invite")
     .update({ acceptedAt: new Date().toISOString() })
     .eq("code", code)
+    .eq("companyId", invite.data.companyId)
+    .is("acceptedAt", null)
+    .is("revokedAt", null)
     .select("*")
     .single();
 }
 
 async function activateCustomer(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     userId,
     companyId
@@ -152,7 +184,7 @@ async function activateCustomer(
 }
 
 async function activateEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     userId,
     companyId
@@ -181,7 +213,7 @@ async function activateEmployee(
 }
 
 async function activateSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     userId,
     companyId
@@ -210,7 +242,7 @@ async function activateSupplier(
 }
 
 export async function addUserToCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userToCompany: {
     userId: string;
     companyId: string;
@@ -221,7 +253,7 @@ export async function addUserToCompany(
 }
 
 export async function createCustomerAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     id,
     customerId,
@@ -237,7 +269,7 @@ export async function createCustomerAccount(
   | { success: false; message: string }
   | { success: true; code: string; userId: string; email: string }
 > {
-  const customerContact = await getCustomerContact(client, id);
+  const customerContact = await getCustomerContact(client, id, customerId);
   if (
     customerContact.error ||
     customerContact.data === null ||
@@ -250,7 +282,7 @@ export async function createCustomerAccount(
   const { email, firstName, lastName } = customerContact.data.contact;
 
   const permissions = makeCustomerPermissions(companyId);
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
   const user = await getUserByEmail(email);
   let userId = "";
   let isNewUser = false;
@@ -259,18 +291,20 @@ export async function createCustomerAccount(
     userId = user.data.id;
   } else {
     isNewUser = true;
-    const createSupabaseUser = await serviceRole.auth.admin.createUser({
+    const createAuth = await createAuthUser({
       email: email.toLowerCase(),
-      password: crypto.randomUUID(),
-      email_confirm: true
+      password: crypto.randomUUID()
     });
 
-    if (createSupabaseUser.error) {
-      return { success: false, message: createSupabaseUser.error.message };
+    if (createAuth.error || !createAuth.data.user) {
+      return {
+        success: false,
+        message: createAuth.error?.message ?? "Failed to create user"
+      };
     }
 
-    userId = createSupabaseUser.data.user.id;
-    const createCarbonUser = await createUser(serviceRole, {
+    userId = createAuth.data.user.id;
+    const createCarbonUser = await createUser(serviceClient, {
       id: userId,
       email: email.toLowerCase(),
       firstName: firstName ?? "",
@@ -279,7 +313,7 @@ export async function createCustomerAccount(
     });
 
     if (createCarbonUser.error) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
       return { success: false, message: createCarbonUser.error.message };
     }
   }
@@ -287,13 +321,17 @@ export async function createCustomerAccount(
   const code = crypto.randomUUID();
   const [contactUpdate, customerAccountInsert, inviteInsert] =
     await Promise.all([
-      client.from("customerContact").update({ userId }).eq("id", id),
+      client
+        .from("customerContact")
+        .update({ userId })
+        .eq("id", id)
+        .eq("customerId", customerId),
       insertCustomerAccount(client, {
         id: userId,
         customerId,
         companyId
       }),
-      insertInvite(serviceRole, {
+      insertInvite(serviceClient, {
         role: "customer",
         permissions,
         email,
@@ -305,27 +343,27 @@ export async function createCustomerAccount(
 
   if (contactUpdate.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateCustomer(serviceRole, userId, companyId);
+      await deactivateCustomer(serviceClient, userId, companyId);
     }
     return { success: false, message: contactUpdate.error.message };
   }
 
   if (customerAccountInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateCustomer(serviceRole, userId, companyId);
+      await deactivateCustomer(serviceClient, userId, companyId);
     }
     return { success: false, message: customerAccountInsert.error.message };
   }
 
   if (inviteInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateCustomer(serviceRole, userId, companyId);
+      await deactivateCustomer(serviceClient, userId, companyId);
     }
     return { success: false, message: inviteInsert.error.message };
   }
@@ -334,7 +372,7 @@ export async function createCustomerAccount(
 }
 
 export async function createEmployeeAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     email,
     firstName,
@@ -365,7 +403,7 @@ export async function createEmployeeAccount(
   }
 
   const permissions = makePermissionsFromEmployeeType(employeeTypePermissions);
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
   const user = await getUserByEmail(email);
   let userId = "";
   let isNewUser = false;
@@ -388,18 +426,20 @@ export async function createEmployeeAccount(
     }
   } else {
     isNewUser = true;
-    const createSupabaseUser = await serviceRole.auth.admin.createUser({
+    const createAuth = await createAuthUser({
       email: email.toLowerCase(),
-      password: crypto.randomUUID(),
-      email_confirm: true
+      password: crypto.randomUUID()
     });
 
-    if (createSupabaseUser.error) {
-      return { success: false, message: createSupabaseUser.error.message };
+    if (createAuth.error || !createAuth.data.user) {
+      return {
+        success: false,
+        message: createAuth.error?.message ?? "Failed to create user"
+      };
     }
 
-    userId = createSupabaseUser.data.user.id;
-    const createCarbonUser = await createUser(serviceRole, {
+    userId = createAuth.data.user.id;
+    const createCarbonUser = await createUser(serviceClient, {
       id: userId,
       email: email.toLowerCase(),
       firstName,
@@ -408,7 +448,7 @@ export async function createEmployeeAccount(
     });
 
     if (createCarbonUser.error) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
       return { success: false, message: createCarbonUser.error.message };
     }
   }
@@ -426,7 +466,7 @@ export async function createEmployeeAccount(
       companyId,
       locationId
     }),
-    insertInvite(serviceRole, {
+    insertInvite(serviceClient, {
       role: "employee",
       permissions,
       email,
@@ -438,25 +478,25 @@ export async function createEmployeeAccount(
 
   if (employeeInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     }
     return { success: false, message: employeeInsert.error.message };
   }
 
   if (jobInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateEmployee(serviceRole, userId, companyId);
+      await deactivateEmployee(serviceClient, userId, companyId);
     }
     return { success: false, message: jobInsert.error.message };
   }
 
   if (inviteInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateEmployee(serviceRole, userId, companyId);
+      await deactivateEmployee(serviceClient, userId, companyId);
     }
     return { success: false, message: inviteInsert.error.message };
   }
@@ -465,7 +505,7 @@ export async function createEmployeeAccount(
 }
 
 export async function createSupplierAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     id,
     supplierId,
@@ -481,7 +521,7 @@ export async function createSupplierAccount(
   | { success: false; message: string }
   | { success: true; code: string; userId: string; email: string }
 > {
-  const supplierContact = await getSupplierContact(client, id);
+  const supplierContact = await getSupplierContact(client, id, supplierId);
   if (
     supplierContact.error ||
     supplierContact.data === null ||
@@ -494,7 +534,7 @@ export async function createSupplierAccount(
   const { email, firstName, lastName } = supplierContact.data.contact;
 
   const permissions = makeSupplierPermissions(companyId);
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
   const user = await getUserByEmail(email);
   let userId = "";
   let isNewUser = false;
@@ -503,18 +543,20 @@ export async function createSupplierAccount(
     userId = user.data.id;
   } else {
     isNewUser = true;
-    const createSupabaseUser = await serviceRole.auth.admin.createUser({
+    const createAuth = await createAuthUser({
       email: email.toLowerCase(),
-      password: crypto.randomUUID(),
-      email_confirm: true
+      password: crypto.randomUUID()
     });
 
-    if (createSupabaseUser.error) {
-      return { success: false, message: createSupabaseUser.error.message };
+    if (createAuth.error || !createAuth.data.user) {
+      return {
+        success: false,
+        message: createAuth.error?.message ?? "Failed to create user"
+      };
     }
 
-    userId = createSupabaseUser.data.user.id;
-    const createCarbonUser = await createUser(serviceRole, {
+    userId = createAuth.data.user.id;
+    const createCarbonUser = await createUser(serviceClient, {
       id: userId,
       email: email.toLowerCase(),
       firstName: firstName ?? "",
@@ -523,7 +565,7 @@ export async function createSupplierAccount(
     });
 
     if (createCarbonUser.error) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
       return { success: false, message: createCarbonUser.error.message };
     }
   }
@@ -531,13 +573,17 @@ export async function createSupplierAccount(
   const code = crypto.randomUUID();
   const [contactUpdate, supplierAccountInsert, inviteInsert] =
     await Promise.all([
-      client.from("supplierContact").update({ userId }).eq("id", id),
+      client
+        .from("supplierContact")
+        .update({ userId })
+        .eq("id", id)
+        .eq("supplierId", supplierId),
       insertSupplierAccount(client, {
         id: userId,
         supplierId,
         companyId
       }),
-      insertInvite(serviceRole, {
+      insertInvite(serviceClient, {
         role: "supplier",
         permissions,
         email,
@@ -549,27 +595,27 @@ export async function createSupplierAccount(
 
   if (contactUpdate.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateSupplier(serviceRole, userId, companyId);
+      await deactivateSupplier(serviceClient, userId, companyId);
     }
     return { success: false, message: contactUpdate.error.message };
   }
 
   if (supplierAccountInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateSupplier(serviceRole, userId, companyId);
+      await deactivateSupplier(serviceClient, userId, companyId);
     }
     return { success: false, message: supplierAccountInsert.error.message };
   }
 
   if (inviteInsert.error) {
     if (isNewUser) {
-      await deleteAuthAccount(serviceRole, userId);
+      await deleteAuthAccount(serviceClient, userId);
     } else {
-      await deactivateSupplier(serviceRole, userId, companyId);
+      await deactivateSupplier(serviceClient, userId, companyId);
     }
     return { success: false, message: inviteInsert.error.message };
   }
@@ -578,7 +624,7 @@ export async function createSupplierAccount(
 }
 
 async function createUser(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   user: Omit<User, "fullName">
 ) {
   const { data, error } = await insertUser(client, user);
@@ -591,7 +637,7 @@ async function createUser(
 }
 
 export async function getClaims(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   uid: string,
   company?: string
 ) {
@@ -600,7 +646,7 @@ export async function getClaims(
 
 export async function getCurrentUser(
   request: Request,
-  client: SupabaseClient<Database>
+  client: CarbonDatabaseClient<QueryDatabase>
 ) {
   const { userId } = await requireAuthSession(request);
 
@@ -615,11 +661,15 @@ export async function getCurrentUser(
   return user.data;
 }
 
-export function getPermissionCacheKey(userId: string) {
+export function getPermissionCacheKey(userId: string, companyId: string) {
+  return `permissions:${userId}:${companyId}`;
+}
+
+export function getLegacyPermissionCacheKey(userId: string) {
   return `permissions:${userId}`;
 }
 
-export async function getUser(client: SupabaseClient<Database>, id: string) {
+export async function getUser(client: CarbonDatabaseClient<QueryDatabase>, id: string) {
   return client
     .from("user")
     .select("*")
@@ -629,7 +679,7 @@ export async function getUser(client: SupabaseClient<Database>, id: string) {
 }
 
 export async function getUserByEmail(email: string) {
-  return getCarbonServiceRole()
+  return getCarbonServiceClient()
     .from("user")
     .select("*")
     .eq("email", email.toLowerCase())
@@ -643,7 +693,9 @@ export async function getUserClaims(userId: string, companyId: string) {
   } | null = null;
 
   try {
-    const cachedClaims = await redis.get(getPermissionCacheKey(userId));
+    const cachedClaims = await redis.get(
+      getPermissionCacheKey(userId, companyId)
+    );
     if (cachedClaims) {
       claims = JSON.parse(cachedClaims) as {
         permissions: Record<string, Permission>;
@@ -655,9 +707,9 @@ export async function getUserClaims(userId: string, companyId: string) {
   } finally {
     // if we don't have permissions from redis, get them from the database
     if (!claims) {
-      // TODO: remove service role from here, and move it up a level
+      // TODO: move this service client call up a level
       const rawClaims = await getClaims(
-        getCarbonServiceRole(),
+        getCarbonServiceClient(),
         userId,
         companyId
       );
@@ -670,7 +722,10 @@ export async function getUserClaims(userId: string, companyId: string) {
       claims = makePermissionsFromClaims(rawClaims.data as Json[]);
 
       // store claims in redis
-      await redis.set(getPermissionCacheKey(userId), JSON.stringify(claims));
+      await redis.set(
+        getPermissionCacheKey(userId, companyId),
+        JSON.stringify(claims)
+      );
 
       if (!claims) {
         throw new Error("Failed to get claims");
@@ -682,14 +737,14 @@ export async function getUserClaims(userId: string, companyId: string) {
 }
 
 export async function getUserGroups(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string
 ) {
   return client.rpc("groups_for_user", { uid: userId });
 }
 
 export async function getUserDefaults(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -702,7 +757,7 @@ export async function getUserDefaults(
 }
 
 export async function getModulePreferences(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -715,7 +770,7 @@ export async function getModulePreferences(
 }
 
 export async function upsertModulePreferences(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string,
   preferences: { module: string; position: number; hidden: boolean }[]
@@ -734,7 +789,7 @@ export async function upsertModulePreferences(
 }
 
 async function insertCustomerAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   customerAccount: {
     id: string;
     customerId: string;
@@ -749,19 +804,19 @@ async function insertCustomerAccount(
 }
 
 export async function insertEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employee: EmployeeInsert
 ) {
   return client.from("employee").insert([employee]).select("*").single();
 }
 
 export async function insertInvite(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   invite: InviteInsert
 ) {
   return client
     .from("invite")
-    .upsert([{ ...invite, acceptedAt: null }], {
+    .upsert([{ ...invite, acceptedAt: null, revokedAt: null }], {
       onConflict: "email, companyId",
       ignoreDuplicates: false
     })
@@ -770,7 +825,7 @@ export async function insertInvite(
 }
 
 async function insertSupplierAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierAccount: {
     id: string;
     supplierId: string;
@@ -785,7 +840,7 @@ async function insertSupplierAccount(
 }
 
 async function insertUser(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   user: Omit<User, "fullName" | "createdAt">
 ) {
   return client.from("user").upsert([user]).select("*");
@@ -793,13 +848,13 @@ async function insertUser(
 
 /**
  * Creates a console-only operator: a lightweight user record that can pin in
- * at MES terminals without needing email, password, or Supabase Auth.
+ * at MES terminals without needing email, password, or a provider auth account.
  *
  * Uses a synthetic email ({uuid}@console.internal) to satisfy the NOT NULL
  * constraint. No auth.users entry is created — operators cannot log in.
  */
 export async function createConsoleOperator(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     firstName,
     lastName,
@@ -819,14 +874,14 @@ export async function createConsoleOperator(
   | { success: false; message: string }
   | { success: true; userId: string; name: string }
 > {
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
   const userId = crypto.randomUUID();
   const syntheticEmail = `${userId}@console.internal`;
 
-  // 1. Insert user record (no Supabase Auth)
+  // 1. Insert user record (no provider auth account)
   // Note: isConsoleOperator field added by migration 20260319000000_console-mode.sql
   // Type will be available after db:generate runs
-  const userInsert = await serviceRole
+  const userInsert = await serviceClient
     .from("user")
     .insert({
       id: userId,
@@ -854,7 +909,7 @@ export async function createConsoleOperator(
 
   if (employeeInsert.error) {
     // Cleanup: remove user
-    await serviceRole.from("user").delete().eq("id", userId);
+    await serviceClient.from("user").delete().eq("id", userId);
     return { success: false, message: employeeInsert.error.message };
   }
 
@@ -867,13 +922,13 @@ export async function createConsoleOperator(
 
   if (jobInsert.error) {
     // Cleanup
-    await serviceRole.from("employee").delete().eq("id", userId);
-    await serviceRole.from("user").delete().eq("id", userId);
+    await serviceClient.from("employee").delete().eq("id", userId);
+    await serviceClient.from("user").delete().eq("id", userId);
     return { success: false, message: jobInsert.error.message };
   }
 
   // 4. Add to userToCompany (for billing/plan counting)
-  const companyLink = await serviceRole
+  const companyLink = await serviceClient
     .from("userToCompany")
     .insert({ userId, companyId, role: "employee" as const })
     .select("*")
@@ -895,11 +950,11 @@ export async function createConsoleOperator(
 }
 
 /**
- * Converts a console-only operator to a full user by adding a Supabase Auth
+ * Converts a console-only operator to a full user by adding a provider auth
  * account and updating their email to a real one.
  */
 export async function convertConsoleOperatorToUser(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     userId,
     email,
@@ -914,11 +969,11 @@ export async function convertConsoleOperatorToUser(
     createdBy: string;
   }
 ): Promise<{ success: false; message: string } | { success: true }> {
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
 
   // Verify the user is a console operator
   // Note: isConsoleOperator field added by migration 20260319000000_console-mode.sql
-  const existingUser = await serviceRole
+  const existingUser = await serviceClient
     .from("user")
     .select("*")
     .eq("id", userId)
@@ -929,7 +984,7 @@ export async function convertConsoleOperatorToUser(
   }
 
   // Check email isn't already taken
-  const emailCheck = await serviceRole
+  const emailCheck = await serviceClient
     .from("user")
     .select("id")
     .eq("email", email.toLowerCase())
@@ -939,12 +994,11 @@ export async function convertConsoleOperatorToUser(
     return { success: false, message: "Email is already in use" };
   }
 
-  // Create Supabase Auth account with the same user ID
-  const createAuth = await serviceRole.auth.admin.createUser({
+  // Create provider auth account with the same user ID.
+  const createAuth = await createAuthUser({
     id: userId,
     email: email.toLowerCase(),
-    password: crypto.randomUUID(),
-    email_confirm: true
+    password: crypto.randomUUID()
   });
 
   if (createAuth.error) {
@@ -952,7 +1006,7 @@ export async function convertConsoleOperatorToUser(
   }
 
   // Update user record: real email + no longer console operator
-  const updateUser = await serviceRole
+  const updateUser = await serviceClient
     .from("user")
     .update({
       email: email.toLowerCase(),
@@ -962,12 +1016,12 @@ export async function convertConsoleOperatorToUser(
 
   if (updateUser.error) {
     // Cleanup auth
-    await deleteAuthAccount(serviceRole, userId);
+    await deleteAuthAccount(serviceClient, userId);
     return { success: false, message: updateUser.error.message };
   }
 
   // Change employee type to the selected type
-  await serviceRole
+  await serviceClient
     .from("employee")
     .update({ employeeTypeId: employeeType })
     .eq("id", userId)
@@ -993,7 +1047,7 @@ export async function convertConsoleOperatorToUser(
         employeeTypePermissions
       );
 
-      const inviteResult = await insertInvite(serviceRole, {
+      const inviteResult = await insertInvite(serviceClient, {
         role: "employee",
         permissions,
         email: email.toLowerCase(),
@@ -1059,9 +1113,9 @@ function makeCustomerPermissions(companyId: string) {
   const permissions: Record<string, string[]> = {
     documents_view: [companyId],
     documents_create: [companyId],
-    documents_udpate: [companyId],
+    documents_update: [companyId],
     documents_delete: [companyId],
-    jobs_view: [companyId],
+    production_view: [companyId],
     sales_view: [companyId],
     parts_view: [companyId]
   };
@@ -1269,7 +1323,7 @@ function makeSupplierPermissions(companyId: string) {
   const permissions: Record<string, string[]> = {
     documents_view: [companyId],
     documents_create: [companyId],
-    documents_udpate: [companyId],
+    documents_update: [companyId],
     documents_delete: [companyId],
     purchasing_view: [companyId],
     parts_view: [companyId]
@@ -1279,7 +1333,7 @@ function makeSupplierPermissions(companyId: string) {
 }
 
 export async function getInvite(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   email: string,
   companyId: string
 ) {
@@ -1292,42 +1346,42 @@ export async function getInvite(
 }
 
 export async function resetPassword(userId: string, password: string) {
-  return getCarbonServiceRole().auth.admin.updateUserById(userId, {
-    password
-  });
+  await authProvider.adminSetPassword(userId, password);
+  return { data: { user: { id: userId } }, error: null };
 }
 
 async function rollbackInvite(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: CarbonDatabaseClient<QueryDatabase>,
   { userId, companyId }: { userId: string; companyId: string }
 ) {
   await Promise.all([
-    serviceRole
+    serviceClient
       .from("employee")
       .update({ active: false })
       .eq("id", userId)
       .eq("companyId", companyId),
-    serviceRole
+    serviceClient
       .from("userToCompany")
       .delete()
       .eq("userId", userId)
       .eq("companyId", companyId),
-    serviceRole
+    serviceClient
       .from("customerAccount")
       .delete()
-      .eq("userId", userId)
+      .eq("id", userId)
       .eq("companyId", companyId),
-    serviceRole
+    serviceClient
       .from("supplierAccount")
       .delete()
-      .eq("userId", userId)
+      .eq("id", userId)
       .eq("companyId", companyId)
   ]);
 }
 
 async function setUserPermissions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
+  companyId: string,
   permissions: Record<string, string[]>
 ) {
   const user = await client
@@ -1354,13 +1408,16 @@ async function setUserPermissions(
     .from("userPermission")
     .upsert({ id: userId, permissions: newPermissions });
 
-  await redis.del(getPermissionCacheKey(userId));
+  await redis.del(
+    getPermissionCacheKey(userId, companyId),
+    getLegacyPermissionCacheKey(userId)
+  );
 
   return result;
 }
 
 export async function updateEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     id,
     employeeType,
@@ -1384,7 +1441,7 @@ export async function updateEmployee(
 }
 
 export async function updatePermissions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     id,
     permissions,
@@ -1398,7 +1455,22 @@ export async function updatePermissions(
   }
 ): Promise<Result> {
   if (await client.rpc("is_claims_admin")) {
-    const claims = await getClaims(client, id);
+    const membership = await client
+      .from("userToCompany")
+      .select("userId")
+      .eq("userId", id)
+      .eq("companyId", companyId)
+      .maybeSingle();
+
+    if (membership.error) {
+      return error(membership.error, "Failed to verify user company access");
+    }
+
+    if (!membership.data) {
+      return error(null, "User is not a member of the requested company");
+    }
+
+    const claims = await getClaims(client, id, companyId);
 
     if (claims.error) return error(claims.error, "Failed to get claims");
 
@@ -1514,14 +1586,17 @@ export async function updatePermissions(
       });
     }
 
-    const permissionsUpdate = await getCarbonServiceRole()
+    const permissionsUpdate = await getCarbonServiceClient()
       .from("userPermission")
       .update({ permissions: updatedPermissions })
       .eq("id", id);
     if (permissionsUpdate.error)
       return error(permissionsUpdate.error, "Failed to update claims");
 
-    await redis.del(getPermissionCacheKey(id));
+    await redis.del(
+      getPermissionCacheKey(id, companyId),
+      getLegacyPermissionCacheKey(id)
+    );
 
     return success("Permissions updated");
   } else {

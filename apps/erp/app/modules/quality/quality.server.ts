@@ -1,9 +1,21 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { sql } from "kysely";
+import { and, eq, inArray, sql, withAuth } from "@carbon/database/drizzle";
+import {
+  inboundInspectionHistoryTable,
+  inboundInspectionSampleTable,
+  inboundInspectionTable,
+  nonConformanceItemTable,
+  nonConformanceItemTrackedEntityTable,
+  nonConformanceTable,
+  trackedActivityInputTable,
+  trackedActivityOutputTable,
+  trackedActivityTable,
+  trackedEntityTable,
+  type QueryDatabase
+} from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
+import { nanoid } from "nanoid";
 import type { z } from "zod";
 
-import { getDatabaseClient } from "~/services/database.server";
 import type {
   inboundInspectionDispositionValidator,
   inboundInspectionSampleValidator
@@ -42,69 +54,91 @@ export async function upsertInboundInspectionSample(
     inspectedBy: string;
   }
 ): Promise<Result<{ id: string }>> {
-  const db = getDatabaseClient();
   const nowIso = new Date().toISOString();
 
   try {
-    const result = await db.transaction().execute(async (trx) => {
-      const inspection = await trx
-        .selectFrom("inboundInspection")
-        .select(["id", "status", "receiptId"])
-        .where("id", "=", sample.inspectionId)
-        .where("companyId", "=", sample.companyId)
-        .executeTakeFirst();
-      if (!inspection) throw new Error("Inspection not found");
-
-      const existing = await trx
-        .selectFrom("inboundInspectionSample")
-        .select(["id"])
-        .where("trackedEntityId", "=", sample.trackedEntityId)
-        .executeTakeFirst();
-
-      const samplePayload = {
-        inboundInspectionId: sample.inspectionId,
-        trackedEntityId: sample.trackedEntityId,
-        status: sample.status,
-        notes: sample.notes ?? null,
-        inspectedBy: sample.inspectedBy,
-        inspectedAt: nowIso,
-        companyId: sample.companyId
-      };
-
-      let sampleId: string;
-      if (existing) {
-        const updated = await trx
-          .updateTable("inboundInspectionSample")
-          .set({
-            ...samplePayload,
-            updatedBy: sample.inspectedBy,
-            updatedAt: nowIso
+    const result = await withAuth(
+      { kind: "user", userId: sample.inspectedBy },
+      async (db) => {
+        const [inspection] = await db
+          .select({
+            id: inboundInspectionTable.id,
+            status: inboundInspectionTable.status,
+            receiptId: inboundInspectionTable.receiptId
           })
-          .where("id", "=", existing.id)
-          .returning(["id"])
-          .executeTakeFirstOrThrow();
-        sampleId = updated.id;
-      } else {
-        const inserted = await trx
-          .insertInto("inboundInspectionSample")
-          .values({ ...samplePayload, createdBy: sample.inspectedBy })
-          .returning(["id"])
-          .executeTakeFirstOrThrow();
-        sampleId = inserted.id;
-      }
+          .from(inboundInspectionTable)
+          .where(
+            and(
+              eq(inboundInspectionTable.id, sample.inspectionId),
+              eq(inboundInspectionTable.companyId, sample.companyId)
+            )
+          )
+          .limit(1);
+        if (!inspection) throw new Error("Inspection not found");
 
-      const trackedEntityStatus =
-        sample.status === "Passed" ? "Available" : "Rejected";
-      await trx
-        .updateTable("trackedEntity")
-        .set({ status: trackedEntityStatus })
-        .where("id", "=", sample.trackedEntityId)
-        .where("companyId", "=", sample.companyId)
-        .execute();
+        const [existing] = await db
+          .select({ id: inboundInspectionSampleTable.id })
+          .from(inboundInspectionSampleTable)
+          .where(
+            and(
+              eq(
+                inboundInspectionSampleTable.trackedEntityId,
+                sample.trackedEntityId
+              ),
+              eq(inboundInspectionSampleTable.companyId, sample.companyId)
+            )
+          )
+          .limit(1);
 
-      const activity = await trx
-        .insertInto("trackedActivity")
-        .values({
+        const samplePayload = {
+          inboundInspectionId: sample.inspectionId,
+          trackedEntityId: sample.trackedEntityId,
+          status: sample.status,
+          notes: sample.notes ?? null,
+          inspectedBy: sample.inspectedBy,
+          inspectedAt: nowIso,
+          companyId: sample.companyId
+        };
+
+        let sampleId: string;
+        if (existing) {
+          const [updated] = await db
+            .update(inboundInspectionSampleTable)
+            .set({
+              ...samplePayload,
+              updatedBy: sample.inspectedBy,
+              updatedAt: nowIso
+            })
+            .where(eq(inboundInspectionSampleTable.id, existing.id))
+            .returning({ id: inboundInspectionSampleTable.id });
+
+          if (!updated) throw new Error("Failed to update sample");
+          sampleId = updated.id;
+        } else {
+          sampleId = nanoid();
+          await db.insert(inboundInspectionSampleTable).values({
+            id: sampleId,
+            ...samplePayload,
+            createdBy: sample.inspectedBy,
+            createdAt: nowIso
+          });
+        }
+
+        const trackedEntityStatus =
+          sample.status === "Passed" ? "Available" : "Rejected";
+        await db
+          .update(trackedEntityTable)
+          .set({ status: trackedEntityStatus })
+          .where(
+            and(
+              eq(trackedEntityTable.id, sample.trackedEntityId),
+              eq(trackedEntityTable.companyId, sample.companyId)
+            )
+          );
+
+        const activityId = nanoid();
+        await db.insert(trackedActivityTable).values({
+          id: activityId,
           type: "Inspect",
           sourceDocument: "Inbound Inspection",
           sourceDocumentId: sample.inspectionId,
@@ -115,58 +149,57 @@ export async function upsertInboundInspectionSample(
             ...(sample.notes ? { Notes: sample.notes } : {})
           },
           companyId: sample.companyId,
-          createdBy: sample.inspectedBy
-        })
-        .returning(["id"])
-        .executeTakeFirstOrThrow();
+          createdBy: sample.inspectedBy,
+          createdAt: nowIso
+        });
 
-      await trx
-        .insertInto("trackedActivityInput")
-        .values({
-          trackedActivityId: activity.id,
+        await db.insert(trackedActivityInputTable).values({
+          trackedActivityId: activityId,
           trackedEntityId: sample.trackedEntityId,
           quantity: 0,
           companyId: sample.companyId,
-          createdBy: sample.inspectedBy
-        })
-        .execute();
-      await trx
-        .insertInto("trackedActivityOutput")
-        .values({
-          trackedActivityId: activity.id,
+          createdBy: sample.inspectedBy,
+          createdAt: nowIso
+        });
+        await db.insert(trackedActivityOutputTable).values({
+          trackedActivityId: activityId,
           trackedEntityId: sample.trackedEntityId,
           quantity: 0,
           companyId: sample.companyId,
-          createdBy: sample.inspectedBy
-        })
-        .execute();
+          createdBy: sample.inspectedBy,
+          createdAt: nowIso
+        });
 
-      const isTerminal =
-        inspection.status === "Passed" ||
-        inspection.status === "Failed" ||
-        inspection.status === "Partial";
-      if (!isTerminal) {
-        const samples = await trx
-          .selectFrom("inboundInspectionSample")
-          .select(["status"])
-          .where("inboundInspectionId", "=", sample.inspectionId)
-          .execute();
-        const nextStatus = computeLotStatus(samples);
-        if (nextStatus !== inspection.status) {
-          await trx
-            .updateTable("inboundInspection")
-            .set({
-              status: nextStatus,
-              updatedBy: sample.inspectedBy,
-              updatedAt: nowIso
-            })
-            .where("id", "=", sample.inspectionId)
-            .execute();
+        const isTerminal =
+          inspection.status === "Passed" ||
+          inspection.status === "Failed" ||
+          inspection.status === "Partial";
+        if (!isTerminal) {
+          const samples = await db
+            .select({ status: inboundInspectionSampleTable.status })
+            .from(inboundInspectionSampleTable)
+            .where(
+              eq(
+                inboundInspectionSampleTable.inboundInspectionId,
+                sample.inspectionId
+              )
+            );
+          const nextStatus = computeLotStatus(samples);
+          if (nextStatus !== inspection.status) {
+            await db
+              .update(inboundInspectionTable)
+              .set({
+                status: nextStatus,
+                updatedBy: sample.inspectedBy,
+                updatedAt: nowIso
+              })
+              .where(eq(inboundInspectionTable.id, sample.inspectionId));
+          }
         }
-      }
 
-      return { id: sampleId };
-    });
+        return { id: sampleId };
+      }
+    );
 
     return { data: result, error: null };
   } catch (err) {
@@ -190,106 +223,124 @@ export async function dispositionInboundInspection(
     dispositionedBy: string;
   }
 ): Promise<Result<{ id: string; status: string }>> {
-  const db = getDatabaseClient();
   const nowIso = new Date().toISOString();
 
   try {
-    const result = await db.transaction().execute(async (trx) => {
-      const inspection = await trx
-        .selectFrom("inboundInspection")
-        .select([
-          "id",
-          "receiptLineId",
-          "receiptId",
-          "itemId",
-          "supplierId",
-          "samplingStandard",
-          "severity",
-          "inspectionLevel",
-          "aql",
-          "lotSize",
-          "sampleSize"
-        ])
-        .where("id", "=", args.id)
-        .where("companyId", "=", args.companyId)
-        .executeTakeFirst();
-      if (!inspection) throw new Error("Inspection not found");
+    const result = await withAuth(
+      { kind: "user", userId: args.dispositionedBy },
+      async (db) => {
+        const [inspection] = await db
+          .select({
+            id: inboundInspectionTable.id,
+            receiptLineId: inboundInspectionTable.receiptLineId,
+            receiptId: inboundInspectionTable.receiptId,
+            itemId: inboundInspectionTable.itemId,
+            supplierId: inboundInspectionTable.supplierId,
+            samplingStandard: inboundInspectionTable.samplingStandard,
+            severity: inboundInspectionTable.severity,
+            inspectionLevel: inboundInspectionTable.inspectionLevel,
+            aql: inboundInspectionTable.aql,
+            lotSize: inboundInspectionTable.lotSize,
+            sampleSize: inboundInspectionTable.sampleSize
+          })
+          .from(inboundInspectionTable)
+          .where(
+            and(
+              eq(inboundInspectionTable.id, args.id),
+              eq(inboundInspectionTable.companyId, args.companyId)
+            )
+          )
+          .limit(1);
+        if (!inspection) throw new Error("Inspection not found");
 
-      const lotEntities = await trx
-        .selectFrom("trackedEntity")
-        .select(["id"])
-        .where(
-          sql<string>`attributes ->> 'Receipt Line'`,
-          "=",
-          inspection.receiptLineId
-        )
-        .where("companyId", "=", args.companyId)
-        .execute();
+        const lotEntities = await db
+          .select({ id: trackedEntityTable.id })
+          .from(trackedEntityTable)
+          .where(
+            and(
+              sql`${trackedEntityTable.attributes}->>'Receipt Line' = ${inspection.receiptLineId}`,
+              eq(trackedEntityTable.companyId, args.companyId)
+            )
+          );
 
-      const existingSamples = await trx
-        .selectFrom("inboundInspectionSample")
-        .select(["trackedEntityId", "status"])
-        .where("inboundInspectionId", "=", args.id)
-        .execute();
+        const existingSamples = await db
+          .select({
+            trackedEntityId: inboundInspectionSampleTable.trackedEntityId,
+            status: inboundInspectionSampleTable.status
+          })
+          .from(inboundInspectionSampleTable)
+          .where(eq(inboundInspectionSampleTable.inboundInspectionId, args.id));
 
-      const sampledIds = new Set(existingSamples.map((s) => s.trackedEntityId));
-      const allLotIds = lotEntities.map((e) => e.id);
-      const unsampledIds = allLotIds.filter((id) => !sampledIds.has(id));
-      const failures = existingSamples.filter(
-        (s) => s.status === "Failed"
-      ).length;
+        const sampledIds = new Set(
+          existingSamples.map((s) => s.trackedEntityId)
+        );
+        const allLotIds = lotEntities.map((e) => e.id);
+        const unsampledIds = allLotIds.filter((id) => !sampledIds.has(id));
+        const failures = existingSamples.filter(
+          (s) => s.status === "Failed"
+        ).length;
 
-      // Reject = entire lot non-conforming (ISO 9001:2015 §8.7). Accept only
-      // releases un-sampled entities (sampled outcomes already flipped
-      // per-sample). Partial leaves un-sampled entities On Hold.
-      let lotStatus: "Passed" | "Failed" | "Partial";
-      let idsToFlip: string[] = [];
-      let flipStatus: "Available" | "Rejected" | null = null;
-      switch (args.decision) {
-        case "Accept":
-          lotStatus = "Passed";
-          idsToFlip = unsampledIds;
-          flipStatus = "Available";
-          break;
-        case "Reject":
-          lotStatus = "Failed";
-          idsToFlip = allLotIds;
-          flipStatus = "Rejected";
-          break;
-        case "Partial":
-          lotStatus = "Partial";
-          idsToFlip = [];
-          flipStatus = null;
-          break;
-      }
+        // Reject = entire lot non-conforming (ISO 9001:2015 §8.7). Accept only
+        // releases un-sampled entities (sampled outcomes already flipped
+        // per-sample). Partial leaves un-sampled entities On Hold.
+        let lotStatus: "Passed" | "Failed" | "Partial";
+        let idsToFlip: string[] = [];
+        let flipStatus: "Available" | "Rejected" | null = null;
+        switch (args.decision) {
+          case "Accept":
+            lotStatus = "Passed";
+            idsToFlip = unsampledIds;
+            flipStatus = "Available";
+            break;
+          case "Reject":
+            lotStatus = "Failed";
+            idsToFlip = allLotIds;
+            flipStatus = "Rejected";
+            break;
+          case "Partial":
+            lotStatus = "Partial";
+            idsToFlip = [];
+            flipStatus = null;
+            break;
+        }
 
-      if (flipStatus && idsToFlip.length > 0) {
-        await trx
-          .updateTable("trackedEntity")
-          .set({ status: flipStatus })
-          .where("id", "in", idsToFlip)
-          .where("companyId", "=", args.companyId)
-          .execute();
-      }
+        if (flipStatus && idsToFlip.length > 0) {
+          await db
+            .update(trackedEntityTable)
+            .set({ status: flipStatus })
+            .where(
+              and(
+                inArray(trackedEntityTable.id, idsToFlip),
+                eq(trackedEntityTable.companyId, args.companyId)
+              )
+            );
+        }
 
-      const updated = await trx
-        .updateTable("inboundInspection")
-        .set({
-          status: lotStatus,
-          notes: args.notes ?? null,
-          dispositionedBy: args.dispositionedBy,
-          dispositionedAt: nowIso,
-          updatedBy: args.dispositionedBy,
-          updatedAt: nowIso
-        })
-        .where("id", "=", args.id)
-        .where("companyId", "=", args.companyId)
-        .returning(["id", "status"])
-        .executeTakeFirstOrThrow();
+        const [updated] = await db
+          .update(inboundInspectionTable)
+          .set({
+            status: lotStatus,
+            notes: args.notes ?? null,
+            dispositionedBy: args.dispositionedBy,
+            dispositionedAt: nowIso,
+            updatedBy: args.dispositionedBy,
+            updatedAt: nowIso
+          })
+          .where(
+            and(
+              eq(inboundInspectionTable.id, args.id),
+              eq(inboundInspectionTable.companyId, args.companyId)
+            )
+          )
+          .returning({
+            id: inboundInspectionTable.id,
+            status: inboundInspectionTable.status
+          });
 
-      await trx
-        .insertInto("inboundInspectionHistory")
-        .values({
+        if (!updated) throw new Error("Failed to update inspection");
+
+        await db.insert(inboundInspectionHistoryTable).values({
+          id: nanoid(),
           inboundInspectionId: args.id,
           itemId: inspection.itemId,
           supplierId: inspection.supplierId ?? null,
@@ -307,12 +358,13 @@ export async function dispositionInboundInspection(
                 ? "Rejected"
                 : "Partial",
           companyId: args.companyId,
-          createdBy: args.dispositionedBy
-        })
-        .execute();
+          createdBy: args.dispositionedBy,
+          createdAt: nowIso
+        });
 
-      return { id: updated.id, status: updated.status };
-    });
+        return { id: updated.id, status: updated.status };
+      }
+    );
 
     return { data: result, error: null };
   } catch (err) {
@@ -343,39 +395,63 @@ export async function assignEntitiesToIssueItem(args: {
     return errResult("No assignments provided");
   }
 
-  const db = getDatabaseClient();
   const nowIso = new Date().toISOString();
   const entityIds = assignments.map((a) => a.trackedEntityId);
 
   try {
-    const result = await db.transaction().execute(async (trx) => {
-      const source = await trx
-        .selectFrom("nonConformanceItem")
-        .select(["id", "nonConformanceId", "quantity"])
-        .where("id", "=", nonConformanceItemId)
-        .where("companyId", "=", companyId)
-        .executeTakeFirst();
+    const result = await withAuth({ kind: "user", userId }, async (db) => {
+      const [source] = await db
+        .select({
+          id: nonConformanceItemTable.id,
+          nonConformanceId: nonConformanceItemTable.nonConformanceId,
+          quantity: nonConformanceItemTable.quantity
+        })
+        .from(nonConformanceItemTable)
+        .where(
+          and(
+            eq(nonConformanceItemTable.id, nonConformanceItemId),
+            eq(nonConformanceItemTable.companyId, companyId)
+          )
+        )
+        .limit(1);
       if (!source) throw new Error("Source item association not found");
 
-      const target = await trx
-        .selectFrom("nonConformanceItem")
-        .select(["id", "nonConformanceId", "quantity"])
-        .where("id", "=", targetItemId)
-        .where("companyId", "=", companyId)
-        .executeTakeFirst();
+      const [target] = await db
+        .select({
+          id: nonConformanceItemTable.id,
+          nonConformanceId: nonConformanceItemTable.nonConformanceId,
+          quantity: nonConformanceItemTable.quantity
+        })
+        .from(nonConformanceItemTable)
+        .where(
+          and(
+            eq(nonConformanceItemTable.id, targetItemId),
+            eq(nonConformanceItemTable.companyId, companyId)
+          )
+        )
+        .limit(1);
       if (!target) throw new Error("Target item association not found");
 
       if (source.nonConformanceId !== target.nonConformanceId) {
         throw new Error("Cannot move entities between different NCRs");
       }
 
-      const existingLinks = await trx
-        .selectFrom("nonConformanceItemTrackedEntity")
-        .select(["quantity"])
-        .where("nonConformanceItemId", "=", nonConformanceItemId)
-        .where("trackedEntityId", "in", entityIds)
-        .where("companyId", "=", companyId)
-        .execute();
+      const existingLinks = await db
+        .select({ quantity: nonConformanceItemTrackedEntityTable.quantity })
+        .from(nonConformanceItemTrackedEntityTable)
+        .where(
+          and(
+            eq(
+              nonConformanceItemTrackedEntityTable.nonConformanceItemId,
+              nonConformanceItemId
+            ),
+            inArray(
+              nonConformanceItemTrackedEntityTable.trackedEntityId,
+              entityIds
+            ),
+            eq(nonConformanceItemTrackedEntityTable.companyId, companyId)
+          )
+        );
 
       const existingQty = existingLinks.reduce(
         (acc, l) => acc + Number(l.quantity ?? 0),
@@ -386,48 +462,62 @@ export async function assignEntitiesToIssueItem(args: {
         0
       );
 
-      await trx
-        .deleteFrom("nonConformanceItemTrackedEntity")
-        .where("nonConformanceItemId", "=", nonConformanceItemId)
-        .where("trackedEntityId", "in", entityIds)
-        .where("companyId", "=", companyId)
-        .execute();
+      await db
+        .delete(nonConformanceItemTrackedEntityTable)
+        .where(
+          and(
+            eq(
+              nonConformanceItemTrackedEntityTable.nonConformanceItemId,
+              nonConformanceItemId
+            ),
+            inArray(
+              nonConformanceItemTrackedEntityTable.trackedEntityId,
+              entityIds
+            ),
+            eq(nonConformanceItemTrackedEntityTable.companyId, companyId)
+          )
+        );
 
-      await trx
-        .insertInto("nonConformanceItemTrackedEntity")
-        .values(
-          assignments.map((a) => ({
-            nonConformanceItemId: targetItemId,
-            nonConformanceId: target.nonConformanceId,
-            trackedEntityId: a.trackedEntityId,
-            quantity: Number(a.quantity),
-            companyId,
-            createdBy: userId
-          }))
-        )
-        .execute();
+      await db.insert(nonConformanceItemTrackedEntityTable).values(
+        assignments.map((a) => ({
+          id: nanoid(),
+          nonConformanceItemId: targetItemId,
+          nonConformanceId: target.nonConformanceId,
+          trackedEntityId: a.trackedEntityId,
+          quantity: Number(a.quantity),
+          companyId,
+          createdBy: userId,
+          createdAt: nowIso
+        }))
+      );
 
-      await trx
-        .updateTable("nonConformanceItem")
+      await db
+        .update(nonConformanceItemTable)
         .set({
           quantity: Math.max(0, Number(source.quantity ?? 0) - existingQty),
           updatedBy: userId,
           updatedAt: nowIso
         })
-        .where("id", "=", nonConformanceItemId)
-        .where("companyId", "=", companyId)
-        .execute();
+        .where(
+          and(
+            eq(nonConformanceItemTable.id, nonConformanceItemId),
+            eq(nonConformanceItemTable.companyId, companyId)
+          )
+        );
 
-      await trx
-        .updateTable("nonConformanceItem")
+      await db
+        .update(nonConformanceItemTable)
         .set({
           quantity: Number(target.quantity ?? 0) + movingQty,
           updatedBy: userId,
           updatedAt: nowIso
         })
-        .where("id", "=", targetItemId)
-        .where("companyId", "=", companyId)
-        .execute();
+        .where(
+          and(
+            eq(nonConformanceItemTable.id, targetItemId),
+            eq(nonConformanceItemTable.companyId, companyId)
+          )
+        );
 
       return { moved: assignments.length };
     });
@@ -468,32 +558,14 @@ type DispositionRow = {
 type IssueClosureBlocker = { nonConformanceItemId: string; reason: string };
 
 export async function closeIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: { nonConformanceId: string; companyId: string; userId: string }
 ): Promise<Result<{ id: string }>> {
   const { nonConformanceId, companyId, userId } = args;
-  const db = getDatabaseClient();
 
-  // Preflight reads via Supabase (uses nested selects / RLS-aware service role)
-  const planResult = await (client as any)
+  const planResult = await client
     .from("nonConformanceItem")
-    .select(
-      `
-        id,
-        itemId,
-        disposition,
-        quantity,
-        links:nonConformanceItemTrackedEntity(
-          id,
-          quantity,
-          trackedEntityId,
-          trackedEntity(
-            id,
-            status
-          )
-        )
-      `
-    )
+    .select("id, itemId, disposition, quantity")
     .eq("nonConformanceId", nonConformanceId)
     .eq("companyId", companyId)
     .order("createdAt", { ascending: true });
@@ -502,17 +574,76 @@ export async function closeIssue(
     return errResult("Failed to load disposition plan");
   }
 
-  const plan: DispositionRow[] = (planResult.data as any[]).map((row) => ({
+  const planRows = planResult.data as {
+    id: string;
+    itemId: string;
+    disposition: string | null;
+    quantity: number | null;
+  }[];
+  const planIds = planRows.map((row) => row.id);
+
+  const linksResult =
+    planIds.length === 0
+      ? { data: [], error: null }
+      : await client
+          .from("nonConformanceItemTrackedEntity")
+          .select("id, nonConformanceItemId, trackedEntityId, quantity")
+          .in("nonConformanceItemId", planIds)
+          .eq("companyId", companyId);
+
+  if (linksResult.error || !linksResult.data) {
+    return errResult("Failed to load disposition links");
+  }
+
+  const trackedEntityIds = [
+    ...new Set(
+      (linksResult.data as { trackedEntityId: string }[]).map(
+        (link) => link.trackedEntityId
+      )
+    )
+  ];
+  const trackedEntitiesResult =
+    trackedEntityIds.length === 0
+      ? { data: [], error: null }
+      : await client
+          .from("trackedEntity")
+          .select("id, status")
+          .in("id", trackedEntityIds)
+          .eq("companyId", companyId);
+
+  if (trackedEntitiesResult.error || !trackedEntitiesResult.data) {
+    return errResult("Failed to load tracked entity statuses");
+  }
+
+  const statusByTrackedEntityId = new Map(
+    (trackedEntitiesResult.data as { id: string; status: string }[]).map(
+      (entity) => [entity.id, entity.status]
+    )
+  );
+  const linksByItemId = new Map<string, DispositionLink[]>();
+  for (const link of linksResult.data as {
+    id: string;
+    nonConformanceItemId: string;
+    trackedEntityId: string;
+    quantity: number | null;
+  }[]) {
+    const next = linksByItemId.get(link.nonConformanceItemId) ?? [];
+    next.push({
+      id: link.id,
+      trackedEntityId: link.trackedEntityId,
+      quantity: Number(link.quantity ?? 0),
+      trackedEntityStatus:
+        statusByTrackedEntityId.get(link.trackedEntityId) ?? null
+    });
+    linksByItemId.set(link.nonConformanceItemId, next);
+  }
+
+  const plan: DispositionRow[] = planRows.map((row) => ({
     id: row.id,
     itemId: row.itemId,
     disposition: row.disposition,
     quantity: Number(row.quantity ?? 0),
-    links: (row.links ?? []).map((link: any) => ({
-      id: link.id,
-      trackedEntityId: link.trackedEntityId,
-      quantity: Number(link.quantity ?? 0),
-      trackedEntityStatus: link.trackedEntity?.status ?? null
-    }))
+    links: linksByItemId.get(row.id) ?? []
   }));
 
   const blockers: IssueClosureBlocker[] = [];
@@ -555,13 +686,22 @@ export async function closeIssue(
   }
 
   try {
-    const result = await db.transaction().execute(async (trx) => {
-      const issue = await trx
-        .selectFrom("nonConformance")
-        .select(["id", "nonConformanceId", "status", "locationId"])
-        .where("id", "=", nonConformanceId)
-        .where("companyId", "=", companyId)
-        .executeTakeFirst();
+    const result = await withAuth({ kind: "user", userId }, async (db) => {
+      const [issue] = await db
+        .select({
+          id: nonConformanceTable.id,
+          nonConformanceId: nonConformanceTable.nonConformanceId,
+          status: nonConformanceTable.status,
+          locationId: nonConformanceTable.locationId
+        })
+        .from(nonConformanceTable)
+        .where(
+          and(
+            eq(nonConformanceTable.id, nonConformanceId),
+            eq(nonConformanceTable.companyId, companyId)
+          )
+        )
+        .limit(1);
       if (!issue) throw new Error("Issue not found");
       if (issue.status === "Closed") return { id: issue.id };
 
@@ -573,48 +713,48 @@ export async function closeIssue(
       for (const row of plan) {
         if (row.links.length === 0) continue;
 
-        const activity = await trx
-          .insertInto("trackedActivity")
-          .values({
-            type: "Disposition",
-            sourceDocument: "Non-Conformance",
-            sourceDocumentId: nonConformanceId,
-            sourceDocumentReadableId: readableNc,
-            attributes: {
-              "Non-Conformance": nonConformanceId,
-              Disposition: row.disposition ?? "",
-              Employee: userId
-            },
-            companyId,
-            createdBy: userId
-          })
-          .returning(["id"])
-          .executeTakeFirstOrThrow();
+        const activityId = nanoid();
+        await db.insert(trackedActivityTable).values({
+          id: activityId,
+          type: "Disposition",
+          sourceDocument: "Non-Conformance",
+          sourceDocumentId: nonConformanceId,
+          sourceDocumentReadableId: readableNc,
+          attributes: {
+            "Non-Conformance": nonConformanceId,
+            Disposition: row.disposition ?? "",
+            Employee: userId
+          },
+          companyId,
+          createdBy: userId,
+          createdAt: nowIso
+        });
 
-        await trx
-          .insertInto("trackedActivityInput")
-          .values(
-            row.links.map((link) => ({
-              trackedActivityId: activity.id,
-              trackedEntityId: link.trackedEntityId,
-              quantity: link.quantity,
-              companyId,
-              createdBy: userId
-            }))
-          )
-          .execute();
+        await db.insert(trackedActivityInputTable).values(
+          row.links.map((link) => ({
+            trackedActivityId: activityId,
+            trackedEntityId: link.trackedEntityId,
+            quantity: link.quantity,
+            companyId,
+            createdBy: userId,
+            createdAt: nowIso
+          }))
+        );
 
         if (row.disposition === "Use As Is" || row.disposition === "Rework") {
           const idsToFlip = row.links
             .filter((l) => l.trackedEntityStatus !== "Available")
             .map((l) => l.trackedEntityId);
           if (idsToFlip.length > 0) {
-            await trx
-              .updateTable("trackedEntity")
+            await db
+              .update(trackedEntityTable)
               .set({ status: "Available" })
-              .where("id", "in", idsToFlip)
-              .where("companyId", "=", companyId)
-              .execute();
+              .where(
+                and(
+                  inArray(trackedEntityTable.id, idsToFlip),
+                  eq(trackedEntityTable.companyId, companyId)
+                )
+              );
           }
           continue;
         }
@@ -626,50 +766,66 @@ export async function closeIssue(
           const commentSuffix =
             row.disposition === "Scrap" ? "scrap" : "return to supplier";
 
-          await trx
-            .insertInto("itemLedger")
-            .values(
-              row.links.map((link) => ({
-                itemId: row.itemId,
-                locationId,
-                entryType: "Negative Adjmt." as const,
-                documentType: "Non-Conformance" as const,
-                documentId: nonConformanceId,
-                quantity: -link.quantity,
-                trackedEntityId: link.trackedEntityId,
-                companyId,
-                createdBy: userId,
-                comment: `NC ${readableNc} ${commentSuffix}`
-              }))
-            )
-            .execute();
+          for (const link of row.links) {
+            const ledgerResult = await db.execute<{ id: string }>(sql`
+              select insert_item_ledger_entry(
+                ${"Negative Adjmt."}::"itemLedgerType",
+                ${"Non-Conformance"},
+                ${nonConformanceId},
+                ${companyId},
+                ${row.itemId},
+                ${-link.quantity},
+                ${locationId},
+                ${null},
+                ${link.trackedEntityId},
+                ${"Rejected"},
+                ${userId}
+              ) as id
+            `);
+            const ledgerId = ledgerResult.rows[0]?.id;
+            if (!ledgerId) throw new Error("Failed to create ledger entry");
+
+            await db.execute(sql`
+              update "itemLedger"
+              set "comment" = ${`NC ${readableNc} ${commentSuffix}`}
+              where id = ${ledgerId}
+            `);
+          }
 
           const idsToFlip = row.links
             .filter((l) => l.trackedEntityStatus !== "Rejected")
             .map((l) => l.trackedEntityId);
           if (idsToFlip.length > 0) {
-            await trx
-              .updateTable("trackedEntity")
+            await db
+              .update(trackedEntityTable)
               .set({ status: "Rejected" })
-              .where("id", "in", idsToFlip)
-              .where("companyId", "=", companyId)
-              .execute();
+              .where(
+                and(
+                  inArray(trackedEntityTable.id, idsToFlip),
+                  eq(trackedEntityTable.companyId, companyId)
+                )
+              );
           }
         }
       }
 
-      const updated = await trx
-        .updateTable("nonConformance")
+      const [updated] = await db
+        .update(nonConformanceTable)
         .set({
           status: "Closed",
           closeDate: today,
           updatedBy: userId,
           updatedAt: nowIso
         })
-        .where("id", "=", nonConformanceId)
-        .where("companyId", "=", companyId)
-        .returning(["id"])
-        .executeTakeFirstOrThrow();
+        .where(
+          and(
+            eq(nonConformanceTable.id, nonConformanceId),
+            eq(nonConformanceTable.companyId, companyId)
+          )
+        )
+        .returning({ id: nonConformanceTable.id });
+
+      if (!updated) throw new Error("Failed to close issue");
 
       return { id: updated.id };
     });

@@ -147,7 +147,10 @@ export type IntegrationConfig = {
   /** Full description explaining the integration */
   description: string;
   /** Optional component rendering setup instructions */
-  setupInstructions?: React.FC<{ companyId: string }>;
+  setupInstructions?: React.FC<{
+    companyId: string;
+    metadata?: Record<string, unknown>;
+  }>;
   /** Marketing/preview images */
   images: string[];
   /** Configurable settings fields */

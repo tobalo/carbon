@@ -1,9 +1,12 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  salesOrderStatusEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 import { hasIncompleteJobs } from "@carbon/utils";
 
 type SalesOrderStatusProps = {
-  status?: Database["public"]["Enums"]["salesOrderStatus"] | null;
+  status?: EnumValue<typeof salesOrderStatusEnum> | null;
   jobs?: Array<{
     salesOrderLineId: string;
     productionQuantity: number;
@@ -18,7 +21,7 @@ type SalesOrderStatusProps = {
 };
 
 const STATUS_COLOR_MAP: Record<
-  Database["public"]["Enums"]["salesOrderStatus"],
+  EnumValue<typeof salesOrderStatusEnum>,
   "gray" | "yellow" | "orange" | "blue" | "green" | "red"
 > = {
   Draft: "gray",

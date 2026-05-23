@@ -27,7 +27,7 @@ import { ConfirmDelete } from "~/components/Modals";
 import {
   useDateFormatter,
   usePermissions,
-  useRealtime,
+  usePollingRevalidation,
   useUrlParams
 } from "~/hooks";
 import { useCustomColumns } from "~/hooks/useCustomColumns";
@@ -62,7 +62,7 @@ type ShipmentsTableProps = {
 };
 
 const ShipmentsTable = memo(({ data, count }: ShipmentsTableProps) => {
-  useRealtime("shipment", `id=in.(${data.map((d) => d.id).join(",")})`);
+  usePollingRevalidation("shipment", `id=in.(${data.map((d) => d.id).join(",")})`);
 
   const [params] = useUrlParams();
   const { t } = useLingui();

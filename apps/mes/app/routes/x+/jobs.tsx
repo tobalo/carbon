@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import {
   Button,
   Heading,
@@ -28,23 +27,25 @@ import {
 import { path } from "~/utils/path";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {});
-  const serviceRole = getCarbonServiceRole();
+  const { client, companyId } = await requirePermissions(request, {});
   const locationId = context.get(userContext)?.locationId;
 
-  const jobs = await getOpenJobs(serviceRole, { companyId, locationId });
+  const jobs = await getOpenJobs(client, { companyId, locationId });
 
   if (jobs.error) {
     console.error("getOpenJobs error:", jobs.error);
   }
 
-  const jobMakeMethodIds = (jobs.data ?? []).reduce<string[]>((acc, job) => {
-    if (job.jobMakeMethodId) acc.push(job.jobMakeMethodId);
-    return acc;
-  }, []);
+  const jobMakeMethodIds = (jobs.data ?? []).reduce<string[]>(
+    (acc, job: { jobMakeMethodId?: string | null }) => {
+      if (job.jobMakeMethodId) acc.push(job.jobMakeMethodId);
+      return acc;
+    },
+    []
+  );
 
   const trackedEntities = await getTrackedEntitiesByJobMakeMethodIds(
-    serviceRole,
+    client,
     jobMakeMethodIds,
     companyId
   );

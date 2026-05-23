@@ -1,1 +1,0 @@
-ALTER TABLE "salesRfq" ALTER COLUMN "customerId" DROP NOT NULL;

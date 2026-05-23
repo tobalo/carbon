@@ -5,7 +5,10 @@ import {
   notFound,
   success
 } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -25,15 +28,21 @@ import { path } from "~/utils/path";
 import { supplierLocationsQuery } from "~/utils/react-query";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId, supplierLocationId } = params;
   if (!supplierId) throw notFound("supplierId not found");
   if (!supplierLocationId) throw notFound("supplierLocationId not found");
+  assertSupplierAccountScope(auth, supplierId);
 
-  const location = await getSupplierLocation(client, supplierLocationId);
+  const location = await getSupplierLocation(
+    client,
+    supplierLocationId,
+    supplierId
+  );
   if (location.error) {
     throw redirect(
       path.to.supplierLocations(supplierId),
@@ -51,13 +60,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId, supplierLocationId } = params;
   if (!supplierId) throw notFound("supplierId not found");
   if (!supplierLocationId) throw notFound("supplierLocationId not found");
+  assertSupplierAccountScope(auth, supplierId);
 
   const formData = await request.formData();
   const validation = await validator(supplierLocationValidator).validate(
@@ -74,8 +85,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (addressId === undefined)
     throw badRequest("addressId is undefined in form data");
 
+  const existingLocation = await getSupplierLocation(
+    client,
+    supplierLocationId,
+    supplierId
+  );
+  const existingAddressId = existingLocation.data?.address?.id;
+  if (existingLocation.error || !existingAddressId) {
+    throw redirect(
+      path.to.supplierLocations(supplierId),
+      await flash(
+        request,
+        error(existingLocation.error, "Failed to verify supplier location")
+      )
+    );
+  }
+  if (addressId !== existingAddressId) {
+    throw badRequest("addressId does not match scoped supplier location");
+  }
+
   const update = await updateSupplierLocation(client, {
-    addressId,
+    addressId: existingAddressId,
     name,
     address,
     customFields: setCustomFields(formData)

@@ -7155,9 +7155,6 @@ msgstr "Enviar InspecciÃƒÆ’Ã‚Â³n"
 msgid "Submitted By"
 msgstr "Enviado por"
 
-msgid "Subscribe to changes"
-msgstr "Suscribirse a cambios"
-
 msgid "Substance"
 msgstr "Sustancia"
 
@@ -7197,11 +7194,8 @@ msgstr "Sugerencias"
 msgid "Sunday"
 msgstr "Domingo"
 
-msgid "Supabase provides a wide range of filters."
-msgstr "Supabase proporciona una amplia gama de filtros."
-
-msgid "Supabase provides realtime functionality and broadcasts database changes to authorized users depending on Row Level Security (RLS) policies."
-msgstr "Supabase proporciona funcionalidad en tiempo real y transmite cambios de base de datos a usuarios autorizados segÃƒÆ’Ã‚Âºn las polÃƒÆ’Ã‚Â­ticas de Seguridad a Nivel de Fila (RLS)."
+msgid "Carbon provides a wide range of filters."
+msgstr "Carbon proporciona una amplia gama de filtros."
 
 msgid "Supplier"
 msgstr "Proveedor"

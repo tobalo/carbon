@@ -16,7 +16,7 @@ import { getCurrentPath, isGet, makeRedirectToFromHere } from "../utils/http";
 import { path } from "../utils/path";
 import { refreshAccessToken, verifyAuthSession } from "./auth.server";
 import { setCompanyId } from "./company.server";
-import { getPermissionCacheKey } from "./users";
+import { getLegacyPermissionCacheKey, getPermissionCacheKey } from "./users";
 
 async function assertAuthSession(
   request: Request,
@@ -240,8 +240,12 @@ export async function updateCompanySession(
   const session = await getSession(request);
   const authSession = await getAuthSession(request);
 
-  if (authSession !== undefined) {
-    await redis.del(getPermissionCacheKey(authSession?.userId!));
+  if (authSession != null) {
+    await redis.del(
+      getPermissionCacheKey(authSession.userId, authSession.companyId),
+      getPermissionCacheKey(authSession.userId, companyId),
+      getLegacyPermissionCacheKey(authSession.userId)
+    );
     session.set(SESSION_KEY, {
       ...authSession,
       companyId,

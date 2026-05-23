@@ -13,7 +13,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -50,7 +50,7 @@ const WorkCenterForm = ({
 }: WorkCenterFormProps) => {
   const { t } = useLingui();
   const permissions = usePermissions();
-  const fetcher = useFetcher<PostgrestResponse<{ id: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string }>>();
 
   const { company } = useUser();
   const baseCurrency = company?.baseCurrencyCode ?? "USD";

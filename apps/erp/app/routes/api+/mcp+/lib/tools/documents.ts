@@ -41,7 +41,7 @@ export const registerDocumentsTools: RegisterTools = (server, ctx) => {
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await deleteDocument(ctx.client, params.id);
+      const result = await deleteDocument(ctx.client, params.id, ctx.userId);
       return toMcpResult(result);
     }, "Failed: documents_deleteDocument"),
   );
@@ -72,7 +72,7 @@ export const registerDocumentsTools: RegisterTools = (server, ctx) => {
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await deleteDocumentLabel(ctx.client, params.id, params.label);
+      const result = await deleteDocumentLabel(ctx.client, params.id, params.label, ctx.userId);
       return toMcpResult(result);
     }, "Failed: documents_deleteDocumentLabel"),
   );
@@ -87,7 +87,7 @@ export const registerDocumentsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getDocument(ctx.client, params.documentId);
+      const result = await getDocument(ctx.client, params.documentId, ctx.userId);
       return toMcpResult(result);
     }, "Failed: documents_getDocument"),
   );
@@ -109,7 +109,7 @@ export const registerDocumentsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getDocuments(ctx.client, ctx.companyId, { ...params.args, createdBy: ctx.userId, companyId: ctx.companyId });
+      const result = await getDocuments(ctx.client, ctx.companyId, { ...params.args, createdBy: ctx.userId, companyId: ctx.companyId, userId: ctx.userId });
       return toMcpResult(result);
     }, "Failed: documents_getDocuments"),
   );

@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { Number, Submit, ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -38,7 +37,7 @@ import type { TrackedEntityAttributes } from "@carbon/utils";
 import { labelSizes } from "@carbon/utils";
 import { parseDate } from "@internationalized/date";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   LuCalendar,
@@ -78,6 +77,7 @@ import { getDocumentType } from "~/modules/shared/shared.service";
 import { useItems } from "~/stores";
 import type { StorageItem } from "~/types";
 import { path } from "~/utils/path";
+import { removeStorageObjects, uploadStorageObject } from "~/utils/storage";
 import { stripSpecialCharacters } from "~/utils/string";
 import BatchPropertiesConfig from "../Batches/BatchPropertiesConfig";
 import { BatchPropertiesFields } from "../Batches/BatchPropertiesFields";
@@ -92,10 +92,10 @@ const ReceiptLines = () => {
   const routeData = useRouteData<{
     receipt: Receipt;
     receiptLines: ReceiptLine[];
-    receiptFiles: PostgrestResponse<StorageItem>;
+    receiptFiles: QueryResponse<StorageItem>;
     receiptLineTracking: ItemTracking[];
-    batchProperties: PostgrestResponse<BatchProperty>;
-    itemShelfLife: PostgrestResponse<{
+    batchProperties: QueryResponse<BatchProperty>;
+    itemShelfLife: QueryResponse<{
       itemId: string;
       mode: string;
       days: number | null;
@@ -103,7 +103,6 @@ const ReceiptLines = () => {
   }>(path.to.receipt(receiptId));
 
   const receiptsById = new Map<string, ReceiptLine>(
-    // @ts-expect-error
     routeData?.receiptLines.map((line) => [line.id, line])
   );
   const pendingReceiptLines = usePendingReceiptLines();
@@ -209,7 +208,7 @@ const ReceiptLines = () => {
       const formData = new FormData();
 
       formData.append("ids", lineId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value.toString());
       fetcher.submit(formData, {
         method: "post",
@@ -303,9 +302,9 @@ function ReceiptLineItem({
   receipt?: Receipt;
   className?: string;
   isReadOnly: boolean;
-  files?: PostgrestResponse<StorageItem>;
-  batchProperties?: PostgrestResponse<BatchProperty>;
-  itemShelfLife?: PostgrestResponse<{
+  files?: QueryResponse<StorageItem>;
+  batchProperties?: QueryResponse<BatchProperty>;
+  itemShelfLife?: QueryResponse<{
     itemId: string;
     mode: string;
     days: number | null;
@@ -588,8 +587,8 @@ function BatchForm({
   line: ReceiptLine;
   receipt?: Receipt;
   isReadOnly: boolean;
-  batchProperties?: PostgrestResponse<BatchProperty>;
-  itemShelfLife?: PostgrestResponse<{
+  batchProperties?: QueryResponse<BatchProperty>;
+  itemShelfLife?: QueryResponse<{
     itemId: string;
     mode: string;
     days: number | null;
@@ -875,8 +874,8 @@ function SerialForm({
 }: {
   line: ReceiptLine;
   receipt?: Receipt;
-  batchProperties?: PostgrestResponse<BatchProperty>;
-  itemShelfLife?: PostgrestResponse<{
+  batchProperties?: QueryResponse<BatchProperty>;
+  itemShelfLife?: QueryResponse<{
     itemId: string;
     mode: string;
     days: number | null;
@@ -896,7 +895,7 @@ function SerialForm({
 
   useEffect(() => {
     if (tracking?.expirationDate) {
-      setExpiryDate((prev) => prev || tracking.expirationDate || "");
+      setExpiryDate((prev: any) => prev || tracking.expirationDate || "");
     }
   }, [tracking?.expirationDate]);
 
@@ -1200,7 +1199,6 @@ export default ReceiptLines;
 function useReceiptFiles(receiptId: string) {
   const { t } = useLingui();
   const { company } = useUser();
-  const { carbon } = useCarbon();
 
   const getPath = useCallback(
     ({ name }: { name: string }, lineId: string) => {
@@ -1215,20 +1213,14 @@ function useReceiptFiles(receiptId: string) {
   const revalidator = useRevalidator();
   const upload = useCallback(
     async (files: File[], lineId: string) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getPath({ name: file.name }, lineId);
         toast.info(`Uploading ${file.name}`);
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadStorageObject({
+          bucket: "private",
+          path: fileName,
+          file
+        });
 
         if (fileUpload.error) {
           toast.error(`Failed to upload file: ${file.name}`);
@@ -1251,24 +1243,25 @@ function useReceiptFiles(receiptId: string) {
       }
       revalidator.revalidate();
     },
-    [carbon, revalidator, getPath, receiptId, submit, t]
+    [revalidator, getPath, receiptId, submit, t]
   );
 
   const deleteFile = useCallback(
     async (file: StorageItem, lineId: string) => {
-      const fileDelete = await carbon?.storage
-        .from("private")
-        .remove([getPath(file, lineId)]);
+      const fileDelete = await removeStorageObjects({
+        bucket: "private",
+        paths: [getPath(file, lineId)]
+      });
 
-      if (!fileDelete || fileDelete.error) {
-        toast.error(fileDelete?.error?.message || "Error deleting file");
+      if (fileDelete.error) {
+        toast.error(fileDelete.error.message || "Error deleting file");
         return;
       }
 
       toast.success(`${file.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [getPath, carbon?.storage, revalidator]
+    [getPath, revalidator]
   );
 
   return { upload, deleteFile, getPath };

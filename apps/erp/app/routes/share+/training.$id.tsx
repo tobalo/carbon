@@ -173,7 +173,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
       case "MultipleAnswers":
         const userSelectedAnswers = userAnswer.value as string[];
-        const correctAnswerSet = new Set(question.correctAnswers ?? []);
+        const correctAnswerSet = new Set<string>(
+          (question.correctAnswers ?? []) as string[]
+        );
         const userAnswerSet = new Set(userSelectedAnswers);
         isCorrect =
           correctAnswerSet.size === userAnswerSet.size &&
@@ -533,7 +535,7 @@ function QuestionStep({
             }
             className="flex flex-col gap-2 w-full"
           >
-            {question.options?.map((option, index) => (
+            {question.options?.map((option: any, index: any) => (
               <label
                 key={index}
                 className="flex items-center gap-3 p-3 border rounded-md cursor-pointer hover:bg-accent"
@@ -569,7 +571,7 @@ function QuestionStep({
         const selectedAnswers = (answer?.value as string[]) ?? [];
         return (
           <div className="flex flex-col gap-2 w-full">
-            {question.options?.map((option, index) => (
+            {question.options?.map((option: any, index: any) => (
               <label
                 key={index}
                 className="flex items-center gap-3 p-3 border rounded-md cursor-pointer hover:bg-accent"

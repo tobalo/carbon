@@ -1,6 +1,5 @@
 import { getUser } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import {
   getJiraClient,
   getJiraIssueFromExternalId,
@@ -22,7 +21,7 @@ export class JiraNotificationService implements NotificationService {
 
   async send(
     event: NotificationEvent,
-    context: { serviceRole: SupabaseClient<Database> }
+    context: { serviceClient: DatabaseQueryClient }
   ): Promise<void> {
     switch (event.type) {
       case "task.status.changed": {
@@ -33,7 +32,7 @@ export class JiraNotificationService implements NotificationService {
           return;
 
         const issue = await getJiraIssueFromExternalId(
-          context.serviceRole,
+          context.serviceClient,
           event.companyId,
           event.data.id
         );
@@ -53,7 +52,7 @@ export class JiraNotificationService implements NotificationService {
         if (event.data.table !== "nonConformanceActionTask") return;
 
         const issue = await getJiraIssueFromExternalId(
-          context.serviceRole,
+          context.serviceClient,
           event.companyId,
           event.data.id
         );
@@ -61,7 +60,7 @@ export class JiraNotificationService implements NotificationService {
         if (!issue) return; // No linked Jira issue
 
         const { data: user } = await getUser(
-          context.serviceRole,
+          context.serviceClient,
           event.data.assignee
         );
 
@@ -85,7 +84,7 @@ export class JiraNotificationService implements NotificationService {
         if (event.data.table !== "nonConformanceActionTask") return;
 
         const issue = await getJiraIssueFromExternalId(
-          context.serviceRole,
+          context.serviceClient,
           event.companyId,
           event.data.id
         );

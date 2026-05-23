@@ -3,7 +3,7 @@ import { KanbanLabelPDF } from "@carbon/documents/pdf";
 import { renderToStream } from "@react-pdf/renderer";
 import type { LoaderFunctionArgs } from "react-router";
 import { getCompany } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { client, companyId } = await requirePermissions(request, {
@@ -61,7 +61,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (Object.keys(thumbnailPaths).length > 0) {
     const thumbnailPromises = Object.entries(thumbnailPaths).map(
       async ([id, path]) => {
-        const base64 = await getBase64ImageFromSupabase(client, path);
+        const base64 = await getBase64ImageFromStorage(client, path);
         return { id, data: base64 };
       }
     );

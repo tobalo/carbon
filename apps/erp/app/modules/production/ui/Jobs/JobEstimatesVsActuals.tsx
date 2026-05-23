@@ -1,5 +1,5 @@
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import {
   Card,
   CardAction,
@@ -90,7 +90,7 @@ const JobEstimatesVsActuals = ({
   materials: Material[];
   productionEvents: ProductionEvent[];
   productionQuantities: ProductionQuantity[];
-  notes: Database["public"]["Tables"]["jobOperationNote"]["Row"][];
+  notes: TableRow<"jobOperationNote">[];
 }) => {
   const { carbon } = useCarbon();
   const { jobId } = useParams();
@@ -120,7 +120,6 @@ const JobEstimatesVsActuals = ({
     setCurrentUnitCosts(
       itemCosts?.data?.reduce(
         (acc, itemCost) => {
-          // @ts-expect-error TS2322 - TODO: fix type
           acc[itemCost.itemId] = itemCost.unitCost;
           return acc;
         },
@@ -201,11 +200,11 @@ const JobEstimatesVsActuals = ({
   const getEmployeeIds = (
     operation: Operation,
     type: "Setup" | "Labor" | "Machine"
-  ) => {
+  ): string[] => {
     const operationEvents = productionEvents.filter(
       (pe) => pe.jobOperationId === operation.id && pe.type === type
     );
-    const employeeIds = operationEvents.reduce((acc, pe) => {
+    const employeeIds = operationEvents.reduce((acc: Set<string>, pe) => {
       if (pe.employeeId) {
         acc.add(pe.employeeId);
       }

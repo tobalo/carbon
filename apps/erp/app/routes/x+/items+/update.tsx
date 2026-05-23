@@ -1,26 +1,56 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type { TableUpdate } from "@carbon/database/schema";
 import { getMaterialDescription, getMaterialId } from "@carbon/utils";
 import type { ActionFunctionArgs } from "react-router";
 import type { InventoryItemType } from "~/modules/items";
 
-import { cascadeItemTrackingType } from "~/modules/items/items.service";
+import { cascadeItemTrackingType } from "~/modules/items/items.server";
+import { assertSupplierItemScope } from "~/modules/items/items.service";
 import { getCompanySettings } from "~/modules/settings";
-import { getDatabaseClient } from "~/services/database.server";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "parts"
   });
+  const { client, companyId, userId, role, supplierId } = auth;
 
   const formData = await request.formData();
   const items = formData.getAll("items");
+  const itemIds = items.filter(
+    (item): item is string => typeof item === "string"
+  );
   const field = formData.get("field");
   const value = formData.get("value");
 
-  if (typeof field !== "string" || typeof value !== "string") {
+  if (
+    typeof field !== "string" ||
+    typeof value !== "string" ||
+    itemIds.length !== items.length
+  ) {
     return { error: { message: "Invalid form data" }, data: null };
   }
+
+  const assertSupplierItemScopes = async (
+    scopedItemIds: string[],
+    allowCreatedBy?: boolean
+  ) =>
+    Promise.all(
+      scopedItemIds.map((itemId) =>
+        assertSupplierItemScope(client, {
+          itemId,
+          companyId,
+          role,
+          supplierId,
+          userId,
+          allowCreatedBy
+        })
+      )
+    );
+
+  await assertSupplierItemScopes(
+    itemIds,
+    field === "itemPostingGroupId" ? false : undefined
+  );
 
   switch (field) {
     case "itemTrackingType": {
@@ -39,7 +69,7 @@ export async function action({ request }: ActionFunctionArgs) {
       if (result.error) return result;
 
       try {
-        await cascadeItemTrackingType(getDatabaseClient(), {
+        await cascadeItemTrackingType({
           itemIds: items as string[],
           companyId,
           newType,
@@ -63,7 +93,6 @@ export async function action({ request }: ActionFunctionArgs) {
         return await client
           .from("item")
           .update({
-            // @ts-expect-error
             [field]: value,
             defaultMethodType:
               value === "Make"
@@ -81,7 +110,6 @@ export async function action({ request }: ActionFunctionArgs) {
         return await client
           .from("item")
           .update({
-            // @ts-expect-error - value is a valid method type
             defaultMethodType: value,
             replenishmentSystem:
               value === "Make to Order"
@@ -181,7 +209,10 @@ export async function action({ request }: ActionFunctionArgs) {
           if (readableId) {
             const [materialDetails, relatedItems] = await Promise.all([
               client
-                .rpc("get_material_naming_details", { readable_id: readableId })
+                .rpc("get_material_naming_details", {
+                  readable_id: readableId,
+                  company_id: companyId
+                })
                 .single(),
               client
                 .from("item")
@@ -222,6 +253,7 @@ export async function action({ request }: ActionFunctionArgs) {
               const relatedItemIds = relatedItems.data?.map((item) => item.id);
 
               if (relatedItemIds) {
+                await assertSupplierItemScopes(relatedItemIds);
                 const itemUpdateResult = await client
                   .from("item")
                   .update({ readableId: newMaterialId, name: newDescription })
@@ -233,7 +265,7 @@ export async function action({ request }: ActionFunctionArgs) {
                 }
               }
 
-              let updateData: Database["public"]["Tables"]["material"]["Update"] =
+              let updateData: TableUpdate<"material"> =
                 {
                   [field]: value || null,
                   id: newMaterialId,
@@ -287,7 +319,7 @@ export async function action({ request }: ActionFunctionArgs) {
           return { error: { message: "No materials found" }, data: null };
         }
 
-        let updateData: Database["public"]["Tables"]["material"]["Update"] = {
+        let updateData: TableUpdate<"material"> = {
           [field]: value || null,
           updatedBy: userId,
           updatedAt: new Date().toISOString()
@@ -424,6 +456,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
       const relatedItemIds = relatedItems.data?.map((item) => item.id);
       if (relatedItemIds) {
+        await assertSupplierItemScopes(relatedItemIds);
         const [itemUpdates, partUpdate] = await Promise.all([
           client
             .from("item")
@@ -491,6 +524,7 @@ export async function action({ request }: ActionFunctionArgs) {
         (item) => item.id
       );
       if (relatedConsumableIds) {
+        await assertSupplierItemScopes(relatedConsumableIds);
         const [consumableItemUpdates, consumableUpdate] = await Promise.all([
           client
             .from("item")
@@ -556,6 +590,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
       const relatedMaterialIds = relatedMaterials.data?.map((item) => item.id);
       if (relatedMaterialIds) {
+        await assertSupplierItemScopes(relatedMaterialIds);
         const [materialItemUpdates, materialUpdate] = await Promise.all([
           client
             .from("item")
@@ -618,6 +653,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
       const relatedToolIds = relatedTools.data?.map((item) => item.id);
       if (relatedToolIds) {
+        await assertSupplierItemScopes(relatedToolIds);
         const [toolItemUpdates, toolUpdate] = await Promise.all([
           client
             .from("item")

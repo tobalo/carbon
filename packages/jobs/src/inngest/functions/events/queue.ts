@@ -1,10 +1,6 @@
-import {
-  getPostgresClient,
-  getPostgresConnectionPool,
-  type KyselyDatabase
-} from "@carbon/database/client";
 import type { HandlerType, QueueMessage } from "@carbon/database/event";
-import { type Kysely, PostgresDriver, sql } from "kysely";
+import { getPostgresConnectionPool } from "@carbon/database/postgres";
+import type { Pool } from "pg";
 import { inngest } from "../../client";
 
 const QUEUE_NAME = "event_system"; // Name of the PGMQ queue
@@ -20,18 +16,22 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
-const getDatabaseClient = (size: number) => {
-  const pool = getPostgresConnectionPool(size);
-  return getPostgresClient(
-    pool,
-    PostgresDriver
-  ) as unknown as Kysely<KyselyDatabase>;
-};
-
 type QueueJob = {
   msg_id: number;
   message: QueueMessage;
 };
+
+async function withPostgresPool<T>(
+  size: number,
+  fn: (pool: Pool) => Promise<T>
+): Promise<T> {
+  const pool = getPostgresConnectionPool(size, { kind: "jobs" });
+  try {
+    return await fn(pool);
+  } finally {
+    await pool.end();
+  }
+}
 
 /**
  * Event queue cron function - polls PGMQ every minute and routes events to handlers.
@@ -51,11 +51,13 @@ export const eventQueueFunction = inngest.createFunction(
     };
 
     const { grouped, allIds } = (await step.run("read-queue", async () => {
-      const pg = getDatabaseClient(1);
-      const { rows: jobs } =
-        await sql<QueueJob>`SELECT * FROM pgmq.read(${QUEUE_NAME}, ${VISIBILITY_TIMEOUT}, ${BATCH_SIZE})`.execute(
-          pg
+      const jobs = await withPostgresPool(1, async (pool) => {
+        const { rows } = await pool.query<QueueJob>(
+          "SELECT * FROM pgmq.read($1, $2, $3)",
+          [QUEUE_NAME, VISIBILITY_TIMEOUT, BATCH_SIZE]
         );
+        return rows;
+      });
 
       const grouped: Record<HandlerType, QueueJob[]> = {
         WEBHOOK: [],
@@ -184,10 +186,12 @@ export const eventQueueFunction = inngest.createFunction(
 
     // 9. Delete processed messages from PGMQ
     await step.run("delete-processed", async () => {
-      const pg = getDatabaseClient(1);
-      await sql`SELECT pgmq.delete(${QUEUE_NAME}, id::bigint) FROM unnest(${allIds}::bigint[]) AS id`.execute(
-        pg
-      );
+      await withPostgresPool(1, async (pool) => {
+        await pool.query(
+          "SELECT pgmq.delete($1, id::bigint) FROM unnest($2::bigint[]) AS id",
+          [QUEUE_NAME, allIds]
+        );
+      });
     });
 
     return { routed: allIds.length };

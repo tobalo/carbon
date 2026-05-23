@@ -1,19 +1,19 @@
 /**
- * Extract the user-facing error message from a Supabase
- * `functions.invoke()` failure.
+ * Extract the user-facing error message from a function
+ * function route failure.
  *
- * `supabase-js` wraps non-2xx edge-function responses in `FunctionsHttpError`
+ * Function calls can wrap non-2xx responses in `FunctionsHttpError`
  * where the response body lives on `error.context: Response`. The body is
  * never parsed by the SDK, so callers that just read `error.message` get the
- * generic wrapper text ("Edge Function returned a non-2xx status code") and
- * lose the real message we set inside the edge function (e.g.
+ * generic wrapper text and lose the real message we set inside the function
+ * response (e.g.
  * `{ success: false, message: "Tracked entity not found" }`).
  *
  * Mirrors the pattern in
  * `apps/mes/app/routes/x+/issue-tracked-entity.tsx` so error surfacing is
  * consistent across the two apps.
  */
-export async function getEdgeFunctionErrorMessage(
+export async function getFunctionErrorMessage(
   err: unknown,
   fallback: string
 ): Promise<string> {

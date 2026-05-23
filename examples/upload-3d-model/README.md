@@ -4,7 +4,7 @@ This example demonstrates how to upload an RFQ with a 3D model through the Carbo
 
 ### Getting Started
 
-First run Carbon locally, and make sure your company ID and API key are set in your `.env` or `.env.local` file.
+First run Carbon locally, and make sure `CARBON_COMPANY_ID` and `DATABASE_SERVICE_URL` are set in your `.env` or `.env.local` file.
 
 ```bash
 npm run dev

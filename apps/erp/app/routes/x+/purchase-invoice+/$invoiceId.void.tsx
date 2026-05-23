@@ -1,6 +1,6 @@
 import { error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -15,8 +15,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (!invoiceId) throw new Error("invoiceId not found");
 
   try {
-    const serviceRole = getCarbonServiceRole();
-
     const { data: purchaseInvoice } = await client
       .from("purchaseInvoice")
       .select("status, postingDate")
@@ -78,7 +76,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    const voidInvoice = await serviceRole.functions.invoke(
+    const voidInvoice = await invokeFunction(
       "post-purchase-invoice",
       {
         body: {

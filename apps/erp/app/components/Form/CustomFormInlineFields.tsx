@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import {
   Boolean,
   DatePicker,

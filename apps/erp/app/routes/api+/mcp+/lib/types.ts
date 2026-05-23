@@ -1,9 +1,9 @@
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 
 export interface McpContext {
-  client: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   companyId: string;
   companyGroupId: string;
   userId: string;

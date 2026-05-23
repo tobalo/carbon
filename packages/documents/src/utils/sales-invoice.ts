@@ -1,7 +1,7 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 
 export function getLineDescription(
-  line: Database["public"]["Views"]["salesInvoiceLines"]["Row"]
+  line: TableRow<"salesInvoiceLines">
 ) {
   switch (line?.invoiceLineType) {
     case "Fixed Asset":
@@ -14,7 +14,7 @@ export function getLineDescription(
 }
 
 export function getLineDescriptionDetails(
-  line: Database["public"]["Views"]["salesInvoiceLines"]["Row"]
+  line: TableRow<"salesInvoiceLines">
 ) {
   switch (line?.invoiceLineType) {
     case "Fixed Asset":
@@ -26,7 +26,7 @@ export function getLineDescriptionDetails(
 }
 
 export function getLineSubtotal(
-  line: Database["public"]["Views"]["salesInvoiceLines"]["Row"]
+  line: TableRow<"salesInvoiceLines">
 ) {
   if (line?.quantity && line?.convertedUnitPrice) {
     return (
@@ -40,7 +40,7 @@ export function getLineSubtotal(
 }
 
 export function getLineTaxableSubtotal(
-  line: Database["public"]["Views"]["salesInvoiceLines"]["Row"]
+  line: TableRow<"salesInvoiceLines">
 ) {
   if (line?.quantity && line?.convertedUnitPrice) {
     return (
@@ -53,7 +53,7 @@ export function getLineTaxableSubtotal(
 }
 
 export function getLineTaxesAndFees(
-  line: Database["public"]["Views"]["salesInvoiceLines"]["Row"]
+  line: TableRow<"salesInvoiceLines">
 ) {
   const taxPercent = line.taxPercent ?? 0;
   const tax = getLineTaxableSubtotal(line) * taxPercent;
@@ -65,7 +65,7 @@ export function getLineTaxesAndFees(
 }
 
 export function getLineTotal(
-  line: Database["public"]["Views"]["salesInvoiceLines"]["Row"]
+  line: TableRow<"salesInvoiceLines">
 ) {
   const taxPercent = line.taxPercent ?? 0;
   const tax = getLineTaxableSubtotal(line) * taxPercent;
@@ -73,9 +73,9 @@ export function getLineTotal(
 }
 
 export function getTotal(
-  lines: Database["public"]["Views"]["salesInvoiceLines"]["Row"][],
-  salesInvoice: Database["public"]["Views"]["salesInvoices"]["Row"],
-  salesInvoiceShipment: Database["public"]["Tables"]["salesInvoiceShipment"]["Row"]
+  lines: TableRow<"salesInvoiceLines">[],
+  salesInvoice: TableRow<"salesInvoices">,
+  salesInvoiceShipment: TableRow<"salesInvoiceShipment">
 ) {
   let total = 0;
 

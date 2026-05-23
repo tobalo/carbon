@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -17,8 +17,8 @@ import { basename, dirname, join, normalize } from "pathe";
 
 export const PORT_NAMES = [
   "PORT_DB",
-  "PORT_API",
-  "PORT_STUDIO",
+  "PORT_STORAGE",
+  "PORT_CONSOLE",
   "PORT_INBUCKET",
   "PORT_INNGEST",
   "PORT_ERP",
@@ -27,12 +27,12 @@ export const PORT_NAMES = [
 type PortName = (typeof PORT_NAMES)[number];
 
 export type PortMap = Record<PortName, number>;
-export type JwtCreds = { secret: string; anonKey: string; serviceKey: string };
+export type AuthSecret = { secret: string };
 type RegistryEntry = {
   worktreeRoot: string;
   ports: PortMap;
   redisDb: number;
-  jwt: JwtCreds;
+  auth: AuthSecret;
 };
 type Registry = Record<string, RegistryEntry>;
 
@@ -127,13 +127,13 @@ export function slugify(input: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Per-worktree slot (ports + redis db + jwt creds)
+// Per-worktree slot (ports + redis db + auth secret)
 // ---------------------------------------------------------------------------
 
 export async function resolveSlot(
   slug: string,
   worktreeRoot: string
-): Promise<{ ports: PortMap; redisDb: number; jwt: JwtCreds }> {
+): Promise<{ ports: PortMap; redisDb: number; auth: AuthSecret }> {
   const registry = readRegistry();
   const existing = registry[slug];
 
@@ -145,23 +145,23 @@ export async function resolveSlot(
       return {
         ports: existing.ports,
         redisDb: existing.redisDb,
-        jwt: existing.jwt
+        auth: existing.auth
       };
     }
     // Some cached ports are taken — fall through to re-allocate.
   }
 
   // Slug collision (different path) or no entry — allocate fresh.
-  // JWT creds tie to data signed/stored in postgres; reuse when present so
-  // existing sessions stay valid.
+  // The Better Auth secret signs local sessions; reuse it when present so
+  // existing dev sessions stay valid.
   const { claimedPorts, claimedDbs } = collectClaims(registry, slug);
   const ports = await pickPorts(claimedPorts);
   const redisDb = pickRedisDb(claimedDbs);
-  const jwt = existing?.jwt ?? generateJwtCreds();
+  const auth = existing?.auth ?? generateAuthSecret();
 
-  registry[slug] = { worktreeRoot, ports, redisDb, jwt };
+  registry[slug] = { worktreeRoot, ports, redisDb, auth };
   writeRegistry(registry);
-  return { ports, redisDb, jwt };
+  return { ports, redisDb, auth };
 }
 
 function collectClaims(
@@ -226,36 +226,42 @@ function parseRegistryEntry(raw: unknown): RegistryEntry | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.worktreeRoot !== "string") return null;
-  if (!isPortMap(r.ports)) return null;
+  const ports = parsePortMap(r.ports);
+  if (!ports) return null;
   if (typeof r.redisDb !== "number" || !Number.isInteger(r.redisDb))
     return null;
-  if (!isJwtCreds(r.jwt)) return null;
+  const auth = parseAuthSecret(r.auth ?? r.jwt);
+  if (!auth) return null;
   return {
     worktreeRoot: r.worktreeRoot,
-    ports: r.ports,
+    ports,
     redisDb: r.redisDb,
-    jwt: r.jwt
+    auth
   };
 }
 
-function isPortMap(v: unknown): v is PortMap {
-  if (!v || typeof v !== "object") return false;
+function parsePortMap(v: unknown): PortMap | null {
+  if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
+  const ports = {} as PortMap;
   for (const name of PORT_NAMES) {
-    if (typeof o[name] !== "number" || !Number.isInteger(o[name])) return false;
+    const value =
+      name === "PORT_STORAGE"
+        ? o.PORT_STORAGE ?? o[`PORT_${"API"}`]
+        : name === "PORT_CONSOLE"
+          ? o.PORT_CONSOLE ?? o[`PORT_${"STUDIO"}`]
+          : o[name];
+    if (typeof value !== "number" || !Number.isInteger(value)) return null;
+    ports[name] = value;
   }
-  return true;
+  return ports;
 }
 
-function isJwtCreds(v: unknown): v is JwtCreds {
-  if (!v || typeof v !== "object") return false;
-  const j = v as Record<string, unknown>;
-  return (
-    typeof j.secret === "string" &&
-    j.secret.length > 0 &&
-    typeof j.anonKey === "string" &&
-    typeof j.serviceKey === "string"
-  );
+function parseAuthSecret(v: unknown): AuthSecret | null {
+  if (!v || typeof v !== "object") return null;
+  const auth = v as Record<string, unknown>;
+  if (typeof auth.secret !== "string" || auth.secret.length === 0) return null;
+  return { secret: auth.secret };
 }
 
 function writeRegistry(registry: Registry) {
@@ -272,12 +278,12 @@ function pickRedisDb(taken: Set<number>): number {
   );
 }
 
-function isPortAvailable(port: number): Promise<boolean> {
+export function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.unref();
     server.once("error", () => resolve(false));
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, "0.0.0.0", () => {
       server.close(() => resolve(true));
     });
   });
@@ -323,39 +329,6 @@ async function pickFreePort(taken: Set<number>): Promise<number> {
   throw new Error("Failed to allocate a free port after 100 attempts");
 }
 
-// Mint a fresh JWT_SECRET + the matching `anon` and `service_role` HS256 JWTs.
-// Mirrors supabase's well-known dev token shape so all downstream services
-// (gotrue, postgrest, kong, storage, studio) accept them without further config.
-function generateJwtCreds(): JwtCreds {
-  // 32-byte (256-bit) secret, hex-encoded — matches HS256 key strength.
-  const secret = randomBytes(32).toString("hex");
-  const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 10 * 365 * 24 * 60 * 60; // 10 years
-  const anonKey = signJwt(
-    { iss: "supabase-demo", role: "anon", iat, exp },
-    secret
-  );
-  const serviceKey = signJwt(
-    { iss: "supabase-demo", role: "service_role", iat, exp },
-    secret
-  );
-  return { secret, anonKey, serviceKey };
-}
-
-function signJwt(payload: object, secret: string): string {
-  const header = { alg: "HS256", typ: "JWT" };
-  const h = b64url(JSON.stringify(header));
-  const p = b64url(JSON.stringify(payload));
-  const data = `${h}.${p}`;
-  const sig = b64url(createHmac("sha256", secret).update(data).digest());
-  return `${data}.${sig}`;
-}
-
-function b64url(input: Buffer | string): string {
-  const buf = typeof input === "string" ? Buffer.from(input) : input;
-  return buf
-    .toString("base64")
-    .replace(/=+$/, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+function generateAuthSecret(): AuthSecret {
+  return { secret: randomBytes(32).toString("hex") };
 }

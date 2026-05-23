@@ -68,10 +68,8 @@ const CustomFieldCategoryDetail = ({
   const fieldMap = useMemo(
     () =>
       Array.isArray(customFieldTable.fields)
-        ? customFieldTable.fields.reduce<
-            Record<string, CustomFieldAndDataType>
-            // @ts-ignore
-          >((acc, field) => {
+        ? customFieldTable.fields.reduce(
+            (acc: Record<string, CustomFieldAndDataType>, field: any) => {
             if (!field) return acc;
             const customField = field as CustomFieldAndDataType;
             return {
@@ -90,10 +88,10 @@ const CustomFieldCategoryDetail = ({
     Array.isArray(customFieldTable.fields)
       ? customFieldTable.fields
           .sort(
-            (a, b) =>
+            (a: any, b: any) =>
               (a as CustomField).sortOrder - (b as CustomField).sortOrder
           )
-          .map((field) => (field as CustomField).id)
+          .map((field: any) => (field as CustomField).id)
       : []
   );
 

@@ -100,18 +100,20 @@ export function SalesOrderLineShipments({
                 </Tr>
               </Thead>
               <Tbody>
-                {Object.entries(
-                  shipments.reduce(
-                    (acc, shipment) => {
-                      const key = shipment.shipment.id!;
-                      if (!acc[key]) {
-                        acc[key] = [];
-                      }
-                      acc[key].push(shipment);
-                      return acc;
-                    },
-                    {} as Record<string, typeof shipments>
-                  )
+                {(
+                  Object.entries(
+                    shipments.reduce(
+                      (acc, shipment) => {
+                        const key = shipment.shipment.id!;
+                        if (!acc[key]) {
+                          acc[key] = [];
+                        }
+                        acc[key].push(shipment);
+                        return acc;
+                      },
+                      {} as Record<string, typeof shipments>
+                    )
+                  ) as [string, typeof shipments][]
                 ).map(([shipmentId, groupedShipments]) => (
                   <Tr key={shipmentId}>
                     <Td>
@@ -130,7 +132,7 @@ export function SalesOrderLineShipments({
                     </Td>
                     <Td className="text-right">
                       {groupedShipments.reduce(
-                        (sum, shipment) =>
+                        (sum: any, shipment: any) =>
                           sum + (shipment.shippedQuantity ?? 0),
                         0
                       )}

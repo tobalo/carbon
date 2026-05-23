@@ -13,16 +13,13 @@
  *
  * Includes cooldown protection to prevent redundant syncs of the same entity.
  */
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import {
-  getPostgresClient,
-  getPostgresConnectionPool
-} from "@carbon/database/client";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import {
   type AccountingEntity,
   type AccountingEntityType,
   AccountingSyncSchema,
   type BatchSyncResult,
+  createAccountingDatabaseClient,
   createMappingService,
   getAccountingIntegration,
   getProviderIntegration,
@@ -30,7 +27,6 @@ import {
 } from "@carbon/ee/accounting";
 
 import { groupBy } from "@carbon/utils";
-import { PostgresDriver } from "kysely";
 import { inngest } from "../../client";
 
 // Cooldown period in milliseconds to prevent redundant syncs
@@ -47,7 +43,7 @@ export const syncExternalAccountingFunction = inngest.createFunction(
   async ({ event, step }) => {
     const payload = PayloadSchema.parse(event.data);
 
-    const client = getCarbonServiceRole();
+    const client = getCarbonServiceClient();
 
     const integration = await getAccountingIntegration(
       client,
@@ -62,9 +58,9 @@ export const syncExternalAccountingFunction = inngest.createFunction(
       integration.metadata
     );
 
-    const pool = getPostgresConnectionPool(10);
-    const kysely = getPostgresClient(pool, PostgresDriver);
-    const mappingService = createMappingService(kysely, payload.companyId);
+    const accountingDatabase = createAccountingDatabaseClient(10);
+    const database = accountingDatabase.database;
+    const mappingService = createMappingService(database, payload.companyId);
 
     const results = {
       success: [] as BatchSyncResult[],
@@ -93,7 +89,7 @@ export const syncExternalAccountingFunction = inngest.createFunction(
           );
 
           const syncer = SyncFactory.getSyncer({
-            database: kysely,
+            database,
             companyId: payload.companyId,
             provider,
             config: entityConfig,
@@ -186,7 +182,7 @@ export const syncExternalAccountingFunction = inngest.createFunction(
     } catch (error) {
       console.error("Sync task failed:", error);
     } finally {
-      await pool.end();
+      await accountingDatabase.close();
     }
 
     return results;

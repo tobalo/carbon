@@ -1,6 +1,5 @@
 import { error, notFound, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData, useNavigate, useParams } from "react-router";
@@ -28,7 +27,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  await requirePermissions(request, {
+  const { client, companyGroupId } = await requirePermissions(request, {
     delete: "settings"
   });
 
@@ -40,10 +39,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const { error: deleteError } = await deleteSubsidiary(
-    getCarbonServiceRole(),
-    id
-  );
+  const subsidiary = await getSubsidiary(client, id);
+  if (subsidiary.error || subsidiary.data?.companyGroupId !== companyGroupId) {
+    throw redirect(
+      path.to.companies,
+      await flash(request, error(subsidiary.error, "Subsidiary not found"))
+    );
+  }
+
+  const { error: deleteError } = await deleteSubsidiary(client, id);
   if (deleteError) {
     throw redirect(
       path.to.companies,

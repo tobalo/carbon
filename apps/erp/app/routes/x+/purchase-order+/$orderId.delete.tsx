@@ -1,6 +1,5 @@
 import { assertIsPost, error, notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -15,17 +14,15 @@ import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     delete: "purchasing"
   });
 
   const { orderId } = params;
   if (!orderId) throw notFound("orderId not found");
 
-  const serviceRole = getCarbonServiceRole();
-
   // Get PO status and check if it's in "Needs Approval"
-  const purchaseOrder = await getPurchaseOrder(serviceRole, orderId);
+  const purchaseOrder = await getPurchaseOrder(client, orderId);
   if (purchaseOrder.error || !purchaseOrder.data) {
     throw redirect(
       path.to.purchaseOrders,
@@ -39,12 +36,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
+  if (purchaseOrder.data.companyId !== companyId) {
+    throw redirect(
+      path.to.purchaseOrders,
+      await flash(
+        request,
+        error("You are not authorized to delete this purchase order")
+      )
+    );
+  }
+
   const poStatus = purchaseOrder.data.status;
 
   // If PO is in "Needs Approval", check permissions
   if (poStatus && poStatus === "Needs Approval") {
     const approvalRequest = await getLatestApprovalRequestForDocument(
-      serviceRole,
+      client,
       "purchaseOrder",
       orderId
     );
@@ -62,7 +69,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         userId
       );
       const isApprover = await canApproveRequest(
-        serviceRole,
+        client,
         {
           amount: approvalRequest.data.amount,
           documentType: approvalRequest.data.documentType,
@@ -93,7 +100,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
 
       // Cancel pending approval requests before deletion
-      await serviceRole
+      await client
         .from("approvalRequest")
         .update({
           status: "Cancelled",
@@ -102,6 +109,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         })
         .eq("documentType", "purchaseOrder")
         .eq("documentId", orderId)
+        .eq("companyId", companyId)
         .eq("status", "Pending");
     }
   }

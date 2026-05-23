@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -25,6 +25,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
     view: "resources"
   });
   const dispatch = await getMaintenanceDispatch(viewClient, dispatchId);
+  if (dispatch.error || dispatch.data?.companyId !== companyId) {
+    throw redirect(
+      requestReferrer(request) ?? path.to.maintenanceDispatch(dispatchId),
+      await flash(request, error(dispatch.error, "Dispatch not found"))
+    );
+  }
+
   await requireUnlocked({
     request,
     isLocked: isMaintenanceDispatchLocked(dispatch.data?.status),
@@ -32,15 +39,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
     message: "Cannot modify a locked dispatch. Reopen it first."
   });
 
-  const serviceRole = await getCarbonServiceRole();
-
-  const result = await serviceRole.functions.invoke("issue", {
+  const result = await invokeFunction("issue", {
     body: {
       type: "maintenanceDispatchUnissue",
       maintenanceDispatchItemId: itemId,
       companyId,
       userId
-    }
+    },
   });
 
   if (result.error) {

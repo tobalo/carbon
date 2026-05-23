@@ -422,7 +422,7 @@ const JobsTable = memo(({ data, count, tags }: JobsTableProps) => {
         header: t`Tags`,
         cell: ({ row }) => (
           <HStack spacing={0} className="gap-1">
-            {row.original.tags?.map((tag) => (
+            {row.original.tags?.map((tag: any) => (
               <Badge key={tag} variant="secondary">
                 {tag}
               </Badge>
@@ -594,7 +594,7 @@ const JobsTable = memo(({ data, count, tags }: JobsTableProps) => {
       selectedRows.forEach((row) => {
         if (row.id) formData.append("ids", row.id);
       });
-      formData.append("field", field);
+      formData.append("field", String(field));
       if (value) formData.append("value", value);
       fetcher.submit(formData, {
         method: "post",

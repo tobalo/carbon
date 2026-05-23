@@ -1,12 +1,6 @@
 import { $ } from "execa";
 
-import { client } from "./client";
-import {
-  SUPABASE_ACCESS_TOKEN,
-  SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID,
-  SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET,
-  SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI,
-} from "./env";
+import { fetchWorkspaces, markWorkspaceSeeded } from "./client";
 
 export type Workspace = {
   id: number;
@@ -16,103 +10,48 @@ export type Workspace = {
   seeded: boolean;
   connection_string: string | null;
   database_url: string | null;
-  project_id: string | null;
-  access_token: string | null;
-  anon_key: string | null;
-  database_password: string | null;
-  jwt_key: string | null;
-  service_role_key: string | null;
 };
 
 async function migrate(): Promise<void> {
   console.log("✅ 🌱 Starting migrations");
 
-  const { data: workspaces, error } = await client
-    .from("workspaces")
-    .select("*");
-
-  if (error) {
-    console.error("🔴 🍳 Failed to fetch workspaces", error);
-    process.exit(1);
-  }
+  const workspaces = await fetchWorkspaces<Workspace>();
 
   let hasErrors = false;
 
   console.log("✅ 🛩️ Successfully retreived workspaces");
 
-  console.log("👯‍♀️ Copying supabase folder");
-  await $`cp -r ../packages/database/supabase .`;
-  await $`cp -r ../packages/database/src .`;
-
-  for await (const workspace of workspaces as Workspace[]) {
+  for await (const workspace of workspaces) {
     try {
       console.log(`✅ 🥚 Migrating ${workspace.id}`);
-      const {
-        connection_string,
-        database_url,
-        database_password,
-        service_role_key,
-        project_id,
-        anon_key,
-        access_token,
-      } = workspace;
-      if (!database_url) {
+      const databaseUrl = workspace.connection_string ?? workspace.database_url;
+      if (!databaseUrl?.startsWith("postgres")) {
         console.log(`🔴🍳 Missing database url for ${workspace.id}`);
         continue;
       }
 
       console.log(`✅ 🔑 Setting up environment for ${workspace.id}`);
 
-      let $$ = $({
-        // @ts-ignore
+      const $$ = $({
         env: {
-          SUPABASE_ACCESS_TOKEN:
-            access_token === null ? SUPABASE_ACCESS_TOKEN : access_token,
-          SUPABASE_URL: database_url ?? undefined,
-          SUPABASE_DB_PASSWORD: database_password ?? undefined,
-          SUPABASE_PROJECT_ID: project_id ?? undefined,
-          SUPABASE_ANON_KEY: anon_key ?? undefined,
-          SUPABASE_SERVICE_ROLE_KEY: service_role_key ?? undefined,
-          SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID,
-          SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET,
-          SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI,
-          ...(connection_string?.startsWith("postgresql://") && {
-            PGSSLMODE: "disable",
-          }),
+          DATABASE_MIGRATION_URL: databaseUrl,
+          DATABASE_URL: databaseUrl,
+          DATABASE_SERVICE_URL: databaseUrl,
+          JOBS_DATABASE_URL: databaseUrl,
         },
-        cwd: "supabase",
+        cwd: "..",
+        stdio: "inherit",
       });
-
-      if (project_id) {
-        await $$`supabase link`;
-      }
 
       console.log(`✅ 🐣 Starting migrations for ${workspace.id}`);
 
-      if (connection_string && connection_string.startsWith("postgresql://")) {
-        await $$`supabase db push --db-url ${connection_string} --include-all`;
-      } else {
-        await $$`supabase db push --include-all`;
-        console.log(`✅ 🐣 Starting deployments for ${workspace.id}`);
-        await $$`supabase functions deploy`;
-      }
+      await $$`pnpm --filter @carbon/database db:migrate`;
 
       if (!workspace.seeded) {
         try {
           console.log(`✅ 🌱 Seeding ${workspace.id}`);
-          await $$`tsx ../../packages/database/src/seed.ts`;
-          const { error } = await client
-            .from("workspaces")
-            .update({ seeded: true })
-            .eq("id", workspace.id);
-
-          if (error) {
-            throw new Error(
-              `🔴 🍳 Failed to mark ${workspace.id} as seeded: ${error.message}`
-            );
-          }
-
-          // TODO: run the seed.sql file
+          await $$`pnpm --filter @carbon/database db:seed`;
+          await markWorkspaceSeeded(workspace.id);
         } catch (e) {
           console.error(`🔴 🍳 Failed to seed ${workspace.id}`, e);
         }

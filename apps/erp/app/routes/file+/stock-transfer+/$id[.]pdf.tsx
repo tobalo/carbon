@@ -5,7 +5,7 @@ import { renderToStream } from "@react-pdf/renderer";
 import type { LoaderFunctionArgs } from "react-router";
 import { getStockTransfer, getStockTransferLines } from "~/modules/inventory";
 import { getCompany } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { client, companyId } = await requirePermissions(request, {
@@ -73,7 +73,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             if (!path) {
               return null;
             }
-            return getBase64ImageFromSupabase(client, path).then((data) => ({
+            return getBase64ImageFromStorage(client, path).then((data) => ({
               id,
               data
             }));

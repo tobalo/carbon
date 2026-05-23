@@ -1,9 +1,12 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  makeMethodStatusEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 import { Trans } from "@lingui/react/macro";
 
 type MakeMethodVersionStatusProps = {
-  status?: Database["public"]["Enums"]["makeMethodStatus"];
+  status?: EnumValue<typeof makeMethodStatusEnum>;
   isActive?: boolean;
 };
 

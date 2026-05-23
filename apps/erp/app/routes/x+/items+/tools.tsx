@@ -18,15 +18,20 @@ export const handle: Handle = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts",
     bypassRls: true
   });
+  const { client, companyId, role, supplierId: scopedSupplierId } = auth;
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const search = searchParams.get("search");
-  const supplierId = searchParams.get("supplierId");
+  if (role === "supplier" && !scopedSupplierId) {
+    throw new Response("Supplier account is not scoped", { status: 403 });
+  }
+  const supplierId =
+    role === "supplier" ? scopedSupplierId : searchParams.get("supplierId");
 
   const { limit, offset, sorts, filters } =
     getGenericQueryFilters(searchParams);

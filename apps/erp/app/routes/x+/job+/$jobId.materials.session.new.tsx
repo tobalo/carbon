@@ -169,7 +169,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       // Filter out the target storage unit and only include storage units with available quantity
       const validSources =
         availableSources?.filter(
-          (source) =>
+          (source: any) =>
             source.storageUnitId !== item.storageUnitId &&
             source.quantityOnHandInStorageUnit >
               source.quantityRequiredByStorageUnit
@@ -180,7 +180,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
 
       // Sort sources by available quantity (descending) to prioritize storage units with more stock
-      validSources.sort((a, b) => {
+      validSources.sort((a: any, b: any) => {
         const aAvailable =
           a.quantityOnHandInStorageUnit - a.quantityRequiredByStorageUnit;
         const bAvailable =

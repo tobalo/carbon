@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -23,10 +23,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const acknowledged = formData.get("acknowledged") === "true";
 
   // Item Rule evaluation across every line on this receipt before posting.
-  // Use service role so item / storageUnit reads are not blocked by RLS for
-  // users who have `inventory.update` but not `parts.view` etc.
-  const serviceRole = getCarbonServiceRole();
-  const { data: lines } = await serviceRole
+  const { data: lines } = await client
     .from("receiptLine")
     .select(
       "id, itemId, storageUnitId, receivedQuantity, locationId, receiptId"
@@ -38,10 +35,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // an Inbound Transfer ALSO eval the `warehouseTransfer` surface — the post
   // auto-completes the parent transfer, so warehouse-scoped rules need to
   // fire here too.
-  const { data: receiptForSurface } = await serviceRole
+  const { data: receiptForSurface } = await client
     .from("receipt")
     .select("sourceDocument")
     .eq("id", receiptId)
+    .eq("companyId", companyId)
     .single();
   const surfaces: ("receipt" | "warehouseTransfer")[] = ["receipt"];
   if (receiptForSurface?.sourceDocument === "Inbound Transfer") {
@@ -60,7 +58,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const allRuleNames: Record<string, string> = {};
   for (const surface of surfaces) {
     const { violations, ruleNames } = await evaluateLinesForSurface({
-      client: serviceRole,
+      client,
       companyId,
       userId,
       surface,
@@ -85,7 +83,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .update({
       status: "Pending"
     })
-    .eq("id", receiptId);
+    .eq("id", receiptId)
+    .eq("companyId", companyId);
 
   if (setPendingState.error) {
     throw redirect(
@@ -98,23 +97,24 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   try {
-    const receiptMetadata = await serviceRole
+    const receiptMetadata = await client
       .from("receipt")
       .select("sourceDocument,sourceDocumentId")
       .eq("id", receiptId)
+      .eq("companyId", companyId)
       .single();
 
-    const companySettings = await (serviceRole.from("companySettings") as any)
+    const companySettings = await (client.from("companySettings") as any)
       .select("updateLeadTimesOnReceipt")
       .eq("id", companyId)
       .single();
 
-    const postReceipt = await serviceRole.functions.invoke("post-receipt", {
+    const postReceipt = await invokeFunction("post-receipt", {
       body: {
         receiptId: receiptId,
         userId: userId,
         companyId: companyId
-      }
+      },
     });
 
     if (postReceipt.error) {
@@ -123,7 +123,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         .update({
           status: "Draft"
         })
-        .eq("id", receiptId);
+        .eq("id", receiptId)
+        .eq("companyId", companyId);
 
       throw redirect(
         path.to.receipt(receiptId),
@@ -141,7 +142,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       receiptMetadata.data?.sourceDocument === "Purchase Order" &&
       receiptMetadata.data?.sourceDocumentId
     ) {
-      const leadTimeUpdate = await serviceRole.functions.invoke(
+      const leadTimeUpdate = await invokeFunction(
         "update-purchased-prices",
         {
           body: {
@@ -150,7 +151,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             companyId,
             updatePrices: false,
             updateLeadTimes: true
-          }
+          },
         }
       );
 
@@ -168,7 +169,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .update({
         status: "Draft"
       })
-      .eq("id", receiptId);
+      .eq("id", receiptId)
+      .eq("companyId", companyId);
   }
 
   throw redirect(path.to.receipt(receiptId));

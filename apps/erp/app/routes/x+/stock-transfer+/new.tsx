@@ -1,6 +1,5 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { msg } from "@lingui/core/macro";
@@ -60,9 +59,8 @@ export async function action({ request }: ActionFunctionArgs) {
   // status="Released"), so this is the gate where rules must fire before
   // any stock-moving is started. Evaluate against the destination side
   // (`toStorageUnitId`) — that's where stock will land.
-  const serviceRole = getCarbonServiceRole();
   const { violations, ruleNames } = await evaluateLinesForSurface({
-    client: serviceRole,
+    client,
     companyId,
     userId,
     surface: "stockTransfer",

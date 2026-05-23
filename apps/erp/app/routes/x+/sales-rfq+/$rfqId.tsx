@@ -1,6 +1,5 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { JSONContent } from "@carbon/react";
 import { VStack } from "@carbon/react";
@@ -8,7 +7,7 @@ import { supportedModelTypes } from "@carbon/utils";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { DndContext } from "@dnd-kit/core";
 import { msg } from "@lingui/core/macro";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "@carbon/storage";
 import type { LoaderFunctionArgs } from "react-router";
 import { Outlet, redirect, useParams, useSubmit } from "react-router";
 import { PanelProvider, ResizablePanels } from "~/components/Layout/Panels";
@@ -34,26 +33,17 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "sales"
   });
 
   const { rfqId } = params;
   if (!rfqId) throw new Error("Could not find rfqId");
 
-  const serviceRole = await getCarbonServiceRole();
-
   const [rfqSummary, lines] = await Promise.all([
-    getSalesRFQ(serviceRole, rfqId),
-    getSalesRFQLines(serviceRole, rfqId)
+    getSalesRFQ(client, rfqId),
+    getSalesRFQLines(client, rfqId)
   ]);
-
-  const opportunity = await getOpportunity(
-    serviceRole,
-    rfqSummary.data?.opportunityId ?? null
-  );
-
-  if (!opportunity.data) throw new Error("Failed to get opportunity record");
 
   if (rfqSummary.error) {
     throw redirect(
@@ -65,12 +55,24 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     );
   }
 
+  if (rfqSummary.data.companyId !== companyId) {
+    throw redirect(path.to.salesRfqs);
+  }
+
   if (lines.error) {
     throw redirect(
       path.to.salesRfqs,
       await flash(request, error(lines.error, "Failed to load RFQ lines"))
     );
   }
+
+  const opportunity = await getOpportunity(
+    client,
+    companyId,
+    rfqSummary.data?.opportunityId ?? null
+  );
+
+  if (!opportunity.data) throw new Error("Failed to get opportunity record");
 
   return {
     rfqSummary: rfqSummary.data,
@@ -88,7 +90,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         itemId: line.itemId ?? "",
         quantity: line.quantity ?? [1]
       })) ?? [],
-    files: getOpportunityDocuments(serviceRole, companyId, opportunity.data.id),
+    files: getOpportunityDocuments(client, companyId, opportunity.data.id),
     opportunity: opportunity.data
   };
 }

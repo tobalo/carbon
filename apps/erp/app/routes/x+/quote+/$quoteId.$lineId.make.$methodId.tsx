@@ -33,8 +33,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (!methodId) throw new Error("Could not find methodId");
 
   const [makeMethod, materials, operations, tags] = await Promise.all([
-    getQuoteMakeMethod(client, methodId),
-    getQuoteMaterialsByMethodId(client, methodId),
+    getQuoteMakeMethod(client, methodId, companyId),
+    getQuoteMaterialsByMethodId(client, methodId, companyId),
     getQuoteOperationsByMethodId(client, methodId),
     getTagsList(client, companyId, "operation")
   ]);
@@ -112,7 +112,6 @@ export default function QuoteMakeMethodRoute() {
       <QuoteBillOfMaterial
         key={`bom:${methodId}`}
         quoteMakeMethodId={methodId}
-        // @ts-expect-error TS2322 - TODO: fix type
         materials={materials}
         operations={operations}
       />
@@ -120,7 +119,6 @@ export default function QuoteMakeMethodRoute() {
         key={`bop:${methodId}`}
         quoteMakeMethodId={methodId}
         materials={materials}
-        // @ts-expect-error
         operations={operations}
         tags={tags}
       />

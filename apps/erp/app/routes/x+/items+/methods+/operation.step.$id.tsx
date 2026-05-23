@@ -12,7 +12,7 @@ import { operationStepValidator } from "~/modules/shared";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     update: "parts"
   });
 
@@ -30,7 +30,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const { id: _id, ...d } = validation.data;
 
-  await assertMethodOperationIsDraft(client, validation.data.operationId);
+  await assertMethodOperationIsDraft(
+    client,
+    validation.data.operationId,
+    companyId
+  );
 
   const update = await upsertMethodOperationStep(client, {
     id,

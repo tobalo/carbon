@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { formatCityStatePostalCode, formatDate } from "@carbon/utils";
 import {
   Body,
@@ -26,10 +26,10 @@ import {
 } from "./components/Theme";
 
 interface SalesInvoiceEmailProps extends Email {
-  salesInvoice: Database["public"]["Views"]["salesInvoices"]["Row"];
-  salesInvoiceLines: Database["public"]["Views"]["salesInvoiceLines"]["Row"][];
-  salesInvoiceLocations: Database["public"]["Views"]["salesInvoiceLocations"]["Row"];
-  salesInvoiceShipment: Database["public"]["Tables"]["salesInvoiceShipment"]["Row"];
+  salesInvoice: TableRow<"salesInvoices">;
+  salesInvoiceLines: TableRow<"salesInvoiceLines">[];
+  salesInvoiceLocations: TableRow<"salesInvoiceLocations">;
+  salesInvoiceShipment: TableRow<"salesInvoiceShipment">;
   paymentTerms: { id: string; name: string }[];
 }
 

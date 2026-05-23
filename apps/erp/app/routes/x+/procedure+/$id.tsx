@@ -26,6 +26,7 @@ import { getTagsList } from "~/modules/shared";
 import type { action } from "~/routes/x+/procedure+/update";
 import type { Handle } from "~/utils/handle";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 
 export const handle: Handle = {
   breadcrumb: msg`Procedures`,
@@ -44,7 +45,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (!id) throw new Error("Could not find id");
 
   const [procedure, tags] = await Promise.all([
-    getProcedure(client, id),
+    getProcedure(client, id, companyId),
     getTagsList(client, companyId, "procedure")
   ]);
 
@@ -162,7 +163,11 @@ function ProcedureEditor() {
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/job/notes/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error("Failed to upload image");

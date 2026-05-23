@@ -1,5 +1,8 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { msg } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
@@ -39,10 +42,11 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "production",
     bypassRls: true
   });
+  const { client, companyId } = auth;
 
   const { jobId } = params;
   if (!jobId) throw new Error("Could not find jobId");
@@ -52,23 +56,23 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     getTagsList(client, companyId, "job")
   ]);
 
-  if (companyId !== job.data?.companyId) {
-    throw redirect(path.to.jobs);
-  }
-
   if (job.error) {
     throw redirect(
       path.to.jobs,
       await flash(request, error(job.error, "Failed to load job"))
     );
   }
+  if (companyId !== job.data?.companyId) {
+    throw redirect(path.to.jobs);
+  }
+  assertCustomerAccountScope(auth, job.data?.customerId);
 
   return {
     job: job.data,
     tags: tags.data ?? [],
     files: getJobDocuments(client, companyId, job.data),
     trackedEntities: getTrackedEntitiesByJobId(client, jobId),
-    method: getJobMethodTree(client, jobId), // returns a promise
+    method: getJobMethodTree(client, jobId, companyId), // returns a promise
     configurationParameters: getConfigurationParameters(
       client,
       job.data.itemId!,

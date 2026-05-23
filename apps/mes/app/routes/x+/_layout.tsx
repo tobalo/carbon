@@ -6,7 +6,8 @@ import {
   getCompanies,
   getUser
 } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { requirePermissions } from "@carbon/auth/auth.server";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import {
   destroyAuthSession,
   requireAuthSession
@@ -39,7 +40,7 @@ import {
 import { AppSidebar } from "~/components";
 import { ConsolePill } from "~/components/ConsolePill";
 import { PinInOverlay } from "~/components/PinInOverlay";
-import RealtimeDataProvider from "~/components/RealtimeDataProvider";
+import PollingDataProvider from "~/components/PollingDataProvider";
 import { TimeCardWarning } from "~/components/TimeCardWarning";
 import { userContext } from "~/context";
 import { userMiddleware } from "~/middleware/user";
@@ -71,9 +72,11 @@ export const middleware: MiddlewareFunction[] = [userMiddleware];
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { accessToken, companyId, expiresAt, expiresIn, userId } =
     await requireAuthSession(request, { verify: true });
+  const { userId: authorizedUserId } = await requirePermissions(request, {});
 
   // share a client between requests
-  const client = getCarbon(accessToken);
+  const client = getCarbon(accessToken, userId);
+  const queryClient = client as unknown as DatabaseQueryClient;
 
   // parallelize the requests
   const [companies, user] = await Promise.all([
@@ -85,7 +88,9 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     await destroyAuthSession(request);
   }
 
-  const company = companies.data?.find((c) => c.companyId === companyId);
+  const company = companies.data?.find(
+    (c: { companyId: string }) => c.companyId === companyId
+  );
   if (!company) {
     throw redirect(path.to.accountSettings);
   }
@@ -95,9 +100,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const locationId = ctx?.locationId;
   const consoleMode = ctx?.consoleMode ?? false;
   const pinnedInUser = ctx?.pinnedInUser ?? null;
-  const effectiveUserId = ctx?.effectiveUserId ?? userId;
-
-  const serviceRole = getCarbonServiceRole();
+  const effectiveUserId = ctx?.effectiveUserId ?? authorizedUserId;
 
   let [
     companyPlan,
@@ -108,8 +111,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     locationEmployees
   ] = await Promise.all([
     getStripeCustomerByCompanyId(companyId, userId),
-    getLocationsByCompany(client, companyId),
-    getActiveJobCount(client, {
+    getLocationsByCompany(queryClient, companyId),
+    getActiveJobCount(queryClient, {
       employeeId: effectiveUserId,
       companyId
     }),
@@ -118,10 +121,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       .select("timeCardEnabled, consoleEnabled")
       .eq("id", companyId)
       .single(),
-    getOpenClockEntry(client, effectiveUserId, companyId),
+    getOpenClockEntry(queryClient, effectiveUserId, companyId),
     // Get employees at current location for console mode pin-in filtering
     consoleMode && locationId
-      ? serviceRole
+      ? queryClient
           .from("employeeJob")
           .select("id")
           .eq("locationId", locationId)
@@ -137,7 +140,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 
   // Get active maintenance count after we have the location
   const activeMaintenanceCount = await getActiveMaintenanceEventsCount(
-    client,
+    queryClient,
     locationId
   );
 
@@ -180,7 +183,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       locationEmployeeIds,
       locations: locations.data ?? [],
       openClockEntry: openClockEntry?.data
-        ? getOpenClockEntry(client, userId, companyId)
+        ? getOpenClockEntry(queryClient, userId, companyId)
         : null,
       effectiveUserId,
       pinnedInUser,
@@ -243,7 +246,7 @@ export default function AuthenticatedRoute() {
         />
       ) : (
         <CarbonProvider session={session}>
-          <RealtimeDataProvider>
+          <PollingDataProvider>
             <SidebarProvider defaultOpen={false}>
               <TooltipProvider delayDuration={0}>
                 <AppSidebar
@@ -296,7 +299,7 @@ export default function AuthenticatedRoute() {
                 )}
               </TooltipProvider>
             </SidebarProvider>
-          </RealtimeDataProvider>
+          </PollingDataProvider>
         </CarbonProvider>
       )}
     </div>

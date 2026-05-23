@@ -4,7 +4,7 @@ This example demonstrates how to create a quote with a configurator. It requires
 
 ### Setup
 
-First run Carbon locally, and make sure your company ID and API key are set in your `.env` or `.env.local` file.
+First run Carbon locally, and make sure `CARBON_COMPANY_ID` and `DATABASE_SERVICE_URL` are set in your `.env` or `.env.local` file.
 
 ```bash
 npm run dev

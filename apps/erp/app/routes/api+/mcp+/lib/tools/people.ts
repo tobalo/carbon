@@ -149,7 +149,7 @@ export const registerPeopleTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getAttribute(ctx.client, params.attributeId);
+      const result = await getAttribute(ctx.client, params.attributeId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: people_getAttribute"),
   );
@@ -182,7 +182,7 @@ export const registerPeopleTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getAttributeCategory(ctx.client, params.id);
+      const result = await getAttributeCategory(ctx.client, params.id, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: people_getAttributeCategory"),
   );

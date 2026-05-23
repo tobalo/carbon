@@ -28,7 +28,7 @@ import {
 import ItemThumbnail from "./ItemThumbnail";
 import Location from "./Location";
 import New from "./New";
-import RealtimeDataProvider from "./RealtimeDataProvider";
+import PollingDataProvider from "./PollingDataProvider";
 import SearchFilter from "./SearchFilter";
 import { SearchLandingPage } from "./SearchLandingPage";
 import Select from "./Select";
@@ -63,7 +63,7 @@ export {
   ModuleIcon,
   New,
   OperationStatusIcon,
-  RealtimeDataProvider,
+  PollingDataProvider,
   SearchFilter,
   SearchLandingPage,
   Select,

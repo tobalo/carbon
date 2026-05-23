@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { DatePicker, InputControlled, ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -76,7 +76,7 @@ const QuoteProperties = () => {
       const formData = new FormData();
 
       formData.append("ids", quoteId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value ?? "");
       fetcher.submit(formData, {
         method: "post",
@@ -465,7 +465,6 @@ const QuoteProperties = () => {
         <span className="text-xs font-medium text-muted-foreground">
           Created By
         </span>
-        {/* @ts-expect-error TS2322 */}
         <EmployeeAvatar employeeId={routeData?.quote?.createdBy} />
       </VStack>
 

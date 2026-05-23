@@ -29,6 +29,7 @@ import {
   cleanupFunction,
   dispatchFunction,
   mrpFunction,
+  refreshMaterializedViewsFunction,
   updateExchangeRatesFunction,
   weeklyFunction
 } from "./functions/scheduled";
@@ -68,6 +69,7 @@ export const functions = [
   dispatchFunction,
   auditArchiveFunction,
   mrpFunction,
+  refreshMaterializedViewsFunction,
   weeklyFunction,
   updateExchangeRatesFunction,
   // Integrations

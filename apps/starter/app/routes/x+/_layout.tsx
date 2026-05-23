@@ -18,7 +18,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     await requireAuthSession(request, { verify: true });
 
   // share a client between requests
-  const client = getCarbon(accessToken);
+  const client = getCarbon(accessToken, userId);
 
   // parallelize the requests
   const [companies, user] = await Promise.all([
@@ -30,7 +30,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     await destroyAuthSession(request);
   }
 
-  const company = companies.data?.find((c) => c.companyId === companyId);
+  const company = companies.data?.find(
+    (c: { companyId: string }) => c.companyId === companyId
+  );
   if (!company) {
     throw redirect(getAppUrl());
   }

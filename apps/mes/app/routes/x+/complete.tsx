@@ -1,8 +1,8 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data, redirect } from "react-router";
 import { nonScrapQuantityValidator } from "~/services/models";
@@ -25,20 +25,20 @@ export async function action({ request }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
   // Get current job operation and production quantities to check if operation will be finished
   const [jobOperation, productionQuantities] = await Promise.all([
-    serviceRole
+    client
       .from("jobOperation")
       .select("*")
       .eq("id", validation.data.jobOperationId)
+      .eq("companyId", companyId)
       .maybeSingle(),
-    serviceRole
+    client
       .from("productionQuantity")
       .select("*")
       .eq("type", "Production")
       .eq("jobOperationId", validation.data.jobOperationId)
+      .eq("companyId", companyId)
   ]);
 
   if (jobOperation.error || !jobOperation.data) {
@@ -62,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
       0);
 
   if (validation.data.trackingType === "Serial") {
-    const response = await serviceRole.functions.invoke("issue", {
+    const response = await invokeFunction("issue", {
       body: {
         type: "jobOperationSerialComplete",
         ...validation.data,
@@ -74,7 +74,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const trackedEntityId = response.data?.newTrackedEntityId;
 
     if (willBeFinished) {
-      const finishOperation = await finishJobOperation(serviceRole, {
+      const finishOperation = await finishJobOperation(client, {
         jobOperationId: jobOperation.data.id,
         userId,
         companyId
@@ -109,8 +109,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     return redirect(`${path.to.operation(validation.data.jobOperationId)}`);
   } else if (validation.data.trackingType === "Batch") {
-    const serviceRole = await getCarbonServiceRole();
-    const response = await serviceRole.functions.invoke("issue", {
+    const response = await invokeFunction("issue", {
       body: {
         type: "jobOperationBatchComplete",
         ...validation.data,
@@ -130,7 +129,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     if (willBeFinished) {
-      const finishOperation = await finishJobOperation(serviceRole, {
+      const finishOperation = await finishJobOperation(client, {
         jobOperationId: jobOperation.data.id,
         userId,
         companyId
@@ -178,7 +177,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const issue = await serviceRole.functions.invoke("issue", {
+    const issue = await invokeFunction("issue", {
       body: {
         id: validation.data.jobOperationId,
         type: "jobOperation",
@@ -199,7 +198,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     if (willBeFinished) {
-      const finishOperation = await finishJobOperation(serviceRole, {
+      const finishOperation = await finishJobOperation(client, {
         jobOperationId: jobOperation.data.id,
         userId,
         companyId

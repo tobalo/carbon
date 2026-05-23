@@ -1,9 +1,8 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { sanitize } from "~/utils/supabase";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
+import { sanitize } from "~/utils/query";
 
 export async function getOpenClockEntry(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   employeeId: string,
   companyId: string
 ) {
@@ -17,7 +16,7 @@ export async function getOpenClockEntry(
 }
 
 export async function clockIn(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -41,7 +40,7 @@ export async function clockIn(
 }
 
 export async function clockOut(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -69,7 +68,7 @@ export async function clockOut(
 }
 
 export async function updateTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     entryId: string;
     clockIn?: string;

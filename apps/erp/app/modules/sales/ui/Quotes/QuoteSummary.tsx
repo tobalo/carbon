@@ -292,8 +292,8 @@ const LinePricingOptions = ({
 
   const additionalChargesByQuantity =
     line.quantity?.reduce(
-      (acc, quantity) => {
-        const charges = Object.values(line.additionalCharges ?? {}).reduce(
+      (acc: any, quantity: any) => {
+        const charges = (Object.values(line.additionalCharges ?? {}) as any[]).reduce(
           (chargeAcc, charge) => {
             const amount = charge.amounts?.[quantity];
             return chargeAcc + amount;
@@ -306,10 +306,10 @@ const LinePricingOptions = ({
       { 0: 0 } as Record<number, number>
     ) ?? {};
 
-  const convertedAdditionalChargesByQuantity = Object.entries(
+  const convertedAdditionalChargesByQuantity = (Object.entries(
     additionalChargesByQuantity
-  ).reduce<Record<number, number>>(
-    (acc, [quantity, amount]) => {
+  ) as [string, number][]).reduce<Record<number, number>>(
+    (acc, [quantity, amount]: [string, number]) => {
       acc[Number(quantity)] = amount * quoteExchangeRate;
       return acc;
     },
@@ -318,8 +318,8 @@ const LinePricingOptions = ({
 
   const taxableAdditionalChargesByQuantity =
     line.quantity?.reduce(
-      (acc, quantity) => {
-        const charges = Object.values(line.additionalCharges ?? {}).reduce(
+      (acc: any, quantity: any) => {
+        const charges = (Object.values(line.additionalCharges ?? {}) as any[]).reduce(
           (chargeAcc, charge) => {
             if (charge.taxable === false) return chargeAcc;
             const amount = charge.amounts?.[quantity];
@@ -333,10 +333,10 @@ const LinePricingOptions = ({
       { 0: 0 } as Record<number, number>
     ) ?? {};
 
-  const convertedTaxableAdditionalChargesByQuantity = Object.entries(
+  const convertedTaxableAdditionalChargesByQuantity = (Object.entries(
     taxableAdditionalChargesByQuantity
-  ).reduce<Record<number, number>>(
-    (acc, [quantity, amount]) => {
+  ) as [string, number][]).reduce<Record<number, number>>(
+    (acc, [quantity, amount]: [string, number]) => {
       acc[Number(quantity)] = amount * quoteExchangeRate;
       return acc;
     },
@@ -350,7 +350,7 @@ const LinePricingOptions = ({
       amount: selectedLine.convertedShippingCost
     });
   }
-  Object.entries(line.additionalCharges ?? {}).forEach(([name, charge]) => {
+  (Object.entries(line.additionalCharges ?? {}) as [string, any][]).forEach(([name, charge]) => {
     additionalCharges.push({
       name: charge.description,
       amount: charge.amounts?.[selectedLine.quantity] * quoteExchangeRate
@@ -733,9 +733,9 @@ const QuoteSummary = ({
 
         const additionalChargesByQuantity =
           line.quantity?.reduce(
-            (acc, quantity) => {
-              const charges = Object.values(
-                line.additionalCharges ?? {}
+            (acc: any, quantity: any) => {
+              const charges = (
+                Object.values(line.additionalCharges ?? {}) as any[]
               ).reduce((chargeAcc, charge) => {
                 const amount = charge.amounts?.[quantity];
                 return chargeAcc + amount;
@@ -747,10 +747,10 @@ const QuoteSummary = ({
           ) ?? {};
 
         const convertedAdditionalChargesByQuantity =
-          Object.entries(additionalChargesByQuantity).reduce<
+          (Object.entries(additionalChargesByQuantity) as [string, number][]).reduce<
             Record<number, number>
           >(
-            (acc, [quantity, amount]) => {
+            (acc, [quantity, amount]: [string, number]) => {
               acc[Number(quantity)] =
                 amount * (routeData?.quote.exchangeRate ?? 1);
               return acc;
@@ -760,9 +760,9 @@ const QuoteSummary = ({
 
         const taxableAdditionalChargesByQuantity =
           line.quantity?.reduce(
-            (acc, quantity) => {
-              const charges = Object.values(
-                line.additionalCharges ?? {}
+            (acc: any, quantity: any) => {
+              const charges = (
+                Object.values(line.additionalCharges ?? {}) as any[]
               ).reduce((chargeAcc, charge) => {
                 if (charge.taxable === false) return chargeAcc;
                 const amount = charge.amounts?.[quantity];
@@ -775,10 +775,10 @@ const QuoteSummary = ({
           ) ?? {};
 
         const convertedTaxableAdditionalChargesByQuantity =
-          Object.entries(taxableAdditionalChargesByQuantity).reduce<
+          (Object.entries(taxableAdditionalChargesByQuantity) as [string, number][]).reduce<
             Record<number, number>
           >(
-            (acc, [quantity, amount]) => {
+            (acc, [quantity, amount]: [string, number]) => {
               acc[Number(quantity)] =
                 amount * (routeData?.quote.exchangeRate ?? 1);
               return acc;
@@ -809,7 +809,7 @@ const QuoteSummary = ({
     );
   });
 
-  const subtotal = Object.values(selectedLines).reduce((acc, line) => {
+  const subtotal = (Object.values(selectedLines) as SelectedLine[]).reduce((acc, line) => {
     return (
       acc +
       (line.convertedNetUnitPrice ?? 0) * line.quantity +
@@ -817,7 +817,7 @@ const QuoteSummary = ({
       (line.convertedShippingCost ?? 0)
     );
   }, 0);
-  const totalDiscount = Object.values(selectedLines).reduce((acc, line) => {
+  const totalDiscount = (Object.values(selectedLines) as SelectedLine[]).reduce((acc, line) => {
     return (
       acc +
       (line.convertedUnitPrice ?? 0) *
@@ -825,7 +825,7 @@ const QuoteSummary = ({
         (line.discountPercent ?? 0)
     );
   }, 0);
-  const tax = Object.values(selectedLines).reduce((acc, line) => {
+  const tax = (Object.values(selectedLines) as SelectedLine[]).reduce((acc, line) => {
     return (
       acc +
       ((line.convertedNetUnitPrice ?? 0) * line.quantity +

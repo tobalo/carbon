@@ -12,8 +12,6 @@
     "@react-aria/i18n": "catalog:",
     "@react-router/dev": "catalog:",
     "@react-router/remix-routes-option-adapter": "catalog:",
-    "@supabase/functions-js": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "@tailwindcss/typography": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@vercel/analytics": "catalog:",

@@ -28,7 +28,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const [shipment, shipmentLines, shipmentLineTracking] = await Promise.all([
     getShipment(client, shipmentId),
-    getShipmentLines(client, shipmentId),
+    getShipmentLines(client, shipmentId, companyId),
     getShipmentTracking(client, shipmentId, companyId)
   ]);
 

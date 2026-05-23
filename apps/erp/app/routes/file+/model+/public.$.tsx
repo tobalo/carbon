@@ -1,7 +1,12 @@
 import { notFound } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  assertCompanyPath,
+  downloadObject,
+  normalizeStorageKey
+} from "@carbon/storage";
 import { supportedModelTypes } from "@carbon/utils";
 import type { LoaderFunctionArgs } from "react-router";
+import { requireModelAccess } from "~/utils/modelAccess.server";
 
 const supportedFileTypes: Record<string, string> = {
   pdf: "application/pdf",
@@ -23,18 +28,23 @@ const supportedFileTypes: Record<string, string> = {
   flac: "audio/flac"
 };
 
-export async function loader({ params }: LoaderFunctionArgs) {
-  const client = getCarbonServiceRole();
-
-  const path = params["*"];
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const path = params["*"] ? decodeURIComponent(params["*"]) : null;
 
   if (!path) throw new Error("Path not found");
 
-  if (!path.includes("models")) {
+  let storageKey: string;
+  try {
+    storageKey = normalizeStorageKey(path);
+  } catch {
     throw notFound("Invalid path");
   }
 
-  const fileType = path.split(".").pop()?.toLowerCase();
+  if (!storageKey.split("/").includes("models")) {
+    throw notFound("Invalid path");
+  }
+
+  const fileType = storageKey.split(".").pop()?.toLowerCase();
 
   if (
     !fileType ||
@@ -43,14 +53,13 @@ export async function loader({ params }: LoaderFunctionArgs) {
   )
     throw new Error(`File type ${fileType} not supported`);
   const contentType = supportedFileTypes[fileType];
+  const companyId = storageKey.split("/")[0];
+  if (!companyId) throw new Error("Company ID not found");
+  assertCompanyPath(companyId, storageKey);
+  await requireModelAccess(request, companyId);
 
   async function downloadFile() {
-    const result = await client.storage.from("private").download(`${path}`);
-    if (result.error) {
-      console.error(result.error);
-      return null;
-    }
-    return result.data;
+    return downloadObject({ companyId, key: storageKey });
   }
 
   let fileData = await downloadFile();

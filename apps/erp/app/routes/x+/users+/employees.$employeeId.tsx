@@ -1,8 +1,7 @@
 import { assertIsPost, error, notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data, redirect, useLoaderData } from "react-router";
@@ -24,7 +23,7 @@ import {
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "users",
     role: "employee"
   });
@@ -32,7 +31,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const { employeeId } = params;
   if (!employeeId) throw notFound("employeeId not found");
 
-  const client = getCarbonServiceRole();
   const [rawClaims, employee, employeeTypes] = await Promise.all([
     getClaims(client, employeeId, companyId),
     getEmployee(client, employeeId, companyId),

@@ -5,7 +5,7 @@ import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import { Menubar, VStack } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Await, redirect, useLoaderData, useParams } from "react-router";
@@ -68,8 +68,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const [methodMaterials, methodOperations, tags, toolManufacturing] =
     await Promise.all([
-      getMethodMaterialsByMakeMethod(client, fullMethod.data.id),
-      getMethodOperationsByMakeMethodId(client, fullMethod.data.id),
+      getMethodMaterialsByMakeMethod(client, fullMethod.data.id, companyId),
+      getMethodOperationsByMakeMethodId(client, fullMethod.data.id, companyId),
       getTagsList(client, companyId, "operation"),
       getItemManufacturing(client, itemId, companyId)
     ]);
@@ -181,7 +181,7 @@ export default function ToolDetailsRoute() {
   const toolData = useRouteData<{
     toolSummary: ToolSummary;
     files: Promise<ItemFile[]>;
-    makeMethods: Promise<PostgrestResponse<MakeMethod>>;
+    makeMethods: Promise<QueryResponse<MakeMethod>>;
   }>(path.to.tool(itemId));
 
   if (!toolData) throw new Error("Could not find tool data");
@@ -241,6 +241,7 @@ export default function ToolDetailsRoute() {
               <BillOfProcess
                 key={`bop:${itemId}`}
                 makeMethod={methodData.makeMethod}
+                materials={methodData.methodMaterials ?? []}
                 // @ts-ignore
                 operations={methodData.methodOperations ?? []}
                 tags={tags}

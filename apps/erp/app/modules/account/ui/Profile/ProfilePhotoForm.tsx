@@ -1,4 +1,4 @@
-import { SUPABASE_URL, useCarbon } from "@carbon/auth";
+import { IMAGE_RESIZER_URL } from "@carbon/auth";
 import {
   Badge,
   Button,
@@ -11,6 +11,7 @@ import type { ChangeEvent } from "react";
 import { useSubmit } from "react-router";
 import { Avatar } from "~/components";
 import { path } from "~/utils/path";
+import { removeStorageObjects, uploadStorageObject } from "~/utils/storage";
 import type { Account } from "../../types";
 
 const maxSizeMB = 10;
@@ -21,27 +22,24 @@ type ProfilePhotoFormProps = {
 
 const ProfilePhotoForm = ({ user }: ProfilePhotoFormProps) => {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const submit = useSubmit();
 
   const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       let avatarFile = e.target.files[0];
       toast.info(t`Uploading ${avatarFile.name}`);
-      const fileExtension = avatarFile.name.substring(
-        avatarFile.name.lastIndexOf(".") + 1
-      );
       const formData = new FormData();
       formData.append("file", avatarFile);
 
       try {
-        const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/image-resizer`,
-          {
-            method: "POST",
-            body: formData
-          }
-        );
+        if (!IMAGE_RESIZER_URL) {
+          throw new Error("IMAGE_RESIZER_URL is not set");
+        }
+
+        const response = await fetch(IMAGE_RESIZER_URL, {
+          method: "POST",
+          body: formData
+        });
 
         if (!response.ok) {
           let errorMessage = "Failed to resize image";
@@ -81,12 +79,11 @@ const ProfilePhotoForm = ({ user }: ProfilePhotoFormProps) => {
         return;
       }
 
-      const imageUpload = await carbon.storage
-        .from("avatars")
-        .upload(`${user.id}.${fileExtension}`, avatarFile, {
-          cacheControl: "0",
-          upsert: true
-        });
+      const imageUpload = await uploadStorageObject({
+        bucket: "avatars",
+        path: avatarFile.name,
+        file: avatarFile
+      });
 
       if (imageUpload.error) {
         console.error(imageUpload.error);
@@ -106,10 +103,11 @@ const ProfilePhotoForm = ({ user }: ProfilePhotoFormProps) => {
   };
 
   const deleteImage = async () => {
-    if (carbon && user?.avatarUrl) {
-      const imageDelete = await carbon.storage
-        .from("avatars")
-        .remove([user.avatarUrl]);
+    if (user?.avatarUrl) {
+      const imageDelete = await removeStorageObjects({
+        bucket: "avatars",
+        paths: [user.avatarUrl]
+      });
 
       if (imageDelete.error) {
         const errorMessage =

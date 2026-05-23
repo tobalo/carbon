@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  procedureStepTypeEnum
+} from "@carbon/database/schema";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@carbon/react";
 import { AiOutlinePartition } from "react-icons/ai";
 import {
@@ -232,7 +235,7 @@ export const ProcedureStepTypeIcon = ({
   type,
   className
 }: {
-  type: Database["public"]["Enums"]["procedureStepType"];
+  type: EnumValue<typeof procedureStepTypeEnum>;
   className?: string;
 }) => {
   switch (type) {

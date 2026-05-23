@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { Copy, MenuIcon, MenuItem } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -14,7 +14,7 @@ import { CustomerAvatar, Hyperlink, New, Table } from "~/components";
 import { usePermissions, useUrlParams } from "~/hooks";
 import { path } from "~/utils/path";
 
-type CustomerPortal = Database["public"]["Tables"]["externalLink"]["Row"];
+type CustomerPortal = TableRow<"externalLink">;
 
 type CustomerPortalsTableProps = {
   appUrl: string;

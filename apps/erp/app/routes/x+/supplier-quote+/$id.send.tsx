@@ -3,6 +3,7 @@ import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
+import { signDownload } from "@carbon/storage";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import {
@@ -122,16 +123,15 @@ export async function action(args: ActionFunctionArgs) {
 
           for (const doc of topDocs) {
             const storagePath = `${companyId}/supplier-interaction/${interactionId}/${doc.name}`;
-            const { data: signedUrlData } = await client.storage
-              .from("private")
-              .createSignedUrl(storagePath, 3600);
-
-            if (signedUrlData?.signedUrl) {
-              attachments.push({
-                filename: doc.name,
-                path: signedUrlData.signedUrl
-              });
-            }
+            const signedUrl = await signDownload({
+              companyId,
+              key: storagePath,
+              expiresIn: 3600
+            });
+            attachments.push({
+              filename: doc.name,
+              path: signedUrl
+            });
           }
         }
 
@@ -148,16 +148,15 @@ export async function action(args: ActionFunctionArgs) {
 
             for (const doc of docs) {
               const storagePath = `${companyId}/supplier-interaction-line/${line.id}/${doc.name}`;
-              const { data: signedUrlData } = await client.storage
-                .from("private")
-                .createSignedUrl(storagePath, 3600);
-
-              if (signedUrlData?.signedUrl) {
-                attachments.push({
-                  filename: doc.name,
-                  path: signedUrlData.signedUrl
-                });
-              }
+              const signedUrl = await signDownload({
+                companyId,
+                key: storagePath,
+                expiresIn: 3600
+              });
+              attachments.push({
+                filename: doc.name,
+                path: signedUrl
+              });
             }
           }
         }

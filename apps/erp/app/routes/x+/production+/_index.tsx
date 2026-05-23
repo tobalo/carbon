@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import {
   Badge,
@@ -25,7 +24,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  useRealtimeChannel,
+  useInterval,
   VStack
 } from "@carbon/react";
 import type { ChartConfig } from "@carbon/react/Chart";
@@ -47,7 +46,6 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import type { DateRange } from "@react-types/datepicker";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { CSVLink } from "react-csv";
-import { flushSync } from "react-dom";
 import {
   LuArrowUpRight,
   LuChevronDown,
@@ -59,7 +57,13 @@ import {
 } from "react-icons/lu";
 import { RiProgress8Line } from "react-icons/ri";
 import type { LoaderFunctionArgs } from "react-router";
-import { Await, Link, useFetcher, useLoaderData } from "react-router";
+import {
+  Await,
+  Link,
+  useFetcher,
+  useLoaderData,
+  useRevalidator
+} from "react-router";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import {
   CustomerAvatar,
@@ -97,29 +101,46 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "production"
   });
+  const { client, companyId, customerId: scopedCustomerId, role, userId } = auth;
+
+  let activeJobsQuery = client
+    .from("job")
+    .select("id,status,assignee")
+    .eq("companyId", companyId)
+    .in("status", OPEN_JOB_STATUSES);
+  let assignedJobsQuery = client
+    .from("job")
+    .select("id,status,assignee")
+    .eq("companyId", companyId)
+    .eq("assignee", userId);
+
+  if (role === "customer") {
+    activeJobsQuery = activeJobsQuery.eq("customerId", scopedCustomerId ?? "");
+    assignedJobsQuery = assignedJobsQuery.eq(
+      "customerId",
+      scopedCustomerId ?? ""
+    );
+  }
 
   const [activeJobs, assignedJobs, workCenters] = await Promise.all([
-    client
-      .from("job")
-      .select("id,status,assignee")
-      .eq("companyId", companyId)
-      .in("status", OPEN_JOB_STATUSES),
-    client
-      .from("job")
-      .select("id,status,assignee")
-      .eq("companyId", companyId)
-      .eq("assignee", userId),
-    getWorkCentersListWithBlockingStatus(client, companyId)
+    activeJobsQuery,
+    assignedJobsQuery,
+    role === "customer"
+      ? Promise.resolve({ data: [], error: null })
+      : getWorkCentersListWithBlockingStatus(client, companyId)
   ]);
 
   return {
     activeJobs: activeJobs.data?.length ?? 0,
     assignedJobs: assignedJobs.data?.length ?? 0,
     workCenters: workCenters.data ?? [],
-    events: getActiveProductionEvents(client, companyId)
+    events:
+      role === "customer"
+        ? Promise.resolve({ data: [], error: null })
+        : getActiveProductionEvents(client, companyId)
   };
 }
 
@@ -612,7 +633,6 @@ export default function ProductionDashboard() {
             {(resolvedEvents) => (
               <WorkCenterCards
                 events={resolvedEvents.data ?? []}
-                // @ts-expect-error TS2322 - TODO: fix type
                 workCenters={workCenters}
               />
             )}
@@ -641,6 +661,25 @@ type WorkCenterWithBlocking = WorkCenter & {
   blockingDispatchReadableId?: string | null;
 };
 
+function buildJobOperationMetaData(events: ActiveProductionEvent[]) {
+  return events.reduce<Record<string, JobOperationMetaData>>((acc, event) => {
+    if (event.id) {
+      acc[event.jobOperationId] = {
+        jobId: event.jobId,
+        jobReadableId: event.jobReadableId,
+        salesOrderId: event.salesOrderId,
+        salesOrderReadableId: event.salesOrderReadableId,
+        salesOrderLineId: event.salesOrderLineId,
+        customerId: event.customerId,
+        description: event.description,
+        dueDate: event.dueDate,
+        deadlineType: event.deadlineType
+      };
+    }
+    return acc;
+  }, {});
+}
+
 function WorkCenterCards({
   events: initialEvents,
   workCenters
@@ -652,24 +691,7 @@ function WorkCenterCards({
   const [events, setEvents] = useState<ActiveProductionEvent[]>(initialEvents);
   const [jobOperationMetaData, setJobOperationMetaData] = useState<
     Record<string, JobOperationMetaData>
-  >(
-    initialEvents.reduce<Record<string, JobOperationMetaData>>((acc, event) => {
-      if (event.id) {
-        acc[event.jobOperationId] = {
-          jobId: event.jobId,
-          jobReadableId: event.jobReadableId,
-          salesOrderId: event.salesOrderId,
-          salesOrderReadableId: event.salesOrderReadableId,
-          salesOrderLineId: event.salesOrderLineId,
-          customerId: event.customerId,
-          description: event.description,
-          dueDate: event.dueDate,
-          deadlineType: event.deadlineType
-        };
-      }
-      return acc;
-    }, {})
-  );
+  >(() => buildJobOperationMetaData(initialEvents));
 
   const eventsByWorkCenterId = workCenters.reduce<
     Record<
@@ -733,79 +755,19 @@ function WorkCenterCards({
     return acc;
   }, {});
 
-  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const { carbon, accessToken } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
-
-  const ensureMetaData = async (event: { jobOperationId: string }) => {
-    if (jobOperationMetaData[event.jobOperationId]) {
-      return;
-    }
-
-    const jobOperation = await carbon
-      ?.from("jobOperation")
-      .select(
-        "description, ...job(jobId:id, jobReadableId:jobId, customerId, dueDate, deadlineType, salesOrderLineId, ...salesOrderLine(...salesOrder(salesOrderId:id, salesOrderReadableId:salesOrderId)))"
-      )
-      .eq("id", event.jobOperationId)
-      .single();
-
-    if (jobOperation?.data) {
-      flushSync(() => {
-        setJobOperationMetaData((prev) => ({
-          ...prev,
-          [event.jobOperationId]: jobOperation.data
-        }));
-      });
-    }
-  };
+  const revalidator = useRevalidator();
 
   useEffect(() => {
     setEvents(initialEvents);
+    setJobOperationMetaData(buildJobOperationMetaData(initialEvents));
   }, [initialEvents]);
 
-  useRealtimeChannel({
-    topic: `production-dashboard-work-centers:${companyId}`,
-    setup(channel) {
-      return channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "productionEvent",
-          filter: `companyId=eq.${companyId}`
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const { new: inserted } = payload;
-            setEvents((prev) => [...prev, inserted as ActiveProductionEvent]);
-            ensureMetaData({ jobOperationId: inserted.jobOperationId });
-          } else if (payload.eventType === "UPDATE") {
-            const { new: updated } = payload;
-            setEvents((prev) => {
-              if (updated.endTime) {
-                return prev.filter((event) => event.id !== updated.id);
-              }
-              const exists = prev.some((event) => event.id === updated.id);
-              if (exists) {
-                return prev.map((event) =>
-                  event.id === updated.id ? { ...event, ...updated } : event
-                );
-              }
-              return [...prev, updated as ActiveProductionEvent];
-            });
-          } else if (payload.eventType === "DELETE") {
-            const { old: deleted } = payload;
-            setEvents((prev) =>
-              prev.filter((event) => event.id !== deleted.id)
-            );
-          }
-        }
-      );
-    }
-  });
+  useInterval(() => {
+    revalidator.revalidate();
+  }, companyId ? 15_000 : null);
 
   return (
     <div className="w-full grid grid-cols-6 gap-4">

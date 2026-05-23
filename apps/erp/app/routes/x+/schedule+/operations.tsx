@@ -17,7 +17,6 @@ import {
   useInterval,
   useLocalStorage,
   useMount,
-  useRealtimeChannel,
   VStack
 } from "@carbon/react";
 import {
@@ -154,38 +153,43 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const [workCenters, processes, operations, tags] = await Promise.all([
     getWorkCentersByLocation(client, locationId),
     getProcessesList(client, companyId),
-    getActiveJobOperationsByLocation(client, locationId, selectedWorkCenterIds),
+    getActiveJobOperationsByLocation(
+      client,
+      locationId,
+      companyId,
+      selectedWorkCenterIds
+    ),
     getTagsList(client, companyId, "operation")
   ]);
 
   const activeWorkCenters = new Set();
 
-  operations.data?.forEach((op) => {
+  operations.data?.forEach((op: any) => {
     if (op.operationStatus === "In Progress") {
       activeWorkCenters.add(op.workCenterId);
     }
   });
 
   let filteredOperations = selectedWorkCenterIds.length
-    ? (operations.data?.filter((op) =>
+    ? (operations.data?.filter((op: any) =>
         selectedWorkCenterIds.includes(op.workCenterId)
       ) ?? [])
     : (operations.data ?? []);
 
   if (selectedSalesOrderIds.length) {
-    filteredOperations = filteredOperations.filter((op) =>
+    filteredOperations = filteredOperations.filter((op: any) =>
       selectedSalesOrderIds.includes(op.salesOrderId)
     );
   }
 
   if (selectedProcessIds.length) {
-    filteredOperations = filteredOperations.filter((op) =>
+    filteredOperations = filteredOperations.filter((op: any) =>
       selectedProcessIds.includes(op.processId)
     );
   }
 
   if (selectedTags.length) {
-    filteredOperations = filteredOperations.filter((op) => {
+    filteredOperations = filteredOperations.filter((op: any) => {
       if (op.tags) {
         return selectedTags.some((tag) => op.tags.includes(tag));
       }
@@ -194,14 +198,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   if (selectedAssignee.length) {
-    filteredOperations = filteredOperations.filter((op) =>
+    filteredOperations = filteredOperations.filter((op: any) =>
       selectedAssignee.includes(op.assignee)
     );
   }
 
   if (search) {
     filteredOperations = filteredOperations.filter(
-      (op) =>
+      (op: any) =>
         op.jobReadableId.toLowerCase().includes(search.toLowerCase()) ||
         op.itemReadableId.toLowerCase().includes(search.toLowerCase()) ||
         op.customerName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -238,7 +242,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         blockingDispatchReadableId: wc.blockingDispatchReadableId ?? undefined
       }))
       .sort((a, b) => a.title.localeCompare(b.title)) satisfies Column[],
-    items: (filteredOperations.map((op) => {
+    items: (filteredOperations.map((op: any) => {
       const operation = makeDurations(op);
       return {
         id: op.id,
@@ -282,7 +286,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     processes: processes.data ?? [],
     salesOrders: Object.entries(
       filteredOperations?.reduce(
-        (acc, op) => {
+        (acc: any, op: any) => {
           if (op.salesOrderId) {
             acc[op.salesOrderId] = op.salesOrderReadableId;
           }
@@ -293,10 +297,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ).map(([id, readableId]) => ({ id, readableId })),
     availableTags: Object.entries(
       filteredOperations.reduce(
-        (acc, op) => {
+        (acc: any, op: any) => {
           if (op.tags) {
             // biome-ignore lint/suspicious/useIterableCallbackReturn: suppressed due to migration
-            op.tags.forEach((tag) => (acc[tag] = true));
+            op.tags.forEach((tag: any) => (acc[tag] = true));
           }
           return acc;
         },
@@ -354,11 +358,7 @@ function KanbanSchedule() {
     setItems((prevItems) => sortItems(prevItems));
   }, [sortItems]);
 
-  const { progressByOperation } = useProgressByOperation(
-    items,
-    setItems,
-    sortItems
-  );
+  const { progressByOperation } = useProgressByOperation(items);
 
   const [people] = usePeople();
   const [params] = useUrlParams();
@@ -396,7 +396,7 @@ function KanbanSchedule() {
         filter: {
           type: "static",
           options: salesOrders.map((so) => ({
-            label: so.readableId,
+            label: String(so.readableId ?? ""),
             value: so.id
           }))
         }
@@ -407,7 +407,7 @@ function KanbanSchedule() {
         filter: {
           type: "static",
           options: people.map((p) => ({
-            label: p.name,
+            label: String(p.name ?? ""),
             value: p.id
           }))
         }
@@ -418,8 +418,8 @@ function KanbanSchedule() {
         filter: {
           type: "static",
           options: availableTags.map((tag) => ({
-            label: tag,
-            value: tag
+            label: String(tag),
+            value: String(tag)
           }))
         }
       }
@@ -571,11 +571,7 @@ export default function ScheduleRoute() {
   );
 }
 
-function useProgressByOperation(
-  items: OperationItem[],
-  setItems: React.Dispatch<React.SetStateAction<OperationItem[]>>,
-  sortItems: (items: OperationItem[]) => OperationItem[]
-) {
+function useProgressByOperation(items: OperationItem[]) {
   const {
     company: { id: companyId }
   } = useUser();
@@ -587,6 +583,7 @@ function useProgressByOperation(
   const [progressByOperation, setProgressByOperation] = useState<
     Record<string, Progress>
   >({});
+  const operationIds = items.map((item) => item.id);
 
   const getProductionEvents = useCallback(
     async (operationIds: string[]) => {
@@ -620,8 +617,12 @@ function useProgressByOperation(
   );
 
   useMount(() => {
-    getProductionEvents(items.map((item) => item.id));
+    void getProductionEvents(operationIds);
   });
+
+  useInterval(() => {
+    void getProductionEvents(operationIds);
+  }, carbon && operationIds.length > 0 ? 15_000 : null);
 
   const getProgress = useCallback(() => {
     const timeNow = now(getLocalTimeZone());
@@ -685,98 +686,6 @@ function useProgressByOperation(
       setProgressByOperation(progress);
     }
   }, [productionEventsByOperation]);
-
-  useRealtimeChannel({
-    topic: `kanban-schedule:${companyId}`,
-    setup(channel) {
-      return channel
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "jobOperation",
-            filter: `id=in.(${items.map((item) => item.id).join(",")})`
-          },
-          (payload) => {
-            switch (payload.eventType) {
-              case "UPDATE": {
-                const { new: updated } = payload;
-                setItems((prevItems: OperationItem[]) =>
-                  sortItems(
-                    prevItems.map((item: OperationItem) => {
-                      if (item.id === updated.id) {
-                        return {
-                          ...item,
-                          columnId: updated.workCenterId,
-                          priority: updated.priority
-                        };
-                      }
-                      return item;
-                    })
-                  )
-                );
-                break;
-              }
-              case "DELETE": {
-                const { old: deleted } = payload;
-                setItems((prevItems: OperationItem[]) =>
-                  sortItems(
-                    prevItems.filter(
-                      (item: OperationItem) => item.id !== deleted.id
-                    )
-                  )
-                );
-                break;
-              }
-            }
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "productionEvent",
-            filter: `companyId=eq.${companyId}`
-          },
-          (payload) => {
-            if (payload.eventType === "INSERT") {
-              const { new: inserted } = payload;
-              if (inserted.jobOperationId) {
-                setProductionEventsByOperation((prevState) => ({
-                  ...prevState,
-                  [inserted.jobOperationId]: [
-                    ...(prevState[inserted.jobOperationId] ?? []),
-                    inserted
-                  ]
-                }));
-              }
-            } else if (payload.eventType === "UPDATE") {
-              const { new: updated } = payload;
-              if (updated.jobOperationId) {
-                setProductionEventsByOperation((prevState) => ({
-                  ...prevState,
-                  [updated.jobOperationId]: (
-                    prevState[updated.jobOperationId] ?? []
-                  ).map((event) => (event.id === updated.id ? updated : event))
-                }));
-              }
-            } else if (payload.eventType === "DELETE") {
-              const { old: deleted } = payload;
-              if (deleted.jobOperationId) {
-                setProductionEventsByOperation((prevState) => ({
-                  ...prevState,
-                  [deleted.jobOperationId]: (
-                    prevState[deleted.jobOperationId] ?? []
-                  ).filter((event) => event.id !== deleted.id)
-                }));
-              }
-            }
-          }
-        );
-    }
-  });
 
   return { progressByOperation };
 }

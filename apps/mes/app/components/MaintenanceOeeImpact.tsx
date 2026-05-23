@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  oeeImpactEnum
+} from "@carbon/database/schema";
 import { Badge, cn } from "@carbon/react";
 import { Trans } from "@lingui/react/macro";
 import {
@@ -9,7 +12,7 @@ import {
 } from "react-icons/lu";
 
 type MaintenanceOeeImpactProps = {
-  oeeImpact?: Database["public"]["Enums"]["oeeImpact"] | null;
+  oeeImpact?: EnumValue<typeof oeeImpactEnum> | null;
   className?: string;
 };
 

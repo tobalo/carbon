@@ -44,8 +44,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Fetch direct children by parentId. We need the actual row list (not
   // just a count) because the `.select(..., { count: "exact", head: true })`
-  // combo was returning `count: null` in practice through this PostgREST
-  // build, so the cascade modal never triggered. Fetching rows and reading
+  // combo returned `count: null` in practice through the old query adapter,
+  // so the cascade modal never triggered. Fetching rows and reading
   // `.data.length` is unambiguous and the direct-child list is tiny.
   const [storageUnit, children] = await Promise.all([
     getStorageUnit(client, storageUnitId),

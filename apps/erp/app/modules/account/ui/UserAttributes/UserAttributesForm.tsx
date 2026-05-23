@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -34,6 +33,7 @@ import SupplierAvatar from "~/components/SupplierAvatar";
 import { usePermissions, useUser } from "~/hooks";
 import { DataType } from "~/modules/shared";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import {
   attributeBooleanValidator,
   attributeCustomerValidator,
@@ -76,7 +76,7 @@ const UserAttributesForm = ({ attributeCategory }: UserAttributesFormProps) => {
   return (
     <div className="w-full">
       <VStack spacing={4}>
-        {attributeCategory.userAttribute.map((attribute) => {
+        {attributeCategory.userAttribute.map((attribute: any) => {
           const genericProps = getGenericProps(
             // @ts-ignore
             attribute as PublicAttributes["userAttribute"],
@@ -638,9 +638,7 @@ function getGenericProps(
   )
     throw new Error("Missing attributeDataType");
 
-  // @ts-expect-error
   const type = attribute.attributeDataType.id;
-  // @ts-expect-error
   const userAttributeId = attribute.id;
   let userAttributeValueId = undefined;
 
@@ -648,14 +646,10 @@ function getGenericProps(
   let value: string | number | boolean | Date | null = null;
 
   if (
-    // @ts-expect-error
     attribute.userAttributeValue &&
-    // @ts-expect-error
     Array.isArray(attribute.userAttributeValue) &&
-    // @ts-expect-error
     attribute.userAttributeValue.length === 1
   ) {
-    // @ts-expect-error
     const userAttributeValue = attribute.userAttributeValue[0];
     userAttributeValueId = userAttributeValue.id;
 
@@ -745,7 +739,6 @@ function FileAttributeForm({
   onClose: () => void;
 }) {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [filePath, setFilePath] = useState<string | null>(
@@ -753,7 +746,7 @@ function FileAttributeForm({
   );
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!acceptedFiles[0] || !carbon) return;
+    if (!acceptedFiles[0]) return;
     const fileUpload = acceptedFiles[0];
 
     setFile(fileUpload);
@@ -761,12 +754,11 @@ function FileAttributeForm({
 
     const fileName = `${company.id}/person/${userId}/${fileUpload.name}`;
 
-    const upload = await carbon?.storage
-      .from("private")
-      .upload(fileName, fileUpload, {
-        cacheControl: `${12 * 60 * 60}`,
-        upsert: true
-      });
+    const upload = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file: fileUpload
+    });
 
     if (upload.error) {
       toast.error(t`Failed to upload file: ${fileUpload.name}`);

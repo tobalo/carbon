@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { JSONContent } from "@carbon/react";
 import { formatDate } from "@carbon/utils";
 import { Text, View } from "@react-pdf/renderer";
@@ -11,17 +11,17 @@ type ListItem = {
   name: string;
 };
 
-type IssueItem = Database["public"]["Tables"]["nonConformanceItem"]["Row"] & {
+type IssueItem = TableRow<"nonConformanceItem"> & {
   name: string | null;
 };
 
 type ActionTask =
-  Database["public"]["Tables"]["nonConformanceActionTask"]["Row"] & {
+  TableRow<"nonConformanceActionTask"> & {
     supplier: { name: string } | null;
   };
 
 type JobOperationStepRecord =
-  Database["public"]["Tables"]["jobOperationStepRecord"]["Row"];
+  TableRow<"jobOperationStepRecord">;
 
 type JobOperationStepWithRecords = {
   id: string;
@@ -44,11 +44,11 @@ type Associations = {
 };
 
 interface IssuePDFProps extends PDF {
-  nonConformance: Database["public"]["Tables"]["nonConformance"]["Row"];
-  nonConformanceTypes: Database["public"]["Tables"]["nonConformanceType"]["Row"][];
+  nonConformance: TableRow<"nonConformance">;
+  nonConformanceTypes: TableRow<"nonConformanceType">[];
   actionTasks: ActionTask[];
   requiredActions: ListItem[];
-  reviewers: Database["public"]["Tables"]["nonConformanceReviewer"]["Row"][];
+  reviewers: TableRow<"nonConformanceReviewer">[];
   items: IssueItem[];
   associations?: Associations | null;
   assignees?: Record<string, string>;

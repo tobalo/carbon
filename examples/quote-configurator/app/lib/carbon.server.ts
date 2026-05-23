@@ -1,11 +1,10 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import {
-  CARBON_API_KEY,
-  CARBON_API_URL,
+  getServiceDatabaseQueryClient,
+  type DatabaseQueryClient
+} from "@carbon/database/query-client";
+import {
   CARBON_APP_URL,
-  CARBON_COMPANY_ID,
-  CARBON_PUBLIC_KEY
+  CARBON_COMPANY_ID
 } from "~/config";
 
 export const quoteLineStatusType = [
@@ -27,16 +26,11 @@ export const quoteStatusType = [
 
 class CarbonClient {
   private readonly appUrl: string = CARBON_APP_URL;
-  private readonly client: SupabaseClient;
+  private readonly client: DatabaseQueryClient;
   private readonly companyId: string = CARBON_COMPANY_ID;
+
   constructor() {
-    this.client = createClient(CARBON_API_URL, CARBON_PUBLIC_KEY, {
-      global: {
-        headers: {
-          "carbon-key": CARBON_API_KEY
-        }
-      }
-    });
+    this.client = getServiceDatabaseQueryClient();
   }
 
   async getCustomer(id: string) {
@@ -283,16 +277,57 @@ class CarbonClient {
     quoteLineId: string;
     configuration?: Record<string, unknown>;
   }) {
-    return this.client.functions.invoke("get-method", {
-      body: {
-        type: "itemToQuoteLine",
-        sourceId: lineMethod.itemId,
-        targetId: `${lineMethod.quoteId}:${lineMethod.quoteLineId}`,
-        companyId: this.companyId,
-        configuration: lineMethod.configuration,
-        userId: "system"
-      }
+    return this.invokeFunction("get-method", {
+      type: "itemToQuoteLine",
+      sourceId: lineMethod.itemId,
+      targetId: `${lineMethod.quoteId}:${lineMethod.quoteLineId}`,
+      companyId: this.companyId,
+      configuration: lineMethod.configuration,
+      userId: "system"
     });
+  }
+
+  private async invokeFunction<T = unknown>(
+    name: string,
+    body: Record<string, unknown>
+  ) {
+    const response = await fetch(
+      `${this.appUrl.replace(/\/+$/, "")}/api/functions/${name}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.CARBON_FUNCTIONS_TOKEN
+            ? { Authorization: `Bearer ${process.env.CARBON_FUNCTIONS_TOKEN}` }
+            : {})
+        },
+        body: JSON.stringify(body)
+      }
+    );
+    const payload = (await response.json().catch(() => null)) as
+      | { data?: T; message?: string }
+      | T
+      | null;
+
+    if (!response.ok) {
+      return {
+        data: null,
+        error: {
+          message:
+            payload && typeof payload === "object" && "message" in payload
+              ? String(payload.message)
+              : `Function ${name} failed with ${response.status}`
+        }
+      };
+    }
+
+    return {
+      data:
+        payload && typeof payload === "object" && "data" in payload
+          ? (payload.data ?? null)
+          : payload,
+      error: null
+    };
   }
 
   sanitize<T extends Record<string, any>>(

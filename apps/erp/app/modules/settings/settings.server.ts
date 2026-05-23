@@ -1,14 +1,74 @@
-import type { Database, Json } from "@carbon/database";
+import type {
+  Json,
+  QueryDatabase
+} from "@carbon/database/schema";
 import { getIntegrationConfigById, type IntegrationID } from "@carbon/ee";
 import { getIntegrationServerHooks } from "@carbon/ee/hooks.server";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { z } from "zod";
 import type { Integration } from "~/modules/settings/types";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
+import crypto from "crypto";
 import type { customFieldValidator } from "./settings.models";
 
 const INTEGRATION_CACHE_TTL = 3600;
+const WEBHOOK_SIGNATURE_HEADER = "x-carbon-webhook-signature";
+
+export function withIntegrationWebhookSecret(
+  metadata: Record<string, unknown>
+): Record<string, unknown> {
+  return typeof metadata.webhookSecret === "string" &&
+    metadata.webhookSecret.length > 0
+    ? metadata
+    : {
+        ...metadata,
+        webhookSecret: crypto.randomUUID()
+      };
+}
+
+function getIntegrationWebhookSecret(metadata: unknown): string {
+  return typeof metadata === "object" &&
+    metadata !== null &&
+    typeof (metadata as Record<string, unknown>).webhookSecret === "string"
+    ? ((metadata as Record<string, unknown>).webhookSecret as string)
+    : "";
+}
+
+function normalizeWebhookSignature(signature: string): string {
+  return signature.trim().replace(/^sha256=/i, "");
+}
+
+export function verifyIntegrationWebhookSignature(
+  request: Request,
+  metadata: unknown,
+  payload: string
+): boolean {
+  const secret = getIntegrationWebhookSecret(metadata);
+  const provided = request.headers.get(WEBHOOK_SIGNATURE_HEADER) ?? "";
+
+  if (!secret || !provided) {
+    return false;
+  }
+
+  const signature = normalizeWebhookSignature(provided);
+  if (!/^[a-f0-9]{64}$/i.test(signature)) {
+    return false;
+  }
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
+
+  const expectedBuffer = Buffer.from(expected, "hex");
+  const providedBuffer = Buffer.from(signature, "hex");
+
+  return (
+    expectedBuffer.byteLength === providedBuffer.byteLength &&
+    crypto.timingSafeEqual(expectedBuffer, providedBuffer)
+  );
+}
 
 export async function clearCustomFieldsCache(companyId?: string) {
   const keys = companyId ? `customFields:${companyId}:*` : "customFields:*";
@@ -56,7 +116,7 @@ export async function clearAllIntegrationCaches(): Promise<void> {
 }
 
 export async function deactivateIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     companyId: string;
@@ -85,7 +145,7 @@ export async function deactivateIntegration(
 }
 
 export async function deleteCustomField(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -104,7 +164,7 @@ interface CompanyIntegration {
 }
 
 export async function getCompanyIntegrations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ): Promise<CompanyIntegration[]> {
   const cacheKey = `integrations:${companyId}`;
@@ -205,7 +265,7 @@ export async function getCompanyIntegrations(
 }
 
 export async function hasIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   integrationId: string
 ): Promise<boolean> {
@@ -214,7 +274,7 @@ export async function hasIntegration(
 }
 
 export async function getCompanyIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   integrationId: string
 ): Promise<CompanyIntegration | null> {
@@ -226,7 +286,7 @@ export async function getCompanyIntegration(
 }
 
 export async function getSlackIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ): Promise<{ token: string; channelId?: string } | null> {
   const integration = await getCompanyIntegration(client, companyId, "slack");
@@ -248,14 +308,14 @@ export async function getSlackIntegration(
 }
 
 export async function hasSlackIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ): Promise<boolean> {
   return hasIntegration(client, companyId, "slack");
 }
 
 export async function upsertCompanyIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   update: {
     id: string;
     active: boolean;
@@ -282,7 +342,7 @@ export async function upsertCompanyIntegration(
 }
 
 export async function upsertCustomField(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   customField:
     | (Omit<z.infer<typeof customFieldValidator>, "id"> & {
         companyId: string;
@@ -324,7 +384,7 @@ export async function upsertCustomField(
 }
 
 export async function updateCustomFieldsSortOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -391,7 +451,7 @@ export async function getIntegrationHealth(
 }
 
 export async function getIntegrationsWithHealth(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   const results = await client

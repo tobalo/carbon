@@ -248,7 +248,6 @@ const PurchaseInvoiceHeader = () => {
               </DropdownMenuContent>
             </DropdownMenu>
             <PurchaseInvoicingStatus
-              // @ts-expect-error TS2322 - TODO: fix type
               status={routeData?.purchaseInvoice?.status}
             />
             {supplierApprovalRequired && !isSupplierApproved && (

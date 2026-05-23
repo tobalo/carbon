@@ -8,7 +8,7 @@ self.addEventListener("fetch", (event) => {
   // If the request is for the favicons, fonts, or the built files (which are hashed in the name)
   if (
     url.pathname.includes("logo") ||
-    url.pathname.includes("storage/v1/object/public/avatars")
+    url.pathname.includes("/avatars/")
   ) {
     event.respondWith(
       // we will open the assets cache

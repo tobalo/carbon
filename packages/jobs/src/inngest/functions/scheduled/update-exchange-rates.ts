@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import type { Rates } from "@carbon/ee/exchange-rates.server";
 import { getExchangeRatesClient } from "@carbon/ee/exchange-rates.server";
 import { EXCHANGE_RATES_API_KEY } from "@carbon/env";
@@ -72,10 +72,10 @@ export const updateExchangeRatesFunction = inngest.createFunction(
   { id: "update-exchange-rates", retries: 2 },
   { cron: "0 0 * * *" },
   async ({ step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
     await step.run("fetch-and-update-exchange-rates", async () => {
       console.log(`Exchange Rates Task Started: ${new Date().toISOString()}`);
-      const integrations = await serviceRole
+      const integrations = await serviceClient
         .from("companyIntegration")
         .select("active, companyId")
         .eq("id", "exchange-rates-v1")
@@ -138,10 +138,11 @@ export const updateExchangeRatesFunction = inngest.createFunction(
           `Processing integration for company ID: ${integration.companyId}`
         );
 
-        const company = await serviceRole
+        const company = await serviceClient
           .from("company")
           .select("*")
           .eq("id", integration.companyId)
+          .eq("active", true)
           .single();
 
         if (company.error) {
@@ -177,7 +178,7 @@ export const updateExchangeRatesFunction = inngest.createFunction(
             );
             continue;
           }
-          const { data, error } = await serviceRole
+          const { data, error } = await serviceClient
             .from("currency")
             .select("*")
             .eq("companyGroupId", company.data.companyGroupId);
@@ -220,14 +221,24 @@ export const updateExchangeRatesFunction = inngest.createFunction(
           console.log(
             `Updating ${updates.length} currencies for company ${integration.companyId}`
           );
-          const { error: upsertError } = await serviceRole
-            .from("currency")
-            .upsert(updates);
-          if (upsertError) {
+          const updateResults = await Promise.all(
+            updates.map((currency) =>
+              serviceClient
+                .from("currency")
+                .update({
+                  exchangeRate: currency.exchangeRate,
+                  updatedAt
+                })
+                .eq("id", currency.id)
+                .eq("companyGroupId", company.data.companyGroupId)
+            )
+          );
+          const updateErrors = updateResults.filter((result) => result.error);
+          if (updateErrors.length > 0) {
             console.error(
               `Error updating currencies for company ${
                 integration.companyId
-              }: ${JSON.stringify(upsertError)}`
+              }: ${JSON.stringify(updateErrors.map((result) => result.error))}`
             );
           } else {
             console.log(

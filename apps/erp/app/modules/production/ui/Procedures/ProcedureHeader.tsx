@@ -17,7 +17,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense, useEffect } from "react";
 import {
   LuChevronDown,
@@ -44,7 +44,7 @@ const ProcedureHeader = () => {
 
   const routeData = useRouteData<{
     procedure: Procedure;
-    versions: PostgrestResponse<Procedure>;
+    versions: QueryResponse<Procedure>;
   }>(path.to.procedure(id));
 
   const navigate = useNavigate();

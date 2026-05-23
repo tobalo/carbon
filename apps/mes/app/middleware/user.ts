@@ -19,8 +19,19 @@ export const userMiddleware: MiddlewareFunction = async ({
     userId
   });
 
-  // Read pin-in state from cookies (console mode comes from auth session)
-  const pinIn = consoleMode ? getConsolePinIn(request, companyId) : null;
+  // Read pin-in state from a signed cookie; console mode comes from auth session.
+  const cookiePinIn = consoleMode ? getConsolePinIn(request, companyId) : null;
+  const employee =
+    cookiePinIn !== null
+      ? await client
+          .from("employee")
+          .select("id")
+          .eq("id", cookiePinIn.userId)
+          .eq("companyId", companyId)
+          .eq("active", true)
+          .maybeSingle()
+      : null;
+  const pinIn = employee?.data ? cookiePinIn : null;
 
   context.set(userContext, {
     locationId: location,

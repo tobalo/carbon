@@ -1,10 +1,4 @@
-import { useCarbon } from "@carbon/auth";
-import {
-  toast,
-  useDisclosure,
-  useInterval,
-  useRealtimeChannel
-} from "@carbon/react";
+import { useDisclosure, useInterval } from "@carbon/react";
 import type { TrackedEntityAttributes } from "@carbon/utils";
 import {
   getLocalTimeZone,
@@ -12,8 +6,7 @@ import {
   parseAbsolute,
   toZoned
 } from "@internationalized/date";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRevalidator } from "react-router";
 import { useUrlParams, useUser } from "~/hooks";
 import type {
@@ -24,7 +17,6 @@ import type {
   ProductionEvent,
   TrackedEntity
 } from "~/services/types";
-import { path } from "~/utils/path";
 
 export function useOperation({
   operation,
@@ -44,14 +36,9 @@ export function useOperation({
 }) {
   const [params] = useUrlParams();
   const trackedEntityParam = params.get("trackedEntityId");
-  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const { carbon, accessToken } = useCarbon();
   const user = useUser();
 
   const revalidator = useRevalidator();
-  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const channelRef = useRef<RealtimeChannel | null>(null);
-
   const scrapModal = useDisclosure();
   const reworkModal = useDisclosure();
   const completeModal = useDisclosure();
@@ -96,91 +83,12 @@ export function useOperation({
     setOperationState(operation);
   }, [operation]);
 
-  useRealtimeChannel({
-    topic: `job-operations:${operation.id}`,
-    dependencies: [operation.jobId],
-    setup(channel) {
-      return channel
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "job",
-            filter: `id=eq.${operation.jobId}`
-          },
-          (payload) => {
-            if (payload.eventType === "UPDATE") {
-              revalidator.revalidate();
-            }
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "productionEvent",
-            filter: `jobOperationId=eq.${operation.id}`
-          },
-          (payload) => {
-            switch (payload.eventType) {
-              case "INSERT":
-                const { new: inserted } = payload;
-                setEventState((prevEvents) => [
-                  ...prevEvents,
-                  inserted as ProductionEvent
-                ]);
-                break;
-              case "UPDATE":
-                const { new: updated } = payload;
-
-                setEventState((prevEvents) =>
-                  prevEvents.map((event) =>
-                    event.id === updated.id
-                      ? ({
-                          ...event,
-                          ...updated
-                        } as ProductionEvent)
-                      : event
-                  )
-                );
-                break;
-              case "DELETE":
-                const { old: deleted } = payload;
-                setEventState((prevEvents) =>
-                  prevEvents.filter((event) => event.id !== deleted.id)
-                );
-                break;
-              default:
-                break;
-            }
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "jobOperation",
-            filter: `id=eq.${operation.id}`
-          },
-          (payload) => {
-            if (payload.eventType === "UPDATE") {
-              const updated = payload.new;
-              setOperationState((prev) => ({
-                ...prev,
-                ...updated,
-                operationStatus: updated.status ?? prev.operationStatus
-              }));
-            } else if (payload.eventType === "DELETE") {
-              toast.error("This operation has been deleted");
-              window.location.href = path.to.operations;
-            }
-          }
-        );
-    }
-  });
+  useInterval(
+    () => {
+      revalidator.revalidate();
+    },
+    isAnyModalOpen ? null : 15_000
+  );
 
   const getProgress = useCallback(() => {
     const timeNow = now(getLocalTimeZone());

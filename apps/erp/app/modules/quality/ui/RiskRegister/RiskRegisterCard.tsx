@@ -60,7 +60,7 @@ export default function RiskRegisterCard({
     setLoading(true);
     const { data, error } = await carbon
       .from("riskRegister")
-      .select("*, assignee:assignee(id, firstName, lastName, avatarUrl)")
+      .select("*")
       .eq("companyId", company.id)
       .eq("source", source)
       .eq("sourceId", sourceId)
@@ -144,7 +144,6 @@ export default function RiskRegisterCard({
             formDisclosure.onClose();
             fetchRisks();
           }}
-          // @ts-expect-error TS2322 - TODO: fix type
           initialValues={
             selectedRisk
               ? {
@@ -190,7 +189,6 @@ export default function RiskRegisterCard({
           }}
           title={t`Delete Risk`}
           text={t`Are you sure you want to delete this risk?`}
-          // @ts-expect-error TS2345 - TODO: fix type
           action={path.to.deleteRisk(selectedRisk.id)}
         />
       )}
@@ -254,7 +252,6 @@ function RiskRegisterCardItem({
         <div>
           <Assignee
             table="riskRegister"
-            // @ts-expect-error TS2322 - TODO: fix type
             id={risk.id}
             size="sm"
             value={risk.assignee ?? undefined}

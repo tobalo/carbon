@@ -1,7 +1,10 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  nonConformanceTaskStatusEnum
+} from "@carbon/database/schema";
 import type { JiraStatusCategory } from "./types";
 
-type CarbonTaskStatus = Database["public"]["Enums"]["nonConformanceTaskStatus"];
+type CarbonTaskStatus = EnumValue<typeof nonConformanceTaskStatusEnum>;
 
 /**
  * Maps Jira status category to Carbon task status.

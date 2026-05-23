@@ -1,9 +1,9 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { sanitize } from "~/utils/supabase";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
+import { sanitize } from "@carbon/utils";
 
 export async function deleteUserAttributeValue(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     userId: string;
     userAttributeId: string;
@@ -18,12 +18,12 @@ export async function deleteUserAttributeValue(
     .eq("userId", args.userId);
 }
 
-export async function getAccount(client: SupabaseClient<Database>, id: string) {
+export async function getAccount(client: CarbonDatabaseClient<QueryDatabase>, id: string) {
   return client.from("user").select("*").eq("id", id).single();
 }
 
 export async function getAttributes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string,
   isPublic: boolean
@@ -48,7 +48,7 @@ export async function getAttributes(
 }
 
 export async function getPrivateAttributes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -56,7 +56,7 @@ export async function getPrivateAttributes(
 }
 
 export async function getPublicAttributes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -64,7 +64,7 @@ export async function getPublicAttributes(
 }
 
 export async function getAllAttributeCategories(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -87,7 +87,7 @@ export async function getAllAttributeCategories(
 }
 
 export async function getAttributeCategoryWithValues(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   categoryId: string,
   userId: string,
   companyId: string
@@ -113,7 +113,7 @@ export async function getAttributeCategoryWithValues(
 }
 
 export async function updateAvatar(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   avatarUrl: string | null
 ) {
@@ -128,7 +128,7 @@ export async function updateAvatar(
 }
 
 export async function updatePublicAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   account: {
     id: string;
     firstName: string;
@@ -141,7 +141,7 @@ export async function updatePublicAccount(
 }
 
 export async function upsertUserAttributeValue(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   update: {
     userAttributeValueId?: string | undefined;
     userAttributeId: string;

@@ -35,7 +35,7 @@ import {
   useLoaderData,
   useNavigate
 } from "react-router";
-import { RealtimeDataProvider } from "~/components";
+import { PollingDataProvider } from "~/components";
 import { PrimaryNavigation, Topbar } from "~/components/Layout";
 import { TimeCardWarning } from "~/components/TimeCardWarning";
 import TrainingPanel from "~/components/TrainingPanel";
@@ -96,7 +96,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   //   proxyRegion,
   // });
 
-  const client = getCarbon(accessToken);
+  const client = getCarbon(accessToken, userId);
 
   // Parallelize all requests
   const [
@@ -219,7 +219,7 @@ export default function AuthenticatedRoute() {
         />
       ) : (
         <CarbonProvider session={session}>
-          <RealtimeDataProvider>
+          <PollingDataProvider>
             <TooltipProvider>
               <div className="flex flex-col h-screen">
                 <Topbar />
@@ -254,7 +254,7 @@ export default function AuthenticatedRoute() {
                 </Suspense>
               )}
             </TooltipProvider>
-          </RealtimeDataProvider>
+          </PollingDataProvider>
         </CarbonProvider>
       )}
     </div>

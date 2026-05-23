@@ -1,4 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from "./env";
+import { Pool } from "pg";
+import { CARBON_CONTROL_DATABASE_URL } from "./env";
 
-export const client = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const pool = new Pool({
+  connectionString: CARBON_CONTROL_DATABASE_URL
+});
+
+export async function fetchWorkspaces<T>(columns = "*") {
+  const result = await pool.query<T>(
+    `select ${columns} from workspaces order by id`
+  );
+  return result.rows;
+}
+
+export async function markWorkspaceSeeded(id: number) {
+  await pool.query("update workspaces set seeded = true where id = $1", [id]);
+}

@@ -1,13 +1,9 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
-import {
-  recalculateJobOperationDependencies,
-  updateJobOperationOrder
-} from "~/modules/production";
+import { recalculateJobOperationDependencies } from "~/modules/production";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
@@ -41,7 +37,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
     })
   );
 
-  const updateSortOrders = await updateJobOperationOrder(client, updates);
+  const updateSortOrders = await Promise.all(
+    updates.map(({ id, order, updatedBy }) =>
+      client
+        .from("jobOperation")
+        .update({ order, updatedBy })
+        .eq("id", id)
+        .eq("jobId", jobId)
+        .eq("companyId", companyId)
+    )
+  );
   if (updateSortOrders.some((update) => update.error))
     return data(
       {},
@@ -53,7 +58,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (jobId) {
     const recalculateDependencies = await recalculateJobOperationDependencies(
-      getCarbonServiceRole(),
+      client,
       {
         jobId: jobId,
         companyId: companyId,

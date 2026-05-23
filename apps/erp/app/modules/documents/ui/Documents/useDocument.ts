@@ -18,10 +18,11 @@ export const useDocument = () => {
 
   const canDelete = useCallback(
     (doc: DocumentType) => {
+      const writeGroups = new Set([user?.id, ...(user?.groups ?? [])]);
       return (
         !permissions.can("delete", "documents") ||
         // @ts-ignore
-        !doc.writeGroups?.some((group) => user?.groups.includes(group))
+        !doc.writeGroups?.some((group) => writeGroups.has(group))
       );
     },
     [permissions, user]
@@ -29,10 +30,11 @@ export const useDocument = () => {
 
   const canUpdate = useCallback(
     (document: DocumentType) => {
+      const writeGroups = new Set([user?.id, ...(user?.groups ?? [])]);
       return (
         !permissions.can("update", "documents") ||
         // @ts-ignore
-        !document.writeGroups?.some((group) => user?.groups.includes(group))
+        !document.writeGroups?.some((group) => writeGroups.has(group))
       );
     },
     [permissions, user]
@@ -161,16 +163,16 @@ export const useDocument = () => {
   const makePreview = useCallback(
     async (doc: DocumentType) => {
       if (!doc.path) throw new Error("Document path is undefined");
-      const result = await carbon?.storage.from("private").download(doc.path);
+      const response = await fetch(path.to.file.previewFile(`private/${doc.path}`));
 
-      if (!result || result.error) {
-        toast.error(result?.error?.message || "Error previewing file");
+      if (!response.ok) {
+        toast.error("Error previewing file");
         return null;
       }
 
-      return window.URL.createObjectURL(result.data);
+      return window.URL.createObjectURL(await response.blob());
     },
-    [carbon]
+    []
   );
 
   const removeLabel = useCallback(

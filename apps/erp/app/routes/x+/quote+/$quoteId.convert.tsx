@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validator } from "@carbon/form";
 import { parseAcceptLanguage } from "intl-parse-accept-language";
@@ -8,6 +7,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import {
   convertQuoteToOrder,
+  getQuote,
   getSalesOrder,
   salesConfirmValidator,
   selectedLinesValidator
@@ -19,12 +19,10 @@ import {
 import { loader as pdfLoader } from "~/routes/file+/sales-order+/$id[.]pdf";
 import { path } from "~/utils/path";
 
-// the edge function grows larger than 2MB - so this is a workaround to avoid the edge function limit
-
 export async function action(args: ActionFunctionArgs) {
   const { request, params } = args;
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "sales"
   });
 
@@ -65,8 +63,19 @@ export async function action(args: ActionFunctionArgs) {
   const customerContact = notificationValidation.data?.customerContact;
   const cc = notificationValidation.data?.cc;
 
-  const serviceRole = getCarbonServiceRole();
-  const convert = await convertQuoteToOrder(serviceRole, {
+  const quote = await getQuote(client, quoteId);
+  if (quote.error) {
+    throw redirect(
+      path.to.quoteDetails(quoteId),
+      await flash(request, error(quote.error, "Failed to load quote"))
+    );
+  }
+
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.quotes);
+  }
+
+  const convert = await convertQuoteToOrder(client, {
     id: quoteId,
     purchaseOrderNumber: poNumber ?? "",
     companyId,
@@ -89,7 +98,7 @@ export async function action(args: ActionFunctionArgs) {
   // Generate PDF and optionally send email — failures here should not block
   // the redirect to the new sales order.
   try {
-    const salesOrder = await getSalesOrder(serviceRole, salesOrderId);
+    const salesOrder = await getSalesOrder(client, salesOrderId);
     if (salesOrder.data?.salesOrderId && salesOrder.data?.opportunityId) {
       const { fileName, documentFilePath } =
         await generateAndAttachSalesOrderPdf({
@@ -99,7 +108,7 @@ export async function action(args: ActionFunctionArgs) {
           opportunityId: salesOrder.data.opportunityId,
           companyId,
           userId,
-          serviceRole,
+          client,
           pdfLoader
         });
 
@@ -117,7 +126,7 @@ export async function action(args: ActionFunctionArgs) {
           cc,
           documentFilePath,
           fileName,
-          serviceRole,
+          client,
           locales
         });
       }

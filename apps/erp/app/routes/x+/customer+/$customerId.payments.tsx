@@ -1,5 +1,8 @@
-import { assertIsPost, error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import { assertIsPost, badRequest, error, success } from "@carbon/auth";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -13,12 +16,14 @@ import { CustomerPaymentForm } from "~/modules/sales/ui/Customer";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "sales"
   });
+  const { client } = auth;
 
   const { customerId } = params;
   if (!customerId) throw new Error("Could not find customerId");
+  assertCustomerAccountScope(auth, customerId);
 
   const customerPayment = await getCustomerPayment(client, customerId);
 
@@ -39,12 +44,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "sales"
   });
+  const { client, userId } = auth;
 
   const { customerId } = params;
   if (!customerId) throw new Error("Could not find customerId");
+  assertCustomerAccountScope(auth, customerId);
 
   // validate with salesValidator
   const validation = await validator(customerPaymentValidator).validate(
@@ -53,6 +60,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (validation.error) {
     return validationError(validation.error);
+  }
+  if (validation.data.customerId !== customerId) {
+    throw badRequest("customerId does not match route parameter");
   }
 
   const update = await updateCustomerPayment(client, {

@@ -1,9 +1,9 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { msg } from "@lingui/core/macro";
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import type { ReceiptSourceDocument } from "~/modules/inventory";
 import { getUserDefaults } from "~/modules/users/users.server";
@@ -26,11 +26,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const sourceDocumentId = (formData.get("sourceDocumentId") as string) ?? "";
 
   const defaults = await getUserDefaults(client, userId, companyId);
-  const serviceRole = getCarbonServiceRole();
 
   switch (sourceDocument) {
     case "Purchase Order":
-      const purchaseOrderReceipt = await serviceRole.functions.invoke<{
+      const purchaseOrderReceipt = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -40,7 +39,7 @@ export async function action({ request }: ActionFunctionArgs) {
           purchaseOrderId: sourceDocumentId,
           receiptId: undefined,
           userId: userId
-        }
+        },
       });
       if (!purchaseOrderReceipt.data || purchaseOrderReceipt.error) {
         throw redirect(
@@ -54,7 +53,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       throw redirect(path.to.receiptDetails(purchaseOrderReceipt.data.id));
     case "Inbound Transfer":
-      const warehouseTransferReceipt = await serviceRole.functions.invoke<{
+      const warehouseTransferReceipt = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -63,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
           warehouseTransferId: sourceDocumentId,
           receiptId: undefined,
           userId: userId
-        }
+        },
       });
       if (!warehouseTransferReceipt.data || warehouseTransferReceipt.error) {
         throw redirect(
@@ -77,7 +76,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       throw redirect(path.to.receiptDetails(warehouseTransferReceipt.data.id));
     default:
-      const defaultReceipt = await serviceRole.functions.invoke<{
+      const defaultReceipt = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -85,7 +84,7 @@ export async function action({ request }: ActionFunctionArgs) {
           companyId,
           locationId: defaults.data?.locationId,
           userId: userId
-        }
+        },
       });
 
       if (!defaultReceipt.data || defaultReceipt.error) {

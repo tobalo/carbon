@@ -1,11 +1,13 @@
-import { SUPABASE_URL } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { invokeFunction } from "@carbon/auth/functions.server";
+import { getPublicStorageUrl } from "@carbon/auth";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
+import { nanoid } from "nanoid";
 import type { z } from "zod";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
 import { interpolateSequenceDate } from "~/utils/string";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import type {
   accountsPayableBillingAddressValidator,
   accountsReceivableBillingAddressValidator,
@@ -18,10 +20,8 @@ import type {
   webhookValidator
 } from "./settings.models";
 
-const PUBLIC_STORAGE_URL_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/public/`;
-
 export async function getAccountsPayableBillingAddress(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -32,7 +32,7 @@ export async function getAccountsPayableBillingAddress(
 }
 
 export async function getAccountsReceivableBillingAddress(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -43,7 +43,7 @@ export async function getAccountsReceivableBillingAddress(
 }
 
 export async function updateAccountsPayableBillingAddress(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   data: z.infer<typeof accountsPayableBillingAddressValidator>,
   updatedBy: string
@@ -55,7 +55,7 @@ export async function updateAccountsPayableBillingAddress(
 }
 
 export async function updateAccountsReceivableBillingAddress(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   data: z.infer<typeof accountsReceivableBillingAddressValidator>,
   updatedBy: string
@@ -67,7 +67,7 @@ export async function updateAccountsReceivableBillingAddress(
 }
 
 export async function deactivateWebhooks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -77,28 +77,29 @@ export async function deactivateWebhooks(
 }
 
 export async function deleteApiKey(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId: string
 ) {
-  return client.from("apiKey").delete().eq("id", id);
+  return client.from("apiKey").delete().eq("id", id).eq("companyId", companyId);
 }
 
 export async function deleteSubsidiary(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.from("company").delete().eq("id", companyId);
 }
 
 export async function deleteWebhook(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("webhook").delete().eq("id", id);
 }
 
 export async function getApiKeys(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -121,12 +122,12 @@ export async function getApiKeys(
 }
 
 export async function getCompanies(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string
 ) {
   const companies = await client
     .from("companies")
-    .select("*, companyGroup(name)")
+    .select("*")
     .eq("userId", userId)
     .order("name");
 
@@ -135,23 +136,19 @@ export async function getCompanies(
   }
 
   return {
-    data: companies.data.map(({ companyGroup, ...company }) => ({
+    data: companies.data.map((company) => ({
       ...company,
-      companyGroupName: (companyGroup as { name: string } | null)?.name ?? null,
-      logoLight: company.logoLight
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.logoLight}`
-        : null,
-      logoDark: company.logoDark
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.logoDark}`
-        : null,
       logoLightIcon: company.logoLightIcon
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.logoLightIcon}`
+        ? getPublicStorageUrl(company.logoLightIcon)
         : null,
       logoDarkIcon: company.logoDarkIcon
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.logoDarkIcon}`
+        ? getPublicStorageUrl(company.logoDarkIcon)
         : null,
-      logoWatermark: company.logoWatermark
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.logoWatermark}`
+      logoDark: company.logoDark
+        ? getPublicStorageUrl(company.logoDark)
+        : null,
+      logoLight: company.logoLight
+        ? getPublicStorageUrl(company.logoLight)
         : null
     })),
     error: null
@@ -159,7 +156,7 @@ export async function getCompanies(
 }
 
 export async function getCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   const company = await client
@@ -174,20 +171,17 @@ export async function getCompany(
   return {
     data: {
       ...company.data,
-      logoLight: company.data.logoLight
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.data.logoLight}`
-        : null,
-      logoDark: company.data.logoDark
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.data.logoDark}`
-        : null,
       logoLightIcon: company.data.logoLightIcon
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.data.logoLightIcon}`
+        ? getPublicStorageUrl(company.data.logoLightIcon)
         : null,
       logoDarkIcon: company.data.logoDarkIcon
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.data.logoDarkIcon}`
+        ? getPublicStorageUrl(company.data.logoDarkIcon)
         : null,
-      logoWatermark: company.data.logoWatermark
-        ? `${PUBLIC_STORAGE_URL_PREFIX}${company.data.logoWatermark}`
+      logoDark: company.data.logoDark
+        ? getPublicStorageUrl(company.data.logoDark)
+        : null,
+      logoLight: company.data.logoLight
+        ? getPublicStorageUrl(company.data.logoLight)
         : null
     },
     error: null
@@ -195,7 +189,7 @@ export async function getCompany(
 }
 
 export async function getCompanyIntegrations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -205,14 +199,14 @@ export async function getCompanyIntegrations(
 }
 
 export async function getCompanyPlan(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   companyId: string
 ) {
   return client.from("companyPlan").select("*").eq("id", companyId).single();
 }
 
 export async function getCompanySettings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -222,12 +216,12 @@ export async function getCompanySettings(
     .single();
 }
 
-export async function getConfig(client: SupabaseClient<Database>) {
+export async function getConfig(client: CarbonDatabaseClient<QueryDatabase>) {
   return client.from("config").select("*").single();
 }
 
 export async function getCurrentSequence(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   table: string,
   companyId: string
 ) {
@@ -249,14 +243,14 @@ export async function getCurrentSequence(
 }
 
 export async function getCustomField(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("customField").select("*").eq("id", id).single();
 }
 
 export async function getCustomFields(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   table: string,
   companyId: string
 ) {
@@ -269,7 +263,7 @@ export async function getCustomFields(
 }
 
 export async function getCustomFieldsTables(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -293,7 +287,7 @@ export async function getCustomFieldsTables(
 }
 
 export async function getIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -306,14 +300,14 @@ export async function getIntegration(
 }
 
 export async function getIntegrations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.from("integrations").select("*").eq("companyId", companyId);
 }
 
 export async function getKanbanOutputSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -324,7 +318,7 @@ export async function getKanbanOutputSetting(
 }
 
 export async function getNextSequence(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   table: string,
   companyId: string
 ) {
@@ -334,16 +328,16 @@ export async function getNextSequence(
   });
 }
 
-export async function getPlanById(client: SupabaseClient, planId: string) {
+export async function getPlanById(client: CarbonDatabaseClient, planId: string) {
   return client.from("plan").select("*").eq("id", planId).single();
 }
 
-export async function getPlans(client: SupabaseClient) {
+export async function getPlans(client: CarbonDatabaseClient) {
   return client.from("plan").select("*");
 }
 
 export async function getSequence(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   table: string,
   companyId: string
 ) {
@@ -356,7 +350,7 @@ export async function getSequence(
 }
 
 export async function getSequences(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -380,7 +374,7 @@ export async function getSequences(
 }
 
 export async function getSequencesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   table: string,
   companyId: string
 ) {
@@ -393,7 +387,7 @@ export async function getSequencesList(
 }
 
 export async function getSubsidiaries(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string
 ) {
   return client
@@ -406,25 +400,25 @@ export async function getSubsidiaries(
 }
 
 export async function getSubsidiary(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.from("company").select("*").eq("id", companyId).single();
 }
 
 export async function getTerms(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.from("terms").select("*").eq("id", companyId).single();
 }
 
-export async function getWebhook(client: SupabaseClient<Database>, id: string) {
+export async function getWebhook(client: CarbonDatabaseClient<QueryDatabase>, id: string) {
   return client.from("webhook").select("*").eq("id", id).single();
 }
 
 export async function getWebhooks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -448,36 +442,57 @@ export async function getWebhooks(
   return query;
 }
 
-export async function getWebhookTables(client: SupabaseClient<Database>) {
+export async function getWebhookTables(client: CarbonDatabaseClient<QueryDatabase>) {
   return client.from("webhookTable").select("*").order("name");
 }
 
 export async function insertCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   company: z.infer<typeof companyValidator>,
   companyGroupId?: string
 ) {
   return client
     .from("company")
-    .insert({ ...company, companyGroupId })
+    .insert({
+      id: nanoid(),
+      active: true,
+      auditLogEnabled: false,
+      createdAt: new Date().toISOString(),
+      isEliminationEntity: false,
+      suggestionNotificationGroup: [],
+      ...company,
+      companyGroupId
+    })
     .select("id")
     .single();
 }
 
 export async function insertSubsidiary(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   subsidiary: z.infer<typeof subsidiaryValidator> & {
     companyGroupId: string;
     createdBy: string;
     isEliminationEntity?: boolean;
   }
 ) {
-  const { id: _, ...data } = subsidiary;
-  return client.from("company").insert(data).select("id").single();
+  const { id, createdBy: _, ...data } = subsidiary;
+  return client
+    .from("company")
+    .insert({
+      id: id || nanoid(),
+      active: true,
+      auditLogEnabled: false,
+      createdAt: new Date().toISOString(),
+      isEliminationEntity: false,
+      suggestionNotificationGroup: [],
+      ...data
+    })
+    .select("id")
+    .single();
 }
 
 export async function updateSubsidiary(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   subsidiary: Partial<z.infer<typeof subsidiaryValidator>> & {
     updatedBy: string;
@@ -488,12 +503,12 @@ export async function updateSubsidiary(
 }
 
 export async function seedCompany(
-  client: SupabaseClient<Database>,
+  _client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   userId: string,
   parentCompanyId?: string
 ) {
-  return client.functions.invoke("seed-company", {
+  return invokeFunction("seed-company", {
     body: {
       companyId,
       userId,
@@ -503,7 +518,7 @@ export async function seedCompany(
 }
 
 export async function updateCompanyPlan(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   data: {
     companyId: string;
     stripeCustomerId: string;
@@ -519,18 +534,18 @@ export async function updateCompanyPlan(
 }
 
 export async function updateDefaultCustomerCc(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   defaultCustomerCc: string[]
 ) {
   return client
     .from("companySettings")
-    .update({ defaultCustomerCc })
-    .eq("companyId", companyId);
+    .update(sanitize({ defaultCustomerCc }))
+    .eq("id", companyId);
 }
 
 export async function updateCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   company: Partial<z.infer<typeof companyValidator>> & {
     updatedBy: string;
@@ -540,7 +555,7 @@ export async function updateCompany(
 }
 
 export async function updateShelfLifeSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   settings: {
     /** undefined disables expiry badges company-wide. */
@@ -567,7 +582,7 @@ export async function updateShelfLifeSettings(
 }
 
 export async function updateDigitalQuoteSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   digitalQuoteEnabled: boolean,
   digitalQuoteNotificationGroup: string[],
@@ -586,7 +601,7 @@ export async function updateDigitalQuoteSetting(
 }
 
 export async function updateIntegrationMetadata(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   integrationId: string,
   metadata: any,
@@ -606,7 +621,7 @@ export async function updateIntegrationMetadata(
 }
 
 export async function updateJobTravelerWorkInstructions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   jobTravelerIncludeWorkInstructions: boolean
 ) {
@@ -617,7 +632,7 @@ export async function updateJobTravelerWorkInstructions(
 }
 
 export async function updateAccountingEnabledSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   accountingEnabled: boolean
 ) {
@@ -628,7 +643,7 @@ export async function updateAccountingEnabledSetting(
 }
 
 export async function updateTimeCardSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   timeCardEnabled: boolean
 ) {
@@ -639,7 +654,7 @@ export async function updateTimeCardSetting(
 }
 
 export async function updateKanbanOutputSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   kanbanOutput: (typeof kanbanOutputTypes)[number]
 ) {
@@ -650,7 +665,7 @@ export async function updateKanbanOutputSetting(
 }
 
 export async function updateLogoDark(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   logoDark: string | null
 ) {
@@ -665,7 +680,7 @@ export async function updateLogoDark(
 }
 
 export async function updateLogoDarkIcon(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   logoDarkIcon: string | null
 ) {
@@ -676,7 +691,7 @@ export async function updateLogoDarkIcon(
 }
 
 export async function updateLogoLight(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   logoLight: string | null
 ) {
@@ -687,7 +702,7 @@ export async function updateLogoLight(
 }
 
 export async function updateLogoLightIcon(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   logoLightIcon: string | null
 ) {
@@ -698,7 +713,7 @@ export async function updateLogoLightIcon(
 }
 
 export async function updateLogoWatermark(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   logoWatermark: string | null
 ) {
@@ -709,7 +724,7 @@ export async function updateLogoWatermark(
 }
 
 export async function updateMaintenanceDispatchNotificationSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   settings: {
     maintenanceDispatchNotificationGroup?: string[];
@@ -725,7 +740,7 @@ export async function updateMaintenanceDispatchNotificationSettings(
 }
 
 export async function updateMaterialGeneratedIdsSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   materialGeneratedIds: boolean
 ) {
@@ -736,7 +751,7 @@ export async function updateMaterialGeneratedIdsSetting(
 }
 
 export async function updateMetricSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   useMetric: boolean
 ) {
@@ -747,7 +762,7 @@ export async function updateMetricSettings(
 }
 
 export async function updateProductLabelSize(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   productLabelSize: string
 ) {
@@ -758,7 +773,7 @@ export async function updateProductLabelSize(
 }
 
 export async function updatePurchasePriceUpdateTimingSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   purchasePriceUpdateTiming: (typeof purchasePriceUpdateTimingTypes)[number]
 ) {
@@ -769,7 +784,7 @@ export async function updatePurchasePriceUpdateTimingSetting(
 }
 
 export async function updateLeadTimesOnReceiptSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   updateLeadTimesOnReceipt: boolean
 ) {
@@ -779,7 +794,7 @@ export async function updateLeadTimesOnReceiptSetting(
 }
 
 export async function updateAccountsPayableAddressSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   accountsPayableAddress: boolean
 ) {
@@ -790,7 +805,7 @@ export async function updateAccountsPayableAddressSetting(
 }
 
 export async function updateAccountsReceivableAddressSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   accountsReceivableAddress: boolean
 ) {
@@ -801,7 +816,7 @@ export async function updateAccountsReceivableAddressSetting(
 }
 
 export async function updateAccountsPayableEmail(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   accountsPayableEmail: string | undefined
 ) {
@@ -812,7 +827,7 @@ export async function updateAccountsPayableEmail(
 }
 
 export async function updateAccountsReceivableEmail(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   accountsReceivableEmail: string | undefined
 ) {
@@ -825,7 +840,7 @@ export async function updateAccountsReceivableEmail(
 }
 
 export async function updateQuoteLineCategoryMarkups(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   quoteLineCategoryMarkups: Record<string, number>
 ) {
@@ -836,7 +851,7 @@ export async function updateQuoteLineCategoryMarkups(
 }
 
 export async function updatePurchasingPdfThumbnails(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   includeThumbnailsOnPurchasingPdfs: boolean
 ) {
@@ -847,7 +862,7 @@ export async function updatePurchasingPdfThumbnails(
 }
 
 export async function updateRfqReadySetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   rfqReadyNotificationGroup: string[]
 ) {
@@ -858,7 +873,7 @@ export async function updateRfqReadySetting(
 }
 
 export async function updateSalesPdfThumbnails(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   includeThumbnailsOnSalesPdfs: boolean
 ) {
@@ -869,7 +884,7 @@ export async function updateSalesPdfThumbnails(
 }
 
 export async function updateSequence(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   table: string,
   companyId: string,
   sequence: Partial<z.infer<typeof sequenceValidator>> & {
@@ -884,7 +899,7 @@ export async function updateSequence(
 }
 
 export async function updateSuggestionNotificationSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   suggestionNotificationGroup: string[]
 ) {
@@ -895,7 +910,7 @@ export async function updateSuggestionNotificationSetting(
 }
 
 export async function updateSupplierQuoteNotificationSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   supplierQuoteNotificationGroup: string[]
 ) {
@@ -906,7 +921,7 @@ export async function updateSupplierQuoteNotificationSetting(
 }
 
 export async function upsertApiKey(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   apiKey:
     | (Omit<z.infer<typeof apiKeyValidator>, "id" | "scopes" | "expiresAt"> & {
         createdBy: string;
@@ -919,6 +934,7 @@ export async function upsertApiKey(
       })
     | (Omit<z.infer<typeof apiKeyValidator>, "id" | "scopes" | "expiresAt"> & {
         id: string;
+        companyId: string;
         scopes: Record<string, string[]>;
         expiresAt?: string;
       })
@@ -964,6 +980,7 @@ export async function upsertApiKey(
     expiresAt,
     rateLimit: _rl,
     rateLimitWindow: _rlw,
+    companyId,
     ...rest
   } = apiKey as any;
   return client
@@ -975,11 +992,12 @@ export async function upsertApiKey(
         expiresAt: expiresAt || null
       }) as any
     )
-    .eq("id", apiKey.id);
+    .eq("id", apiKey.id)
+    .eq("companyId", companyId);
 }
 
 export async function updateConsoleSetting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   consoleEnabled: boolean,
   userId?: string
@@ -1096,7 +1114,7 @@ export async function updateConsoleSetting(
 }
 
 export async function updateDefaultSupplierCc(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   defaultSupplierCc: string[]
 ) {
@@ -1107,7 +1125,7 @@ export async function updateDefaultSupplierCc(
 }
 
 export async function upsertWebhook(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   webhook:
     | (Omit<z.infer<typeof webhookValidator>, "id"> & {
         createdBy: string;

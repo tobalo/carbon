@@ -96,11 +96,11 @@ export default function UpdateCustomFieldRoute() {
       initialValues={{
         id: customField.id,
         name: customField.name,
-        // @ts-expect-error
         dataTypeId: (customField.dataTypeId || DataType.Text).toString(),
         table: table,
         listOptions: customField.listOptions ?? [],
-        tags: customField.tags ?? []
+        tags: customField.tags ?? [],
+        required: customField.required ?? false
       }}
       dataTypes={routeData?.dataTypes ?? []}
       onClose={onClose}

@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { InputControlled, Select, ValidatedForm } from "@carbon/form";
 import {
   Badge,
@@ -11,7 +11,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense, useCallback, useEffect } from "react";
 import {
   LuCopy,
@@ -66,7 +66,7 @@ const PartProperties = () => {
     files: Promise<ItemFile[]>;
     supplierParts: SupplierPart[];
     pickMethods: PickMethod[];
-    makeMethods: Promise<PostgrestResponse<MakeMethod>>;
+    makeMethods: Promise<QueryResponse<MakeMethod>>;
     tags: { name: string }[];
   }>(path.to.part(itemId));
 
@@ -108,7 +108,7 @@ const PartProperties = () => {
       const formData = new FormData();
 
       formData.append("items", itemId);
-      formData.append("field", field);
+      formData.append("field", String(field));
 
       formData.append("value", value?.toString() ?? "");
       fetcher.submit(formData, {

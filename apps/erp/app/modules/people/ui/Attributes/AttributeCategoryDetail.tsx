@@ -48,9 +48,8 @@ const AttributeCategoryDetail = ({
   const attributeMap: Record<string, Attribute> = useMemo(
     () =>
       Array.isArray(attributeCategory.userAttribute)
-        ? attributeCategory.userAttribute.reduce<Record<string, Attribute>>(
-            // @ts-ignore
-            (acc, attribute) => {
+        ? attributeCategory.userAttribute.reduce(
+            (acc: Record<string, Attribute>, attribute: any) => {
               if (!attribute) return acc;
               return {
                 ...acc,
@@ -66,8 +65,8 @@ const AttributeCategoryDetail = ({
   const [sortOrder, setSortOrder] = useState<string[]>(
     Array.isArray(attributeCategory.userAttribute)
       ? attributeCategory.userAttribute
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((attribute) => attribute.id)
+          .sort((a: any, b: any) => a.sortOrder - b.sortOrder)
+          .map((attribute: any) => attribute.id)
       : []
   );
 

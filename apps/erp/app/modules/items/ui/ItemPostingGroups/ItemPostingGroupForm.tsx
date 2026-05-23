@@ -13,7 +13,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -43,7 +43,7 @@ const ItemPostingGroupForm = ({
 }: ItemPostingGroupFormProps) => {
   const permissions = usePermissions();
   const { t } = useLingui();
-  const fetcher = useFetcher<PostgrestResponse<{ id: string; name: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string; name: string }>>();
 
   const isEditing = initialValues.id !== undefined;
   const isDisabled = isEditing

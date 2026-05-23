@@ -8,14 +8,14 @@
 
 ### Unlinking Jira Issues
 
-- `unlinkActionFromJiraIssue` in `packages/ee/src/jira/lib/service.ts` uses `getCarbonServiceRole()` (service role client) to delete from `externalIntegrationMapping` because the table has no DELETE RLS policy for authenticated users.
+- `unlinkActionFromJiraIssue` in `packages/ee/src/jira/lib/service.ts` uses `getCarbonServiceClient()` (service client) to delete from `externalIntegrationMapping` because the table has no DELETE RLS policy for authenticated users.
 - The DELETE handler in `apps/erp/app/routes/api+/integrations.jira.issue.link.ts` unlinks from Carbon's DB first, then does best-effort Jira remote link cleanup.
 - Remote link cleanup fetches actual links via `getRemoteLinks()` and finds the Carbon link by `application.name === "Carbon"` or `globalId.startsWith("carbon-")` rather than reconstructing the globalId from a URL.
 
 ### RLS on externalIntegrationMapping
 
 - The table only has SELECT and INSERT RLS policies (defined in migration `20260204001831`). No UPDATE or DELETE policies exist.
-- Any delete operations must use the service role client (`getCarbonServiceRole()`).
+- Any delete operations must use the service client (`getCarbonServiceClient()`).
 
 ### Modal Scroll
 

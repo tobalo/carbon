@@ -1,10 +1,10 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { groupBy } from "@carbon/utils";
 import { z } from "zod";
 import { inngest } from "../../client";
 
-// Type for the Supabase client with our custom RPC functions
-type SearchRpcClient = ReturnType<typeof getCarbonServiceRole> & {
+// Type for the Carbon database client with our custom RPC functions
+type SearchRpcClient = ReturnType<typeof getCarbonServiceClient> & {
   rpc(
     fn: "delete_from_search_index",
     params: { p_company_id: string; p_entity_type: string; p_entity_id: string }
@@ -34,7 +34,8 @@ type SearchEntityConfig = {
   getMetadata: (record: Record<string, any>) => Record<string, any>;
   enrichRecord?: (
     record: Record<string, any>,
-    client: ReturnType<typeof getCarbonServiceRole>
+    client: ReturnType<typeof getCarbonServiceClient>,
+    companyId: string
   ) => Promise<Record<string, any>>;
 };
 
@@ -46,7 +47,7 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/person/${r.id}`,
     getTags: (r) => [r.employeeTypeName].filter(Boolean),
     getMetadata: (r) => ({ active: r.active }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: user } = await client
         .from("user")
         .select("fullName")
@@ -56,6 +57,7 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
         .from("employeeType")
         .select("name")
         .eq("id", record.employeeTypeId)
+        .eq("companyId", companyId)
         .single();
       return {
         ...record,
@@ -70,21 +72,24 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/customer/${r.id}`,
     getTags: (r) => [r.customerTypeName, r.customerStatusName].filter(Boolean),
     getMetadata: (r) => ({ taxId: r.taxId }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: custType } = await client
         .from("customerType")
         .select("name")
         .eq("id", record.customerTypeId)
+        .eq("companyId", companyId)
         .single();
       const { data: custStatus } = await client
         .from("customerStatus")
         .select("name")
         .eq("id", record.customerStatusId)
+        .eq("companyId", companyId)
         .single();
       const { data: tax } = await (client as any)
         .from("customerTax")
         .select("taxId")
         .eq("customerId", record.id)
+        .eq("companyId", companyId)
         .single();
       return {
         ...record,
@@ -100,16 +105,18 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/supplier/${r.id}`,
     getTags: (r) => [r.supplierTypeName, r.supplierStatus].filter(Boolean),
     getMetadata: (r) => ({ taxId: r.taxId }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: suppType } = await client
         .from("supplierType")
         .select("name")
         .eq("id", record.supplierTypeId)
+        .eq("companyId", companyId)
         .single();
       const { data: tax } = await (client as any)
         .from("supplierTax")
         .select("taxId")
         .eq("supplierId", record.id)
+        .eq("companyId", companyId)
         .single();
       return {
         ...record,
@@ -143,16 +150,18 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/job/${r.id}`,
     getTags: (r) => [r.status, r.deadlineType].filter(Boolean),
     getMetadata: (r) => ({ quantity: r.quantity, dueDate: r.dueDate }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: item } = await client
         .from("item")
         .select("name")
         .eq("id", record.itemId)
+        .eq("companyId", companyId)
         .single();
       const { data: customer } = await client
         .from("customer")
         .select("name")
         .eq("id", record.customerId)
+        .eq("companyId", companyId)
         .single();
       return {
         ...record,
@@ -171,11 +180,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
       orderDate: r.orderDate,
       supplierReference: r.supplierReference
     }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: supplier } = await client
         .from("supplier")
         .select("name")
         .eq("id", record.supplierId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, supplierName: supplier?.name };
     }
@@ -187,11 +197,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/sales-invoice/${r.id}`,
     getTags: (r) => [r.status].filter(Boolean),
     getMetadata: (r) => ({ totalAmount: r.totalAmount, dateDue: r.dateDue }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: customer } = await client
         .from("customer")
         .select("name")
         .eq("id", record.customerId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, customerName: customer?.name };
     }
@@ -203,11 +214,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/purchase-invoice/${r.id}`,
     getTags: (r) => [r.status].filter(Boolean),
     getMetadata: (r) => ({ totalAmount: r.totalAmount, dateDue: r.dateDue }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: supplier } = await client
         .from("supplier")
         .select("name")
         .eq("id", record.supplierId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, supplierName: supplier?.name };
     }
@@ -219,11 +231,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
     getLink: (r) => `/x/issue/${r.id}`,
     getTags: (r) => [r.status, r.priority, r.ncTypeName].filter(Boolean),
     getMetadata: (r) => ({ source: r.source, dueDate: r.dueDate }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: ncType } = await client
         .from("nonConformanceType")
         .select("name")
         .eq("id", record.nonConformanceTypeId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, ncTypeName: ncType?.name };
     }
@@ -241,11 +254,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
       nextCalibrationDate: r.nextCalibrationDate,
       serialNumber: r.serialNumber
     }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: gaugeType } = await client
         .from("gaugeType")
         .select("name")
         .eq("id", record.gaugeTypeId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, gaugeTypeName: gaugeType?.name };
     }
@@ -262,11 +276,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
       expirationDate: r.expirationDate,
       customerReference: r.customerReference
     }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: customer } = await client
         .from("customer")
         .select("name")
         .eq("id", record.customerId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, customerName: customer?.name };
     }
@@ -281,11 +296,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
       customerId: r.customerId,
       expirationDate: r.expirationDate
     }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: customer } = await client
         .from("customer")
         .select("name")
         .eq("id", record.customerId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, customerName: customer?.name };
     }
@@ -302,11 +318,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
       orderDate: r.orderDate,
       customerReference: r.customerReference
     }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: customer } = await client
         .from("customer")
         .select("name")
         .eq("id", record.customerId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, customerName: customer?.name };
     }
@@ -321,11 +338,12 @@ const SEARCH_ENTITY_CONFIGS: Record<string, SearchEntityConfig> = {
       supplierId: r.supplierId,
       expirationDate: r.expirationDate
     }),
-    enrichRecord: async (record, client) => {
+    enrichRecord: async (record, client, companyId) => {
       const { data: supplier } = await client
         .from("supplier")
         .select("name")
         .eq("id", record.supplierId)
+        .eq("companyId", companyId)
         .single();
       return { ...record, supplierName: supplier?.name };
     }
@@ -368,7 +386,7 @@ export const searchFunction = inngest.createFunction(
       failed: 0
     };
 
-    const client = getCarbonServiceRole() as unknown as SearchRpcClient;
+    const client = getCarbonServiceClient() as unknown as SearchRpcClient;
 
     type SearchRecord = (typeof payload.records)[number];
     const byCompany = groupBy(payload.records, (r) => r.companyId);
@@ -449,7 +467,7 @@ export const searchFunction = inngest.createFunction(
 
               // Enrich record with related data if needed
               if (config.enrichRecord) {
-                record = await config.enrichRecord(record, client);
+                record = await config.enrichRecord(record, client, companyId);
               }
 
               const title = config.getTitle(record);

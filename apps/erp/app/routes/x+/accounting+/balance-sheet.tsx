@@ -61,7 +61,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       periodEnd
     );
 
-    let balanceSheetAccounts = consolidated.data.filter(
+    let balanceSheetAccounts = (consolidated.data as any[]).filter(
       (a) => a.incomeBalance === "Balance Sheet"
     );
 
@@ -112,7 +112,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     selectedCompany.baseCurrencyCode !== parentCurrency;
 
   let balanceSheetAccounts = (balances.data ?? []).filter(
-    (a) => a.incomeBalance === "Balance Sheet"
+    (a: any) => a.incomeBalance === "Balance Sheet"
   ) as (Chart & { translatedBalance?: number; exchangeRate?: number })[];
 
   let cta = 0;

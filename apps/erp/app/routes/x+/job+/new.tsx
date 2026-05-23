@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
@@ -65,7 +64,6 @@ export async function action({ request }: ActionFunctionArgs) {
         )
       );
     }
-    // @ts-expect-error TS2322 - TODO: fix type
     jobId = nextSequenceResult.data;
   }
 
@@ -134,17 +132,13 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  const upsertMethod = await upsertJobMethod(
-    getCarbonServiceRole(),
-    "itemToJob",
-    {
-      sourceId: d.itemId,
-      targetId: id,
-      companyId,
-      userId,
-      configuration
-    }
-  );
+  const upsertMethod = await upsertJobMethod(client, "itemToJob", {
+    sourceId: d.itemId,
+    targetId: id,
+    companyId,
+    userId,
+    configuration
+  });
 
   if (upsertMethod.error) {
     throw redirect(

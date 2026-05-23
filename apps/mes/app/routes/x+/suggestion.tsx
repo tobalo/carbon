@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
@@ -7,7 +6,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { suggestionValidator } from "~/services/models";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { userId, companyId } = await requirePermissions(request, {});
+  const { client, userId, companyId } = await requirePermissions(request, {});
 
   const formData = await request.formData();
   const validation = await validator(suggestionValidator).validate(formData);
@@ -26,9 +25,8 @@ export async function action({ request }: ActionFunctionArgs) {
     path,
     userId: formUserId
   } = validation.data;
-  const serviceRole = await getCarbonServiceRole();
 
-  const insertSuggestion = await serviceRole
+  const insertSuggestion = await client
     .from("suggestion")
     .insert([
       {
@@ -50,7 +48,7 @@ export async function action({ request }: ActionFunctionArgs) {
     };
   }
 
-  const company = await serviceRole
+  const company = await client
     .from("company")
     .select("suggestionNotificationGroup")
     .eq("id", companyId)

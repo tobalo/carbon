@@ -52,31 +52,72 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     actionTaskIds.length > 0
       ? await client
           .from("jobOperationStep")
-          .select(
-            "id, name, nonConformanceActionId, operationId, jobOperationStepRecord(*)"
-          )
+          .select("id, name, nonConformanceActionId, operationId")
           .in("nonConformanceActionId", actionTaskIds)
+          .eq("companyId", companyId)
           .not("nonConformanceActionId", "is", null)
       : { data: [] };
 
+  const stepIds = jobOperationStepRecords.data?.map((step) => step.id) ?? [];
+  const stepRecordResults =
+    stepIds.length > 0
+      ? await client
+          .from("jobOperationStepRecord")
+          .select("*")
+          .in("jobOperationStepId", stepIds)
+          .eq("companyId", companyId)
+      : { data: [] };
+
+  const recordsByStepId = new Map<string, any[]>();
+  stepRecordResults.data?.forEach((record) => {
+    const records = recordsByStepId.get(record.jobOperationStepId) ?? [];
+    records.push(record);
+    recordsByStepId.set(record.jobOperationStepId, records);
+  });
+
+  const jobOperationStepsWithRecords = {
+    ...jobOperationStepRecords,
+    data: jobOperationStepRecords.data?.map((step) => ({
+      ...step,
+      jobOperationStepRecord: recordsByStepId.get(step.id) ?? []
+    }))
+  };
+
   // Get job IDs from job operations
   const operationIds =
-    jobOperationStepRecords.data
+    jobOperationStepsWithRecords.data
       ?.map((step: any) => step.operationId)
       .filter(Boolean) ?? [];
   const jobOperations =
     operationIds.length > 0
       ? await client
           .from("jobOperation")
-          .select("id, jobId, job(jobId)")
+          .select("id, jobId")
           .in("id", operationIds)
+          .eq("companyId", companyId)
       : { data: [] };
+
+  const jobIds = [
+    ...new Set(jobOperations.data?.map((operation) => operation.jobId) ?? [])
+  ];
+  const jobs =
+    jobIds.length > 0
+      ? await client
+          .from("job")
+          .select("id, jobId")
+          .in("id", jobIds)
+          .eq("companyId", companyId)
+      : { data: [] };
+  const jobsById = new Map(
+    jobs.data?.map((job) => [job.id, job.jobId] as const) ?? []
+  );
 
   // Create a map of operationId -> jobId
   const operationToJobId: Record<string, string> = {};
   jobOperations.data?.forEach((op: any) => {
-    if (op.job?.jobId) {
-      operationToJobId[op.id] = op.job.jobId;
+    const jobReadableId = jobsById.get(op.jobId);
+    if (jobReadableId) {
+      operationToJobId[op.id] = jobReadableId;
     }
   });
 
@@ -93,7 +134,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   });
 
   // Add createdBy users from job operation step records
-  jobOperationStepRecords.data?.forEach((step: any) => {
+  jobOperationStepsWithRecords.data?.forEach((step: any) => {
     step.jobOperationStepRecord?.forEach((record: any) => {
       if (record.createdBy) uniqueUsers.add(record.createdBy);
     });
@@ -169,7 +210,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       items={items.data ?? []}
       associations={associations}
       assignees={userNames}
-      jobOperationStepRecords={jobOperationStepRecords.data ?? []}
+      jobOperationStepRecords={jobOperationStepsWithRecords.data ?? []}
       operationToJobId={operationToJobId}
     />
   );

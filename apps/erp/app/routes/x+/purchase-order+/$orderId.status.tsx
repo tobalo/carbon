@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -32,14 +31,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   // First get current PO status with view permission
-  const { client: viewClient } = await requirePermissions(request, {
-    view: "purchasing"
-  });
+  const { client: viewClient, companyId: viewCompanyId } =
+    await requirePermissions(request, {
+      view: "purchasing"
+    });
 
   const currentPo = await viewClient
     .from("purchaseOrder")
     .select("status")
     .eq("id", id)
+    .eq("companyId", viewCompanyId)
     .single();
 
   const currentStatus = currentPo.data?.status;
@@ -58,15 +59,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
       : { update: "purchasing" })
   });
 
-  const serviceRole = getCarbonServiceRole();
-
   // Cancel pending approval requests when closing the PO
   // Closed POs are terminal - no approvals should remain pending
   // Note: Approved/Rejected requests are NOT cancelled - they serve as audit trail
   // Only "Pending" requests are cancelled since they're no longer actionable
   if (status === "Closed") {
     // Find all pending approval requests for this PO and cancel them
-    const cancelResult = await serviceRole
+    const cancelResult = await client
       .from("approvalRequest")
       .update({
         status: "Cancelled",
@@ -75,6 +74,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       })
       .eq("documentType", "purchaseOrder")
       .eq("documentId", id)
+      .eq("companyId", companyId)
       .eq("status", "Pending")
       .select("id");
 
@@ -89,17 +89,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // This handles reopening from both "Needs Approval" and "Closed" statuses
   if (status === "Draft") {
     // Find all pending approval requests for this PO
-    const pendingApprovals = await serviceRole
+    const pendingApprovals = await client
       .from("approvalRequest")
       .select("*")
       .eq("documentType", "purchaseOrder")
       .eq("documentId", id)
+      .eq("companyId", companyId)
       .eq("status", "Pending");
 
     if (pendingApprovals.data && pendingApprovals.data.length > 0) {
       if (currentStatus === "Closed") {
         // System action when reopening from Closed - cancel all regardless of requester
-        await serviceRole
+        await client
           .from("approvalRequest")
           .update({
             status: "Cancelled",
@@ -108,6 +109,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           })
           .eq("documentType", "purchaseOrder")
           .eq("documentId", id)
+          .eq("companyId", companyId)
           .eq("status", "Pending");
       } else if (currentStatus === "Needs Approval") {
         // Security check: Only allow reopening if user is the requester OR an approver
@@ -115,7 +117,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         const latestApproval = pendingApprovals.data[0]; // Get the latest pending request
         const isRequester = latestApproval.requestedBy === userId;
         const isApprover = await canApproveRequest(
-          serviceRole,
+          client,
           {
             amount: latestApproval.amount,
             documentType: latestApproval.documentType,
@@ -140,7 +142,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         }
 
         // Cancel all pending approval requests when reopening (user has permission)
-        await serviceRole
+        await client
           .from("approvalRequest")
           .update({
             status: "Cancelled",
@@ -149,6 +151,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           })
           .eq("documentType", "purchaseOrder")
           .eq("documentId", id)
+          .eq("companyId", companyId)
           .eq("status", "Pending");
       }
     }
@@ -158,7 +161,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     id,
     status,
     assignee: ["Closed"].includes(status) ? null : undefined,
-    updatedBy: userId
+    updatedBy: userId,
+    companyId
   });
   if (update.error) {
     throw redirect(
@@ -171,7 +175,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (status === "Planned") {
-    await runMRP(serviceRole, {
+    await runMRP(client, {
       type: "purchaseOrder",
       id,
       companyId,

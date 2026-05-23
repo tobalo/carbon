@@ -1,7 +1,7 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getPreferenceHeaders } from "@carbon/react";
 import { parseDateTime, toCalendarDateTime } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import { KPIs } from "~/modules/sales/sales.models";
 import { groupDataByDay, groupDataByMonth } from "~/utils/chart";
@@ -405,7 +405,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 async function getSalesOrdersQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     customerId,
@@ -449,7 +449,7 @@ async function getSalesOrdersQuery(
 }
 
 async function getQuotesQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     customerId,
@@ -485,7 +485,7 @@ async function getQuotesQuery(
 }
 
 async function getRfqQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     customerId,

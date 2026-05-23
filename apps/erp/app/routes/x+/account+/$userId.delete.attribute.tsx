@@ -39,7 +39,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (!canUpdateAnyUser && userId === targetUserId) {
     // check if this is a self managed attribute
-    const attribute = await getAttribute(client, userAttributeId);
+    const attribute = await getAttribute(client, userAttributeId, companyId);
     if (attribute.error) {
       return data(
         null,

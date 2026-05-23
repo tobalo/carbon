@@ -513,8 +513,8 @@ const LinePricingOptions = ({
 
   const additionalChargesByQuantity =
     line.quantity?.reduce(
-      (acc, quantity) => {
-        const charges = Object.values(line.additionalCharges ?? {}).reduce(
+      (acc: any, quantity: any) => {
+        const charges = (Object.values(line.additionalCharges ?? {}) as any[]).reduce(
           (chargeAcc, charge) => {
             const amount = charge.amounts?.[quantity];
             return chargeAcc + amount;
@@ -527,17 +527,17 @@ const LinePricingOptions = ({
       {} as Record<number, number>
     ) ?? {};
 
-  const convertedAdditionalChargesByQuantity = Object.entries(
+  const convertedAdditionalChargesByQuantity = (Object.entries(
     additionalChargesByQuantity
-  ).reduce<Record<number, number>>((acc, [quantity, amount]) => {
+  ) as [string, number][]).reduce<Record<number, number>>((acc, [quantity, amount]: [string, number]) => {
     acc[Number(quantity)] = amount * quoteExchangeRate;
     return acc;
   }, {});
 
   const taxableAdditionalChargesByQuantity =
     line.quantity?.reduce(
-      (acc, quantity) => {
-        const charges = Object.values(line.additionalCharges ?? {}).reduce(
+      (acc: any, quantity: any) => {
+        const charges = (Object.values(line.additionalCharges ?? {}) as any[]).reduce(
           (chargeAcc, charge) => {
             if (charge.taxable === false) return chargeAcc;
             const amount = charge.amounts?.[quantity];
@@ -551,9 +551,9 @@ const LinePricingOptions = ({
       {} as Record<number, number>
     ) ?? {};
 
-  const convertedTaxableAdditionalChargesByQuantity = Object.entries(
+  const convertedTaxableAdditionalChargesByQuantity = (Object.entries(
     taxableAdditionalChargesByQuantity
-  ).reduce<Record<number, number>>((acc, [quantity, amount]) => {
+  ) as [string, number][]).reduce<Record<number, number>>((acc, [quantity, amount]: [string, number]) => {
     acc[Number(quantity)] = amount * quoteExchangeRate;
     return acc;
   }, {});
@@ -658,7 +658,7 @@ const LinePricingOptions = ({
                       </Td>
                       <Td>
                         {formatter.format(
-                          convertedAdditionalChargesByQuantity[option.quantity]
+                          convertedAdditionalChargesByQuantity[option.quantity] ?? 0
                         )}
                       </Td>
                       <Td>

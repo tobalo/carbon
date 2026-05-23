@@ -1,0 +1,30 @@
+ALTER TABLE "companyAccountsPayableBillingAddress" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "companyAccountsReceivableBillingAddress" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "companyPlan" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "companySettings" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "company" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "terms" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "companyAccountsPayableBillingAddress_tenant_select" ON "companyAccountsPayableBillingAddress" AS PERMISSIVE FOR SELECT TO "carbon_app" USING ("companyAccountsPayableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsPayableBillingAddress_tenant_insert" ON "companyAccountsPayableBillingAddress" AS PERMISSIVE FOR INSERT TO "carbon_app" WITH CHECK ("companyAccountsPayableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsPayableBillingAddress_tenant_update" ON "companyAccountsPayableBillingAddress" AS PERMISSIVE FOR UPDATE TO "carbon_app" USING ("companyAccountsPayableBillingAddress"."id" = ANY(app_companies_for_context())) WITH CHECK ("companyAccountsPayableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsPayableBillingAddress_tenant_delete" ON "companyAccountsPayableBillingAddress" AS PERMISSIVE FOR DELETE TO "carbon_app" USING ("companyAccountsPayableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsReceivableBillingAddress_tenant_select" ON "companyAccountsReceivableBillingAddress" AS PERMISSIVE FOR SELECT TO "carbon_app" USING ("companyAccountsReceivableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsReceivableBillingAddress_tenant_insert" ON "companyAccountsReceivableBillingAddress" AS PERMISSIVE FOR INSERT TO "carbon_app" WITH CHECK ("companyAccountsReceivableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsReceivableBillingAddress_tenant_update" ON "companyAccountsReceivableBillingAddress" AS PERMISSIVE FOR UPDATE TO "carbon_app" USING ("companyAccountsReceivableBillingAddress"."id" = ANY(app_companies_for_context())) WITH CHECK ("companyAccountsReceivableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyAccountsReceivableBillingAddress_tenant_delete" ON "companyAccountsReceivableBillingAddress" AS PERMISSIVE FOR DELETE TO "carbon_app" USING ("companyAccountsReceivableBillingAddress"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyPlan_tenant_select" ON "companyPlan" AS PERMISSIVE FOR SELECT TO "carbon_app" USING ("companyPlan"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyPlan_tenant_insert" ON "companyPlan" AS PERMISSIVE FOR INSERT TO "carbon_app" WITH CHECK ("companyPlan"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyPlan_tenant_update" ON "companyPlan" AS PERMISSIVE FOR UPDATE TO "carbon_app" USING ("companyPlan"."id" = ANY(app_companies_for_context())) WITH CHECK ("companyPlan"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companyPlan_tenant_delete" ON "companyPlan" AS PERMISSIVE FOR DELETE TO "carbon_app" USING ("companyPlan"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companySettings_tenant_select" ON "companySettings" AS PERMISSIVE FOR SELECT TO "carbon_app" USING ("companySettings"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companySettings_tenant_insert" ON "companySettings" AS PERMISSIVE FOR INSERT TO "carbon_app" WITH CHECK ("companySettings"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companySettings_tenant_update" ON "companySettings" AS PERMISSIVE FOR UPDATE TO "carbon_app" USING ("companySettings"."id" = ANY(app_companies_for_context())) WITH CHECK ("companySettings"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "companySettings_tenant_delete" ON "companySettings" AS PERMISSIVE FOR DELETE TO "carbon_app" USING ("companySettings"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "company_tenant_select" ON "company" AS PERMISSIVE FOR SELECT TO "carbon_app" USING ("company"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "company_tenant_insert" ON "company" AS PERMISSIVE FOR INSERT TO "carbon_app" WITH CHECK ("company"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "company_tenant_update" ON "company" AS PERMISSIVE FOR UPDATE TO "carbon_app" USING ("company"."id" = ANY(app_companies_for_context())) WITH CHECK ("company"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "company_tenant_delete" ON "company" AS PERMISSIVE FOR DELETE TO "carbon_app" USING ("company"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "terms_tenant_select" ON "terms" AS PERMISSIVE FOR SELECT TO "carbon_app" USING ("terms"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "terms_tenant_insert" ON "terms" AS PERMISSIVE FOR INSERT TO "carbon_app" WITH CHECK ("terms"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "terms_tenant_update" ON "terms" AS PERMISSIVE FOR UPDATE TO "carbon_app" USING ("terms"."id" = ANY(app_companies_for_context())) WITH CHECK ("terms"."id" = ANY(app_companies_for_context()));--> statement-breakpoint
+CREATE POLICY "terms_tenant_delete" ON "terms" AS PERMISSIVE FOR DELETE TO "carbon_app" USING ("terms"."id" = ANY(app_companies_for_context()));

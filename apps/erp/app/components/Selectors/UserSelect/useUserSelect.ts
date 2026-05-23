@@ -1,5 +1,5 @@
 import { useDisclosure, useOutsideClick } from "@carbon/react";
-import type { PostgrestError } from "@supabase/supabase-js";
+import type { QueryError } from "@carbon/database/query-client";
 import debounce from "lodash/debounce";
 import words from "lodash/words";
 import type { AriaAttributes, ChangeEvent, KeyboardEvent } from "react";
@@ -58,7 +58,7 @@ export default function useUserSelect(props: UserSelectProps) {
   /* Data Fetching */
   const groupsFetcher = useFetcher<{
     groups: Group[];
-    errors?: PostgrestError;
+    errors?: QueryError;
   }>();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: suppressed due to migration

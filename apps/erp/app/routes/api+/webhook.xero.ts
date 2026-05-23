@@ -20,14 +20,14 @@
  */
 
 import { XERO_WEBHOOK_SECRET } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import type {
   AccountingEntity,
   AccountingProvider,
   AccountingSyncPayload
 } from "@carbon/ee/accounting";
 import {
-  getAccountingIntegration,
+  getAccountingIntegrationByTenant,
   getProviderIntegration,
   ProviderID
 } from "@carbon/ee/accounting";
@@ -59,15 +59,19 @@ const WebhookSchema = z.object({
 function verifySignature(payload: string, header: string) {
   if (!XERO_WEBHOOK_SECRET) {
     console.warn("XERO_WEBHOOK_SECRET is not configured");
-    return payload;
+    return false;
   }
 
   const hmac = crypto
     .createHmac("sha256", XERO_WEBHOOK_SECRET)
     .update(payload, "utf8")
     .digest("base64");
+  const expected = Buffer.from(hmac);
+  const actual = Buffer.from(header);
 
-  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(header));
+  return (
+    expected.length === actual.length && crypto.timingSafeEqual(expected, actual)
+  );
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -75,32 +79,30 @@ export async function action({ request }: ActionFunctionArgs) {
   const payloadText = await request.text();
 
   // Verify webhook signature for security (Xero's intent-to-receive workflow)
-  if (XERO_WEBHOOK_SECRET) {
-    // If payload is empty or just contains intent-to-receive data, return 200
-    if (!payloadText || payloadText.trim() === "" || payloadText === "{}") {
-      return new Response("", { status: 200 });
-    }
+  const signature = request.headers.get("x-xero-signature");
 
-    const signature = request.headers.get("x-xero-signature");
+  if (!signature) {
+    return data(
+      { success: false, error: "Missing signature" },
+      { status: 401 }
+    );
+  }
 
-    if (!signature) {
-      return data(
-        { success: false, error: "Missing signature" },
-        { status: 401 }
-      );
-    }
+  const isValid = verifySignature(payloadText, signature);
 
-    const isValid = verifySignature(payloadText, signature);
+  if (!isValid) {
+    return data(
+      {
+        success: false,
+        error: "Invalid signature"
+      },
+      { status: 401 }
+    );
+  }
 
-    if (!isValid) {
-      return data(
-        {
-          success: false,
-          error: "Invalid signature"
-        },
-        { status: 401 }
-      );
-    }
+  // If payload is empty or just contains intent-to-receive data, return 200
+  if (!payloadText || payloadText.trim() === "" || payloadText === "{}") {
+    return new Response("", { status: 200 });
   }
 
   // Parse and validate the webhook payload for actual events
@@ -137,7 +139,7 @@ export async function action({ request }: ActionFunctionArgs) {
     "events"
   );
 
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
   const events = parsed.data.events;
   const syncJobs = [];
   const errors = [];
@@ -157,8 +159,8 @@ export async function action({ request }: ActionFunctionArgs) {
   // Process events for each tenant
   for (const [tenantId, tenantEvents] of Object.entries(eventsByTenant)) {
     try {
-      const integration = await getAccountingIntegration(
-        serviceRole,
+      const integration = await getAccountingIntegrationByTenant(
+        serviceClient,
         tenantId,
         ProviderID.XERO
       );
@@ -175,7 +177,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const companyId = integration.companyId;
 
       const provider = getProviderIntegration(
-        serviceRole,
+        serviceClient,
         companyId,
         ProviderID.XERO,
         integration.metadata

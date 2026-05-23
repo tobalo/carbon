@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { getLocalTimeZone, now } from "@internationalized/date";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
@@ -28,15 +27,14 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   // Clock out the operator if time card is enabled
-  const serviceRole = await getCarbonServiceRole();
-  const settings = await serviceRole
+  const settings = await client
     .from("companySettings")
     .select("*")
     .eq("id", companyId)
     .single();
 
   if ((settings.data as any)?.timeCardEnabled) {
-    const clockOutResult = await serviceRole
+    const clockOutResult = await client
       .from("timeCardEntry")
       .update({
         clockOut: now(timezone ?? getLocalTimeZone()).toAbsoluteString(),

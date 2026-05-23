@@ -1,14 +1,14 @@
-import { useSwaggerDocs } from "~/hooks/useSwaggerDocs";
+import { useApiDocsSchema } from "~/hooks/useApiDocsSchema";
 import { useSelectedLang } from "~/modules/api";
 import { snakeToCamel } from "~/utils/string";
 
 const functionPath = "rpc/";
 
 export default function Route() {
-  const swaggerDocsSchema = useSwaggerDocs();
+  const apiDocsSchema = useApiDocsSchema();
   //
   // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const { rpcs } = Object.entries(swaggerDocsSchema?.paths || {}).reduce(
+  const { rpcs } = Object.entries(apiDocsSchema?.paths || {}).reduce(
     (a, [name]) => {
       const trimmedName = name.slice(1);
       const id = trimmedName.replace(functionPath, "");

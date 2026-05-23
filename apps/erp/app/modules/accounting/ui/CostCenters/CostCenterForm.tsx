@@ -12,7 +12,7 @@ import {
   toast,
   VStack
 } from "@carbon/react";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -42,7 +42,7 @@ const CostCenterForm = ({
   onClose
 }: CostCenterFormProps) => {
   const permissions = usePermissions();
-  const fetcher = useFetcher<PostgrestResponse<{ id: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string }>>();
   const routeData = useRouteData<{
     purchaseOrderApprovalsActive: boolean;
   }>(path.to.costCenters);

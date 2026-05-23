@@ -3,10 +3,10 @@ import {
   assertIsPost,
   CarbonEdition,
   CONTROLLED_ENVIRONMENT,
-  carbonClient,
   error,
   magicLinkValidator,
-  RATE_LIMIT
+  RATE_LIMIT,
+  startOAuthSignIn
 } from "@carbon/auth";
 import { sendMagicLink, verifyAuthSession } from "@carbon/auth/auth.server";
 import {
@@ -127,13 +127,11 @@ export default function LoginRoute() {
   >();
 
   const onSignInWithGoogle = async () => {
-    const { error } = await carbonClient.auth.signInWithOAuth({
+    const { error } = await startOAuthSignIn({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/callback${
-          redirectTo ? `?redirectTo=${redirectTo}` : ""
-        }`
-      }
+      redirectTo: `${window.location.origin}/callback${
+        redirectTo ? `?redirectTo=${redirectTo}` : ""
+      }`
     });
 
     if (error) {
@@ -142,14 +140,12 @@ export default function LoginRoute() {
   };
 
   const onSignInWithAzure = async () => {
-    const { error } = await carbonClient.auth.signInWithOAuth({
+    const { error } = await startOAuthSignIn({
       provider: "azure",
-      options: {
-        scopes: "email",
-        redirectTo: `${window.location.origin}/callback${
-          redirectTo ? `?redirectTo=${redirectTo}` : ""
-        }`
-      }
+      scopes: "email",
+      redirectTo: `${window.location.origin}/callback${
+        redirectTo ? `?redirectTo=${redirectTo}` : ""
+      }`
     });
 
     if (error) {

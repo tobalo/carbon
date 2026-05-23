@@ -552,7 +552,7 @@ export const registerPurchasingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getSupplierInteraction(ctx.client, params.opportunityId);
+      const result = await getSupplierInteraction(ctx.client, ctx.companyId, params.opportunityId);
       return toMcpResult(result);
     }, "Failed: purchasing_getSupplierInteraction"),
   );
@@ -1079,7 +1079,11 @@ export const registerPurchasingTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await updatePurchaseOrderStatus(ctx.client, { ...params.update, updatedBy: ctx.userId });
+      const result = await updatePurchaseOrderStatus(ctx.client, {
+        ...params.update,
+        updatedBy: ctx.userId,
+        companyId: ctx.companyId,
+      });
       return toMcpResult(result);
     }, "Failed: purchasing_updatePurchaseOrderStatus"),
   );

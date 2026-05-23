@@ -1,2 +1,0 @@
-ALTER TABLE "methodMaterial" ADD COLUMN "methodOperationId" TEXT;
-ALTER TABLE "methodMaterial" ADD CONSTRAINT "methodMaterial_methodOperation_fkey" FOREIGN KEY ("methodOperationId") REFERENCES "methodOperation" ("id") ON UPDATE CASCADE ON DELETE SET NULL;

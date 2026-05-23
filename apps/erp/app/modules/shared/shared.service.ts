@@ -1,10 +1,15 @@
-import type { Database } from "@carbon/database";
-import type { Kysely, KyselyDatabase } from "@carbon/database/client";
-import { getPurchaseOrderStatus, supportedModelTypes } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { invokeFunction } from "@carbon/auth/functions.server";
+import type {
+  QueryDatabase,
+  TableInsert,
+  TableUpdate
+} from "@carbon/database/schema";
+import { downloadObject } from "@carbon/storage";
+import { supportedModelTypes } from "@carbon/utils";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import type {
   approvalDocumentType,
   documentTypes,
@@ -21,133 +26,8 @@ import type {
   UpsertApprovalRuleInput
 } from "./types";
 
-export async function approveRequest(
-  db: Kysely<KyselyDatabase>,
-  id: string,
-  userId: string,
-  notes?: string
-) {
-  // Pre-flight check: verify approval request exists and is pending
-  const approvalRequest = await db
-    .selectFrom("approvalRequest")
-    .select(["id", "status", "documentType", "documentId", "companyId"])
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!approvalRequest) {
-    return { error: { message: "Approval request not found" }, data: null };
-  }
-
-  if (approvalRequest.status !== "Pending") {
-    return {
-      error: { message: "Approval request is not pending" },
-      data: null
-    };
-  }
-
-  const { documentType, documentId } = approvalRequest;
-  const now = new Date().toISOString();
-
-  try {
-    const result = await db.transaction().execute(async (trx) => {
-      // 1. Update approval request to "Approved"
-      const updatedApproval = await trx
-        .updateTable("approvalRequest")
-        .set({
-          status: "Approved",
-          decisionBy: userId,
-          decisionAt: now,
-          decisionNotes: notes || null,
-          updatedBy: userId,
-          updatedAt: now
-        })
-        .where("id", "=", id)
-        .returning(["id", "documentType", "documentId"])
-        .executeTakeFirstOrThrow();
-
-      // 2. Update document status based on type
-      if (documentType === "purchaseOrder") {
-        // Fetch PO lines to calculate new status
-        const lines = await trx
-          .selectFrom("purchaseOrderLine")
-          .select([
-            "purchaseOrderLineType",
-            "invoicedComplete",
-            "receivedComplete"
-          ])
-          .where("purchaseOrderId", "=", documentId)
-          .execute();
-
-        const { status: calculatedStatus } = getPurchaseOrderStatus(lines);
-
-        // Update PO status (only if currently "Needs Approval")
-        const poUpdate = await trx
-          .updateTable("purchaseOrder")
-          .set({
-            status: calculatedStatus,
-            updatedBy: userId,
-            updatedAt: now
-          })
-          .where("id", "=", documentId)
-          .where("status", "=", "Needs Approval")
-          .returning(["id"])
-          .executeTakeFirst();
-
-        if (!poUpdate) {
-          throw new Error(
-            "Failed to update purchase order status - it may no longer be in 'Needs Approval' state"
-          );
-        }
-      } else if (documentType === "qualityDocument") {
-        const qdUpdate = await trx
-          .updateTable("qualityDocument")
-          .set({
-            status: "Active",
-            updatedBy: userId,
-            updatedAt: now
-          })
-          .where("id", "=", documentId)
-          .returning(["id"])
-          .executeTakeFirst();
-
-        if (!qdUpdate) {
-          throw new Error("Failed to update quality document status");
-        }
-      } else if (documentType === "supplier") {
-        const supplierUpdate = await trx
-          .updateTable("supplier")
-          .set({
-            supplierStatus: "Active",
-            updatedBy: userId,
-            updatedAt: now
-          })
-          .where("id", "=", documentId)
-          .returning(["id"])
-          .executeTakeFirst();
-
-        if (!supplierUpdate) {
-          throw new Error("Failed to update supplier status");
-        }
-      }
-
-      return updatedApproval;
-    });
-
-    return { data: result, error: null };
-  } catch (error) {
-    // Transaction automatically rolled back on error
-    return {
-      error: {
-        message:
-          error instanceof Error ? error.message : "Failed to process approval"
-      },
-      data: null
-    };
-  }
-}
-
 export async function canApproveRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   approvalRequest: ApprovalRequestForApproveCheck,
   userId: string
 ): Promise<boolean> {
@@ -181,7 +61,7 @@ export async function canApproveRequest(
     }
 
     // Check if user belongs to any of the approver groups
-    return approverGroupIds.some((groupId) => userGroupIds.includes(groupId));
+    return approverGroupIds.some((groupId: any) => userGroupIds.includes(groupId));
   });
 }
 
@@ -191,7 +71,7 @@ export async function canApproveRequest(
  * Used for "Assigned to Me" lists.
  */
 export async function canApproveRequestInWindow(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   approvalRequest: ApprovalRequestForApproveCheck,
   userId: string
 ): Promise<boolean> {
@@ -223,7 +103,7 @@ export async function canApproveRequestInWindow(
   // Check if user belongs to any of the approver groups
   const userGroups = await client.rpc("groups_for_user", { uid: userId });
   const userGroupIds = userGroups.data || [];
-  return approverGroupIds.some((groupId) => userGroupIds.includes(groupId));
+  return approverGroupIds.some((groupId: any) => userGroupIds.includes(groupId));
 }
 
 export function canCancelRequest(
@@ -237,7 +117,7 @@ export function canCancelRequest(
 }
 
 export async function cancelApprovalRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   userId: string
 ) {
@@ -278,7 +158,7 @@ export async function cancelApprovalRequest(
 }
 
 export async function canViewApprovalRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   approvalRequest: ApprovalRequestForViewCheck,
   userId: string
 ): Promise<boolean> {
@@ -298,7 +178,7 @@ export async function canViewApprovalRequest(
 }
 
 export async function createApprovalRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   request: CreateApprovalRequestInput & { amount?: number }
 ) {
   return client
@@ -318,7 +198,7 @@ export async function createApprovalRequest(
 }
 
 export async function deleteApprovalRule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -330,25 +210,25 @@ export async function deleteApprovalRule(
 }
 
 export async function deleteNote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   noteId: string
 ) {
   return client.from("note").update({ active: false }).eq("id", noteId);
 }
 
 export async function deleteSavedView(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   viewId: string
 ) {
   return client.from("tableView").delete().eq("id", viewId);
 }
 
 export async function generateEmbedding(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   text: string
 ): Promise<number[]> {
-  const response = await client.functions.invoke("embedding", {
-    body: { text }
+  const response = await invokeFunction("embedding", {
+    body: { text },
   });
 
   if (response.error) {
@@ -367,7 +247,7 @@ export async function generateEmbedding(
 }
 
 export async function getApprovalById(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   const baseRequest = await client
@@ -397,7 +277,7 @@ export async function getApprovalById(
 }
 
 export async function getApprovalRequestsByDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentType: (typeof approvalDocumentType)[number],
   documentId: string
 ) {
@@ -410,7 +290,7 @@ export async function getApprovalRequestsByDocument(
 }
 
 export async function getApprovalRuleByAmount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string,
   amount?: number
@@ -436,7 +316,7 @@ export async function getApprovalRuleByAmount(
 }
 
 export async function getApproverUserIdsForRule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   rule: Pick<ApprovalRule, "approverGroupIds" | "defaultApproverId">
 ): Promise<string[]> {
   const groupIds = rule.approverGroupIds?.filter(Boolean) ?? [];
@@ -465,7 +345,7 @@ export async function getApproverUserIdsForRule(
 }
 
 export async function getApprovalRuleById(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   companyId: string
 ) {
@@ -478,14 +358,14 @@ export async function getApprovalRuleById(
 }
 
 export async function getApprovalRules(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.from("approvalRule").select("*").eq("companyId", companyId);
 }
 
 export async function getApprovalRulesForApprover(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string
 ) {
@@ -499,7 +379,7 @@ export async function getApprovalRulesForApprover(
 }
 
 export async function getApprovalsForUser(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string,
   args?: GenericQueryFilters & ApprovalFilters
@@ -622,20 +502,23 @@ export async function getApprovalsForUser(
   };
 }
 
-export async function getBase64ImageFromSupabase(
-  client: SupabaseClient<Database>,
+export async function getBase64ImageFromStorage(
+  client: CarbonDatabaseClient<QueryDatabase>,
   path: string
 ) {
   function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return Buffer.from(buffer).toString("base64");
   }
 
-  const { data, error } = await client.storage.from("private").download(path);
-  if (error) {
+  const companyId = path.replace(/^\/+/, "").split("/")[0];
+  if (!companyId) {
     return null;
   }
 
-  const arrayBuffer = await data.arrayBuffer();
+  const arrayBuffer = await downloadObject({ companyId, key: path });
+  if (!arrayBuffer) {
+    return null;
+  }
   const base64String = arrayBufferToBase64(arrayBuffer);
 
   // Determine the mime type based on file extension
@@ -648,12 +531,12 @@ export async function getBase64ImageFromSupabase(
   return `data:${mimeType};base64,${base64String}`;
 }
 
-export async function getCountries(client: SupabaseClient<Database>) {
+export async function getCountries(client: CarbonDatabaseClient<QueryDatabase>) {
   return client.from("country").select("*").order("name");
 }
 
 export async function getLatestApprovalRequestForDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentType: (typeof approvalDocumentType)[number],
   documentId: string
 ) {
@@ -735,7 +618,7 @@ export function getDocumentType(
 }
 
 export async function getModelByItemId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   itemId: string
 ) {
   const item = await client
@@ -774,19 +657,43 @@ export async function getModelByItemId(
 }
 
 export async function getNotes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentId: string
 ) {
-  return client
+  const notes = await client
     .from("note")
-    .select("id, note, createdAt, user(id, fullName, avatarUrl)")
+    .select("id, note, createdAt, createdBy")
     .eq("documentId", documentId)
     .eq("active", true)
     .order("createdAt");
+
+  if (notes.error || !notes.data) {
+    return notes;
+  }
+
+  const userIds = [...new Set(notes.data.map((note) => note.createdBy))];
+  const users =
+    userIds.length > 0
+      ? await client
+          .from("user")
+          .select("id, fullName, avatarUrl")
+          .in("id", userIds)
+      : { data: [] };
+  const usersById = new Map(
+    users.data?.map((user) => [user.id, user] as const) ?? []
+  );
+
+  return {
+    ...notes,
+    data: notes.data.map((note) => ({
+      ...note,
+      user: usersById.get(note.createdBy) ?? null
+    }))
+  };
 }
 
 export async function getPendingApprovalsForApprover(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -842,7 +749,7 @@ export async function getPendingApprovalsForApprover(
 }
 
 export async function getPeriods(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   { startDate, endDate }: { startDate: string; endDate: string }
 ) {
   const endWithTime = endDate.includes("T") ? endDate : `${endDate}T23:59:59`;
@@ -854,7 +761,7 @@ export async function getPeriods(
 }
 
 export async function getSavedViews(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -867,7 +774,7 @@ export async function getSavedViews(
 }
 
 export async function getTagsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   table?: string | null
 ) {
@@ -881,7 +788,7 @@ export async function getTagsList(
 }
 
 export async function hasPendingApproval(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentType: (typeof approvalDocumentType)[number],
   documentId: string
 ): Promise<boolean> {
@@ -897,7 +804,7 @@ export async function hasPendingApproval(
 }
 
 export async function importCsv(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     table: string;
     filePath: string;
@@ -907,13 +814,13 @@ export async function importCsv(
     userId: string;
   }
 ) {
-  return client.functions.invoke("import-csv", {
-    body: args
+  return invokeFunction("import-csv", {
+    body: args,
   });
 }
 
 export async function insertNote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   note: {
     note: string;
     documentId: string;
@@ -925,14 +832,14 @@ export async function insertNote(
 }
 
 export async function insertTag(
-  client: SupabaseClient<Database>,
-  tag: Database["public"]["Tables"]["tag"]["Insert"]
+  client: CarbonDatabaseClient<QueryDatabase>,
+  tag: TableInsert<"tag">
 ) {
   return client.from("tag").insert(tag).select("*").single();
 }
 
 export async function isApprovalRequired(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string,
   amount?: number
@@ -952,7 +859,7 @@ export async function isApprovalRequired(
 }
 
 export async function getExternalLink(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   let query = client.from("externalLink").select("*").eq("id", id).single();
@@ -961,10 +868,10 @@ export async function getExternalLink(
 }
 
 export async function upsertExternalLink(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   externalLink:
-    | Database["public"]["Tables"]["externalLink"]["Insert"]
-    | Database["public"]["Tables"]["externalLink"]["Update"]
+    | TableInsert<"externalLink">
+    | TableUpdate<"externalLink">
 ) {
   if ("id" in externalLink && externalLink.id) {
     return client
@@ -977,14 +884,14 @@ export async function upsertExternalLink(
   return client
     .from("externalLink")
     .insert(
-      externalLink as Database["public"]["Tables"]["externalLink"]["Insert"]
+      externalLink as TableInsert<"externalLink">
     )
     .select("id")
     .single();
 }
 
 export async function getCustomerPortals(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -1008,26 +915,45 @@ export async function getCustomerPortals(
 }
 
 export async function getCustomerPortal(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
-  return client
+  const externalLink = await client
     .from("externalLink")
-    .select("*, customer:customerId(id, name)")
+    .select("*")
     .eq("id", id)
     .eq("documentType", "Customer")
     .single();
+
+  if (externalLink.error || !externalLink.data?.customerId) {
+    return externalLink;
+  }
+
+  const customer = await client
+    .from("customer")
+    .select("id, name")
+    .eq("id", externalLink.data.customerId)
+    .eq("companyId", externalLink.data.companyId)
+    .single();
+
+  return {
+    ...externalLink,
+    data: {
+      ...externalLink.data,
+      customer: customer.data
+    }
+  };
 }
 
 export async function deleteCustomerPortal(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("externalLink").delete().eq("id", id);
 }
 
 export async function updateModelThumbnail(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   modelId: string,
   thumbnailPath: string
 ) {
@@ -1035,7 +961,7 @@ export async function updateModelThumbnail(
 }
 
 export async function upsertModelUpload(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   upload:
     | {
         id: string;
@@ -1057,114 +983,15 @@ export async function upsertModelUpload(
 }
 
 export async function updateNote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   note: string
 ) {
   return client.from("note").update({ note }).eq("id", id);
 }
 
-export async function rejectRequest(
-  db: Kysely<KyselyDatabase>,
-  id: string,
-  userId: string,
-  notes?: string
-) {
-  // Pre-flight check: verify approval request exists and is pending
-  const approvalRequest = await db
-    .selectFrom("approvalRequest")
-    .select(["id", "status", "documentType", "documentId"])
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!approvalRequest) {
-    return { error: { message: "Approval request not found" }, data: null };
-  }
-
-  if (approvalRequest.status !== "Pending") {
-    return {
-      error: { message: "Approval request is not pending" },
-      data: null
-    };
-  }
-
-  const { documentType, documentId } = approvalRequest;
-  const now = new Date().toISOString();
-
-  try {
-    const result = await db.transaction().execute(async (trx) => {
-      // 1. Update approval request to "Rejected"
-      const updatedApproval = await trx
-        .updateTable("approvalRequest")
-        .set({
-          status: "Rejected",
-          decisionBy: userId,
-          decisionAt: now,
-          decisionNotes: notes || null,
-          updatedBy: userId,
-          updatedAt: now
-        })
-        .where("id", "=", id)
-        .returning(["id", "documentType", "documentId"])
-        .executeTakeFirstOrThrow();
-
-      // 2. Update document status based on type
-      if (documentType === "purchaseOrder") {
-        const poUpdate = await trx
-          .updateTable("purchaseOrder")
-          .set({
-            status: "Rejected",
-            updatedBy: userId,
-            updatedAt: now
-          })
-          .where("id", "=", documentId)
-          .where("status", "=", "Needs Approval")
-          .returning(["id"])
-          .executeTakeFirst();
-
-        if (!poUpdate) {
-          throw new Error(
-            "Failed to update purchase order status - it may no longer be in 'Needs Approval' state"
-          );
-        }
-      }
-      // Note: qualityDocument rejection doesn't change status (stays Draft)
-
-      if (documentType === "supplier") {
-        const supplierUpdate = await trx
-          .updateTable("supplier")
-          .set({
-            supplierStatus: "Rejected",
-            updatedBy: userId,
-            updatedAt: now
-          })
-          .where("id", "=", documentId)
-          .returning(["id"])
-          .executeTakeFirst();
-
-        if (!supplierUpdate) {
-          throw new Error("Failed to update supplier status");
-        }
-      }
-
-      return updatedApproval;
-    });
-
-    return { data: result, error: null };
-  } catch (error) {
-    // Transaction automatically rolled back on error
-    return {
-      error: {
-        message:
-          error instanceof Error ? error.message : "Failed to process rejection"
-      },
-      data: null
-    };
-  }
-}
-
 export async function upsertApprovalRule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   rule: UpsertApprovalRuleInput
 ) {
   if ("id" in rule) {
@@ -1194,7 +1021,7 @@ export async function upsertApprovalRule(
 }
 
 export async function upsertSavedView(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   view: {
     id?: string;
     name: string;
@@ -1248,7 +1075,7 @@ export async function upsertSavedView(
 }
 
 export async function updateSavedViewOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;

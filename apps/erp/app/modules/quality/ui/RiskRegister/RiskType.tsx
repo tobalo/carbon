@@ -1,8 +1,11 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  riskRegisterTypeEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 
 type RiskTypeProps = {
-  type?: Database["public"]["Enums"]["riskRegisterType"] | null;
+  type?: EnumValue<typeof riskRegisterTypeEnum> | null;
 };
 
 const RiskType = ({ type }: RiskTypeProps) => {

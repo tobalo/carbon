@@ -1,6 +1,6 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import {
@@ -44,7 +44,7 @@ export async function action({ request }: ActionFunctionArgs) {
     ...locationData
   } = validation.data;
 
-  const client = getCarbonServiceRole();
+  const client = getCarbonServiceClient();
 
   const companyInsert = await insertCompany(client, {
     ...locationData,

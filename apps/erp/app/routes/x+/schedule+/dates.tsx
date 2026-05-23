@@ -174,8 +174,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const [jobs, unscheduledJobs, tags] = await Promise.all([
-    getJobsByDateRange(client, locationId ?? "", startDate, endDate),
-    getUnscheduledJobs(client, locationId ?? ""),
+    getJobsByDateRange(client, locationId ?? "", companyId, startDate, endDate),
+    getUnscheduledJobs(client, locationId ?? "", companyId),
     getTagsList(client, companyId, "job")
   ]);
 
@@ -203,22 +203,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let filteredUnscheduledJobs = unscheduledJobs.data ?? [];
 
   if (selectedSalesOrderIds.length) {
-    filteredJobs = filteredJobs.filter((job) =>
+    filteredJobs = filteredJobs.filter((job: any) =>
       selectedSalesOrderIds.includes(job.salesOrderId)
     );
-    filteredUnscheduledJobs = filteredUnscheduledJobs.filter((job) =>
+    filteredUnscheduledJobs = filteredUnscheduledJobs.filter((job: any) =>
       selectedSalesOrderIds.includes(job.salesOrderId)
     );
   }
 
   if (selectedTags.length) {
-    filteredJobs = filteredJobs.filter((job) => {
+    filteredJobs = filteredJobs.filter((job: any) => {
       if (job.tags) {
         return selectedTags.some((tag) => job.tags.includes(tag));
       }
       return false;
     });
-    filteredUnscheduledJobs = filteredUnscheduledJobs.filter((job) => {
+    filteredUnscheduledJobs = filteredUnscheduledJobs.filter((job: any) => {
       if (job.tags) {
         return selectedTags.some((tag) => job.tags.includes(tag));
       }
@@ -227,24 +227,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   if (selectedAssignee.length) {
-    filteredJobs = filteredJobs.filter((job) =>
+    filteredJobs = filteredJobs.filter((job: any) =>
       selectedAssignee.includes(job.assignee)
     );
-    filteredUnscheduledJobs = filteredUnscheduledJobs.filter((job) =>
+    filteredUnscheduledJobs = filteredUnscheduledJobs.filter((job: any) =>
       selectedAssignee.includes(job.assignee)
     );
   }
 
   if (search) {
     filteredJobs = filteredJobs.filter(
-      (job) =>
+      (job: any) =>
         job.jobId.toLowerCase().includes(search.toLowerCase()) ||
         job.itemReadableId?.toLowerCase().includes(search.toLowerCase()) ||
         job.customerName?.toLowerCase().includes(search.toLowerCase()) ||
         job.itemDescription?.toLowerCase().includes(search.toLowerCase())
     );
     filteredUnscheduledJobs = filteredUnscheduledJobs.filter(
-      (job) =>
+      (job: any) =>
         job.jobId.toLowerCase().includes(search.toLowerCase()) ||
         job.itemReadableId?.toLowerCase().includes(search.toLowerCase()) ||
         job.customerName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -347,7 +347,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   // Map scheduled jobs to items
-  const scheduledItems = filteredJobs.map((job) => {
+  const scheduledItems = filteredJobs.map((job: any) => {
     // Determine which column this item belongs to
     let columnId = view === "week" ? "next-week" : "next-month";
 
@@ -425,7 +425,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
 
   // Map unscheduled jobs to items
-  const unscheduledItems = filteredUnscheduledJobs.map((job) => ({
+  const unscheduledItems = filteredUnscheduledJobs.map((job: any) => ({
     id: job.id,
     columnId: "unscheduled",
     columnType: "",
@@ -614,7 +614,7 @@ function DateKanbanSchedule() {
         filter: {
           type: "static",
           options: salesOrders.map((so) => ({
-            label: so.readableId,
+            label: String(so.readableId ?? ""),
             value: so.id
           }))
         }
@@ -625,7 +625,7 @@ function DateKanbanSchedule() {
         filter: {
           type: "static",
           options: people.map((p) => ({
-            label: p.name,
+            label: String(p.name ?? ""),
             value: p.id
           }))
         }
@@ -636,8 +636,8 @@ function DateKanbanSchedule() {
         filter: {
           type: "static",
           options: availableTags.map((tag) => ({
-            label: tag,
-            value: tag
+            label: String(tag),
+            value: String(tag)
           }))
         }
       }

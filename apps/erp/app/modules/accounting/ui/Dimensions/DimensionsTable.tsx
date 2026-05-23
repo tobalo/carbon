@@ -61,7 +61,7 @@ const DimensionsTable = memo(({ data, count }: DimensionsTableProps) => {
         cell: ({ row }) => {
           if (row.original.entityType === "Custom") {
             const values =
-              row.original.dimensionValue?.map((v) => v.name) ?? [];
+              row.original.dimensionValue?.map((v: any) => v.name) ?? [];
             if (values.length === 0) return 0;
 
             const displayValues = values.slice(0, 3);

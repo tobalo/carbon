@@ -1,6 +1,6 @@
 import type { NumberFieldProps } from "@carbon/react";
 import { NumberField, NumberInput } from "@carbon/react";
-import type { PostgrestSingleResponse } from "@supabase/supabase-js";
+import type { QuerySingleResponse } from "@carbon/database/query-client";
 import type { EditableTableCellComponentProps } from "~/components/Editable";
 
 const EditableNumber =
@@ -9,7 +9,7 @@ const EditableNumber =
       accessorKey: string,
       newValue: string,
       row: T
-    ) => Promise<PostgrestSingleResponse<unknown>>,
+    ) => Promise<QuerySingleResponse<unknown>>,
     numberFieldProps?: NumberFieldProps
   ) =>
   ({

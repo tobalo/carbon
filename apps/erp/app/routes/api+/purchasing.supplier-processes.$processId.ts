@@ -19,9 +19,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       data: []
     };
 
+  const supplierId =
+    authorized.role === "supplier" ? authorized.supplierId : null;
   const processes = await getSupplierProcessesByProcess(
     authorized.client,
-    processId
+    processId,
+    supplierId
   );
   if (processes.error) {
     return data(

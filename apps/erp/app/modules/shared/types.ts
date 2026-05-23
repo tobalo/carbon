@@ -1,4 +1,8 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  TableRow,
+  approvalStatusEnum
+} from "@carbon/database/schema";
 import type { ColumnPinningState } from "@tanstack/react-table";
 import type { z } from "zod";
 import type { StorageItem } from "~/types";
@@ -32,7 +36,7 @@ export type ApprovalHistory = NonNullable<
 >;
 
 export type ApprovalRequest =
-  Database["public"]["Views"]["approvalRequests"]["Row"];
+  TableRow<"approvalRequests">;
 
 export type ApprovalRequestForApproveCheck = {
   amount: number | null;
@@ -58,7 +62,7 @@ export type ApprovalRule = NonNullable<
 
 export type ApprovalDecision = "Approved" | "Rejected";
 
-export type ApprovalStatus = Database["public"]["Enums"]["approvalStatus"];
+export type ApprovalStatus = EnumValue<typeof approvalStatusEnum>;
 
 export type BillOfMaterialNodeType =
   | "parent"

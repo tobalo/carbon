@@ -1,3 +1,0 @@
-ALTER TABLE job
-ADD COLUMN "estimatedTime" NUMERIC,
-ADD COLUMN "actualTime" NUMERIC;

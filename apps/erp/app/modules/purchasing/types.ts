@@ -1,5 +1,12 @@
-import type { Database } from "@carbon/database";
-import type { FileObject } from "@supabase/storage-js";
+import type {
+  EnumValue,
+  purchaseOrderLineTypeEnum,
+  purchaseOrderStatusEnum,
+  purchaseOrderTransactionTypeEnum,
+  purchaseOrderTypeEnum,
+  purchasingRfqStatusEnum
+} from "@carbon/database/schema";
+import type { FileObject } from "@carbon/storage";
 import type {
   getPurchaseOrderDelivery,
   getPurchaseOrderLines,
@@ -35,16 +42,16 @@ export type PurchaseOrderLine = NonNullable<
 >[number];
 
 export type PurchaseOrderLineType =
-  Database["public"]["Enums"]["purchaseOrderLineType"];
+  EnumValue<typeof purchaseOrderLineTypeEnum>;
 
 export type PurchaseOrderStatus =
-  Database["public"]["Enums"]["purchaseOrderStatus"];
+  EnumValue<typeof purchaseOrderStatusEnum>;
 
 export type PurchaseOrderType =
-  Database["public"]["Enums"]["purchaseOrderType"];
+  EnumValue<typeof purchaseOrderTypeEnum>;
 
 export type PurchaseOrderTransactionType =
-  Database["public"]["Enums"]["purchaseOrderTransactionType"];
+  EnumValue<typeof purchaseOrderTransactionTypeEnum>;
 
 export type PurchasingPlanningItem = NonNullable<
   Awaited<ReturnType<typeof getPurchasingPlanning>>["data"]
@@ -63,7 +70,7 @@ export type PurchasingRFQSupplier = NonNullable<
 >[number];
 
 export type PurchasingRFQStatusType =
-  Database["public"]["Enums"]["purchasingRfqStatus"];
+  EnumValue<typeof purchasingRfqStatusEnum>;
 
 export type Supplier = NonNullable<
   Awaited<ReturnType<typeof getSuppliers>>["data"]

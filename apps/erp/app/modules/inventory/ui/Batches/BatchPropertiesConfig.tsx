@@ -358,7 +358,6 @@ function BatchPropertyComponent({
             id: property.id,
             itemId: property.itemId,
             label: property.label,
-            // @ts-expect-error TS2322 - TODO: fix type
             dataType: property.dataType,
             listOptions: property.listOptions ?? []
           }}

@@ -1,6 +1,5 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
@@ -53,8 +52,6 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
   // Prepare new attributes by merging with existing ones
   const existingAttributes = trackedEntity.attributes || {};
   let newAttributes = { ...(existingAttributes as Record<string, any>) };
@@ -89,7 +86,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // Clear stale shipment attrs from previously-assigned tracked entities for this line.
   // Batch: any prior entity on this line. Serial: only the entity at this index.
-  let staleQuery = serviceRole
+  let staleQuery = client
     .from("trackedEntity")
     .select("id, attributes")
     .eq("companyId", companyId)
@@ -115,21 +112,22 @@ export async function action({ request }: ActionFunctionArgs) {
         delete cleaned["Shipment Line"];
         delete cleaned.Shipment;
         delete cleaned["Shipment Line Index"];
-        return serviceRole
+        return client
           .from("trackedEntity")
           .update({ attributes: cleaned })
-          .eq("id", stale.id);
+          .eq("id", stale.id)
+          .eq("companyId", companyId);
       })
     );
   }
 
-  // Update the trackedEntity record using service role to bypass RLS
-  const updateResponse = await serviceRole
+  const updateResponse = await client
     .from("trackedEntity")
     .update({
       attributes: newAttributes
     })
     .eq("id", trackedEntityId)
+    .eq("companyId", companyId)
     .eq("status", "Available");
 
   if (updateResponse.error) {

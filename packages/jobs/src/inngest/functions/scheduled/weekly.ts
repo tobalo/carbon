@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { NotificationEvent } from "@carbon/notifications";
 import { Edition } from "@carbon/utils";
 import { inngest } from "../../client";
@@ -7,7 +7,7 @@ export const weeklyFunction = inngest.createFunction(
   { id: "weekly", retries: 2 },
   { cron: "0 21 * * 0" },
   async ({ step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
     await step.run("cloud-cleanup", async () => {
       console.log(`Starting weekly tasks: ${new Date().toISOString()}`);
 
@@ -29,9 +29,10 @@ export const weeklyFunction = inngest.createFunction(
           console.log(`Bypass list: ${bypassList}`);
 
           // Get all companies
-          const { data: companies, error: companiesError } = await serviceRole
+          const { data: companies, error: companiesError } = await serviceClient
             .from("company")
-            .select("id, name, createdAt");
+            .select("id, name, createdAt")
+            .eq("active", true);
 
           if (companiesError) {
             console.error(
@@ -43,7 +44,7 @@ export const weeklyFunction = inngest.createFunction(
           console.log(`Found ${companies?.length || 0} companies`);
 
           // Get all company plans
-          const { data: companyPlans, error: plansError } = await serviceRole
+          const { data: companyPlans, error: plansError } = await serviceClient
             .from("companyPlan")
             .select("id, stripeSubscriptionStatus");
 
@@ -92,9 +93,15 @@ export const weeklyFunction = inngest.createFunction(
 
           console.log(`Companies to delete: ${companiesToDelete.length}`);
 
-          const { error: deletedCompaniesError } = await serviceRole
+          if (companiesToDelete.length === 0) {
+            console.log("No companies to delete");
+            return;
+          }
+
+          const { error: deletedCompaniesError } = await serviceClient
             .from("company")
             .delete()
+            .eq("active", true)
             .in(
               "id",
               companiesToDelete.map((company) => company.id)
@@ -114,7 +121,7 @@ export const weeklyFunction = inngest.createFunction(
 
           // Drop search index tables for companies being deleted
           for (const company of companiesToDelete) {
-            const { error: dropSearchError } = await serviceRole.rpc(
+            const { error: dropSearchError } = await serviceClient.rpc(
               "drop_company_search_index",
               { p_company_id: company.id }
             );
@@ -143,7 +150,7 @@ export const weeklyFunction = inngest.createFunction(
       try {
         // Get all companies with training assignments
         const { data: companiesWithTrainings, error: companiesError } =
-          await serviceRole
+          await serviceClient
             .from("trainingAssignment")
             .select("companyId")
             .limit(1000);
@@ -159,15 +166,32 @@ export const weeklyFunction = inngest.createFunction(
           ...new Set(companiesWithTrainings?.map((c) => c.companyId) ?? [])
         ];
 
+        const { data: activeCompanies, error: activeCompaniesError } =
+          await serviceClient
+            .from("company")
+            .select("id")
+            .eq("active", true)
+            .in("id", uniqueCompanyIds);
+
+        if (activeCompaniesError) {
+          console.error(
+            `Failed to filter active training companies: ${activeCompaniesError.message}`
+          );
+          return;
+        }
+
+        const activeCompanyIds =
+          activeCompanies?.map((company) => company.id) ?? [];
+
         console.log(
-          `Found ${uniqueCompanyIds.length} companies with training assignments`
+          `Found ${activeCompanyIds.length} active companies with training assignments`
         );
 
         let totalNotifications = 0;
 
-        for (const companyId of uniqueCompanyIds) {
+        for (const companyId of activeCompanyIds) {
           const { data: trainingStatus, error: trainingsError } =
-            await serviceRole.rpc("get_training_assignment_status", {
+            await serviceClient.rpc("get_training_assignment_status", {
               p_company_id: companyId
             });
 
@@ -180,7 +204,9 @@ export const weeklyFunction = inngest.createFunction(
 
           // Filter to pending/overdue and dedupe by employee+assignment
           const outstandingTrainings = (trainingStatus ?? []).filter(
-            (t) => t.status === "Pending" || t.status === "Overdue"
+            (t: any) =>
+              t.companyId === companyId &&
+              (t.status === "Pending" || t.status === "Overdue")
           );
 
           // Group by trainingAssignmentId to send one notification per assignment per employee

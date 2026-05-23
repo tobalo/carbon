@@ -1,6 +1,6 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import { QualityKPIs } from "~/modules/quality/quality.models";
 import { getCompanySettings } from "~/modules/settings";
@@ -273,13 +273,28 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
       const supplierIssues = await client
         .from("nonConformanceSupplier")
-        .select("nonConformanceId, supplier:supplier(id, name)")
+        .select("nonConformanceId, supplierId")
         .eq("companyId", companyId)
         .in("nonConformanceId", issueIds as string[]);
 
+      const supplierIds = [
+        ...new Set(supplierIssues.data?.map((si) => si.supplierId) ?? [])
+      ];
+      const suppliers =
+        supplierIds.length > 0
+          ? await client
+              .from("supplier")
+              .select("id, name")
+              .eq("companyId", companyId)
+              .in("id", supplierIds)
+          : { data: [] };
+      const suppliersById = new Map(
+        suppliers.data?.map((supplier) => [supplier.id, supplier] as const)
+      );
+
       const counts: Record<string, { name: string; count: number }> = {};
       for (const si of supplierIssues.data ?? []) {
-        const supplier = si.supplier as { id: string; name: string } | null;
+        const supplier = suppliersById.get(si.supplierId);
         if (!supplier) continue;
         if (!counts[supplier.id]) {
           counts[supplier.id] = { name: supplier.name, count: 0 };
@@ -381,7 +396,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 // --- Query Helpers ---
 
 async function getIssuesQuery(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     companyId,
     issueTypeId
@@ -405,7 +420,7 @@ async function getIssuesQuery(
 }
 
 async function getFilteredIssuesQuery(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     companyId,
     start,
@@ -435,7 +450,7 @@ async function getFilteredIssuesQuery(
 }
 
 async function getIssueTypesMap(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ): Promise<Map<string, string>> {
   const result = await client

@@ -11,7 +11,7 @@ import {
   VStack
 } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
 import { Hidden, Input, Number, Process, Submit } from "~/components/Form";
@@ -34,7 +34,7 @@ const ProcedureForm = ({
 }: ProcedureFormProps) => {
   const permissions = usePermissions();
   const { t } = useLingui();
-  const fetcher = useFetcher<PostgrestResponse<{ id: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string }>>();
 
   const isEditing = initialValues.id !== undefined;
   const isDisabled = isEditing

@@ -1,5 +1,8 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type {
   ClientLoaderFunctionArgs,
@@ -20,6 +23,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return {
       data: []
     };
+
+  assertCustomerAccountScope(authorized, customerId);
 
   const locations = await getCustomerLocations(authorized.client, customerId);
   if (locations.error) {

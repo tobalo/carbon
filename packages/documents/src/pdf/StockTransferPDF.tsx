@@ -1,5 +1,5 @@
 import bwipjs from "@bwip-js/node";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { getAppUrl } from "@carbon/env";
 import { formatDate } from "@carbon/utils";
 import { Image, Text, View } from "@react-pdf/renderer";
@@ -9,9 +9,9 @@ import type { PDF } from "../types";
 import { Header, Summary, Template } from "./components";
 
 interface StockTransferPDFProps extends PDF {
-  stockTransfer: Database["public"]["Tables"]["stockTransfer"]["Row"];
-  stockTransferLines: Database["public"]["Views"]["stockTransferLines"]["Row"][];
-  location: Database["public"]["Tables"]["location"]["Row"];
+  stockTransfer: TableRow<"stockTransfer">;
+  stockTransferLines: TableRow<"stockTransferLines">[];
+  location: TableRow<"location">;
   thumbnails?: Record<string, string | null>;
 }
 
@@ -175,19 +175,19 @@ const StockTransferPDF = ({
 };
 
 function getLineQuantity(
-  line: Database["public"]["Views"]["stockTransferLines"]["Row"]
+  line: TableRow<"stockTransferLines">
 ) {
   return `${line.quantity} ${line.unitOfMeasure}`;
 }
 
 function getLineDescription(
-  line: Database["public"]["Views"]["stockTransferLines"]["Row"]
+  line: TableRow<"stockTransferLines">
 ) {
   return line.itemDescription;
 }
 
 function getLineDescriptionDetails(
-  line: Database["public"]["Views"]["stockTransferLines"]["Row"]
+  line: TableRow<"stockTransferLines">
 ) {
   return line.itemReadableId;
 }

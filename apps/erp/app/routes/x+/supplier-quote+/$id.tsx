@@ -1,6 +1,5 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { VStack } from "@carbon/react";
 import { msg } from "@lingui/core/macro";
@@ -33,19 +32,18 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { companyId, companyGroupId } = await requirePermissions(request, {
+  const { client, companyId, companyGroupId } = await requirePermissions(request, {
     view: "purchasing"
   });
 
   const { id } = params;
   if (!id) throw new Error("Could not find id");
-  const serviceRole = await getCarbonServiceRole();
 
   const [quote, lines, prices, siblingQuotes] = await Promise.all([
-    getSupplierQuote(serviceRole, id),
-    getSupplierQuoteLines(serviceRole, id),
-    getSupplierQuoteLinePricesByQuoteId(serviceRole, id),
-    getSiblingQuotesForQuote(serviceRole, id)
+    getSupplierQuote(client, id),
+    getSupplierQuoteLines(client, id),
+    getSupplierQuoteLinePricesByQuoteId(client, id),
+    getSiblingQuotesForQuote(client, id)
   ]);
 
   if (quote.error) {
@@ -55,12 +53,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     );
   }
 
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.supplierQuotes);
+  }
+
   const [supplierInteraction, presentationCurrency, supplier, companySettings] =
     await Promise.all([
-      getSupplierInteraction(serviceRole, quote.data.supplierInteractionId!),
-      getCurrencyByCode(serviceRole, companyGroupId, quote.data.currencyCode!),
-      getSupplier(serviceRole, quote.data.supplierId!),
-      getCompanySettings(serviceRole, companyId)
+      getSupplierInteraction(client, companyId, quote.data.supplierInteractionId!),
+      getCurrencyByCode(client, companyGroupId, quote.data.currencyCode!),
+      getSupplier(client, quote.data.supplierId!),
+      getCompanySettings(client, companyId)
     ]);
 
   if (supplierInteraction.error) {
@@ -93,9 +95,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       ) ?? [];
   // Compute default CC: use supplier's if set, otherwise company's
   const defaultCc =
-    // @ts-expect-error TS18048 - TODO: fix type
     supplier.data?.defaultCc?.length > 0
-      ? // @ts-expect-error TS18047 - TODO: fix type
+      ?
         supplier.data.defaultCc
       : (companySettings.data?.defaultSupplierCc ?? []);
 
@@ -104,7 +105,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     lines: lines.data ?? [],
     prices: prices.data ?? [],
     files: getSupplierInteractionDocuments(
-      serviceRole,
+      client,
       companyId,
       quote.data.supplierInteractionId!
     ),

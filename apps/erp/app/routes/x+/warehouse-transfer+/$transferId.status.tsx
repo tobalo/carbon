@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -47,8 +46,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     "Completed"
   ]);
   if (COMMITTING_STATUSES.has(status)) {
-    const serviceRole = getCarbonServiceRole();
-    const { data: lines } = await serviceRole
+    const { data: lines } = await client
       .from("warehouseTransferLine")
       .select(
         "id, itemId, fromStorageUnitId, toStorageUnitId, toLocationId, quantity"
@@ -57,7 +55,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .eq("companyId", companyId);
 
     const { violations, ruleNames } = await evaluateLinesForSurface({
-      client: serviceRole,
+      client,
       companyId,
       userId,
       surface: "warehouseTransfer",
@@ -85,7 +83,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     client,
     id,
     status,
-    userId
+    userId,
+    companyId
   );
 
   if (update.error) {

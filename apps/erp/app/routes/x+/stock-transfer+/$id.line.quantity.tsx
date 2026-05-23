@@ -1,3 +1,4 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, notFound, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
@@ -89,7 +90,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   // Call the post-stock-transfer function for inventory items
-  const { error: functionError } = await client.functions.invoke(
+  const { error: functionError } = await invokeFunction(
     "post-stock-transfer",
     {
       body: JSON.stringify({

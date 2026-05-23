@@ -21,7 +21,7 @@ import {
 import { useNavigate } from "react-router";
 import type { FlatTree, FlatTreeItem } from "~/components/TreeView";
 import { LevelLine, TreeView, useTree } from "~/components/TreeView";
-import { useRealtime, useSettings } from "~/hooks";
+import { usePollingRevalidation, useSettings } from "~/hooks";
 import type { Chart } from "../../types";
 
 type ChartOfAccountsTreeProps = {
@@ -74,7 +74,7 @@ function formatCurrency(value: number): string {
 }
 
 const ChartOfAccountsTree = memo(({ data }: ChartOfAccountsTreeProps) => {
-  useRealtime("journal");
+  usePollingRevalidation("journal");
   const settings = useSettings();
   const accountingEnabled = (settings as any).accountingEnabled ?? false;
   const parentRef = useRef<HTMLDivElement>(null);

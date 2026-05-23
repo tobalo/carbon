@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import {
   Badge,
   Button,
@@ -43,8 +43,8 @@ import type { SupplierQuoteLine, SupplierQuoteLinePrice } from "../../types";
 type SelectedLine = z.infer<typeof selectedLineSchema>;
 
 // Type for quotes returned from comparison API (includes supplier relation)
-type ComparisonQuote = Database["public"]["Tables"]["supplierQuote"]["Row"] & {
-  supplier: Database["public"]["Tables"]["supplier"]["Row"] | null;
+type ComparisonQuote = TableRow<"supplierQuote"> & {
+  supplier: TableRow<"supplier"> | null;
 };
 
 type ComparisonData = {

@@ -1,17 +1,22 @@
-import type { Database, Json } from "@carbon/database";
+import { invokeFunction } from "@carbon/auth/functions.server";
+import type {
+  Json,
+  QueryDatabase,
+  TableUpdate
+} from "@carbon/database/schema";
 import { fetchAllFromTable } from "@carbon/database";
-import type { Kysely, KyselyDatabase } from "@carbon/database/client";
 import { getPurchaseOrderStatus } from "@carbon/utils";
+import { listObjects, toStorageFileObject } from "@carbon/storage";
 import { getLocalTimeZone, today } from "@internationalized/date";
 import type {
-  PostgrestSingleResponse,
-  SupabaseClient
-} from "@supabase/supabase-js";
+  QuerySingleResponse,
+  CarbonDatabaseClient
+} from "@carbon/database/query-client";
 import type { z } from "zod";
 import { getEmployeeJob } from "~/modules/people";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import { getCurrencyByCode } from "../accounting/accounting.service";
 import type { PurchaseInvoice } from "../invoicing/types";
 import {
@@ -42,7 +47,7 @@ import type {
 import type { PurchaseOrder, PurchasingRFQ, SupplierQuote } from "./types";
 
 export async function closePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string,
   userId: string
 ) {
@@ -59,7 +64,7 @@ export async function closePurchaseOrder(
 }
 
 export async function convertSupplierQuoteToOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   payload: {
     id: string;
     selectedLines: z.infer<typeof selectedLinesValidator>;
@@ -67,23 +72,23 @@ export async function convertSupplierQuoteToOrder(
     userId: string;
   }
 ) {
-  return client.functions.invoke<{ convertedId: string }>("convert", {
+  return invokeFunction<{ convertedId: string }>("convert", {
     body: {
       type: "supplierQuoteToPurchaseOrder",
       ...payload
-    }
+    },
   });
 }
 
 export async function deletePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string
 ) {
   return client.from("purchaseOrder").delete().eq("id", purchaseOrderId);
 }
 
 export async function deletePurchaseOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderLineId: string
 ) {
   return client
@@ -93,14 +98,14 @@ export async function deletePurchaseOrderLine(
 }
 
 export async function deleteSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client.from("supplier").delete().eq("id", supplierId);
 }
 
 export async function deleteSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string,
   supplierContactId: string
 ) {
@@ -124,7 +129,7 @@ export async function deleteSupplierContact(
 }
 
 export async function deleteSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string,
   supplierLocationId: string
 ) {
@@ -148,50 +153,56 @@ export async function deleteSupplierLocation(
 }
 
 export async function deleteSupplierProcess(
-  client: SupabaseClient<Database>,
-  supplierProcessId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  supplierProcessId: string,
+  supplierId?: string
 ) {
-  return client
+  let query = client
     .from("supplierProcess")
     .delete()
-    .eq("id", supplierProcessId)
-    .single();
+    .eq("id", supplierProcessId);
+
+  if (supplierId) query = query.eq("supplierId", supplierId);
+
+  return query.single();
 }
 
 export async function deleteSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string
 ) {
   return client.from("supplierQuote").delete().eq("id", supplierQuoteId);
 }
 
 export async function deleteSupplierQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("supplierQuoteLine").delete().eq("id", id);
 }
 
 export async function deleteSupplierType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierTypeId: string
 ) {
   return client.from("supplierType").delete().eq("id", supplierTypeId);
 }
 
 export async function getPurchaseOrder(
-  client: SupabaseClient<Database>,
-  purchaseOrderId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  purchaseOrderId: string,
+  companyId?: string
 ) {
-  return client
+  let query = client
     .from("purchaseOrders")
     .select("*")
-    .eq("id", purchaseOrderId)
-    .single();
+    .eq("id", purchaseOrderId);
+  if (companyId) query = query.eq("companyId", companyId);
+  return query.single();
 }
 
 export async function finalizeSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string,
   userId: string
 ) {
@@ -212,7 +223,7 @@ export async function finalizeSupplierQuote(
 }
 
 export async function getPurchaseOrders(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -243,18 +254,20 @@ export async function getPurchaseOrders(
 }
 
 export async function getPurchaseOrderDelivery(
-  client: SupabaseClient<Database>,
-  purchaseOrderId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  purchaseOrderId: string,
+  companyId?: string
 ) {
-  return client
+  let query = client
     .from("purchaseOrderDelivery")
     .select("*")
-    .eq("id", purchaseOrderId)
-    .single();
+    .eq("id", purchaseOrderId);
+  if (companyId) query = query.eq("companyId", companyId);
+  return query.single();
 }
 
 export async function getPurchaseOrderLocations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string
 ) {
   return client
@@ -265,7 +278,7 @@ export async function getPurchaseOrderLocations(
 }
 
 export async function getPurchaseOrderPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string
 ) {
   return client
@@ -276,7 +289,7 @@ export async function getPurchaseOrderPayment(
 }
 
 export async function getPurchaseOrderLines(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string
 ) {
   return client
@@ -288,7 +301,7 @@ export async function getPurchaseOrderLines(
 }
 
 export async function getPurchaseOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderLineId: string
 ) {
   return client
@@ -299,7 +312,7 @@ export async function getPurchaseOrderLine(
 }
 
 export async function getPurchaseOrderSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -310,7 +323,7 @@ export async function getPurchaseOrderSuppliers(
 }
 
 export async function getPurchasingDocumentsAssignedToMe(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   companyId: string
 ) {
@@ -351,7 +364,7 @@ export async function getPurchasingDocumentsAssignedToMe(
 }
 
 export async function getPurchasingPlanning(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string,
   companyId: string,
   periods: string[],
@@ -385,7 +398,7 @@ export async function getPurchasingPlanning(
 }
 
 export async function getPurchasingTerms(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -396,10 +409,17 @@ export async function getPurchasingTerms(
 }
 
 export async function getSupplier(
-  client: SupabaseClient<Database>,
-  supplierId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  supplierId: string,
+  companyId?: string
 ) {
-  return client.from("suppliers").select("*").eq("id", supplierId).single();
+  let query = client.from("suppliers").select("*").eq("id", supplierId);
+
+  if (companyId) {
+    query = query.eq("companyId", companyId);
+  }
+
+  return query.single();
 }
 
 type ApprovalContext = {
@@ -413,14 +433,14 @@ type ApprovalContext = {
 };
 
 export async function getSupplierApprovalContext(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string,
   status: string | null,
   companyId: string,
   userId: string
 ): Promise<ApprovalContext> {
   const latest = await getLatestApprovalRequestForDocument(
-    serviceRole,
+    serviceClient,
     "supplier",
     supplierId
   );
@@ -428,7 +448,7 @@ export async function getSupplierApprovalContext(
   const req = latest.data;
 
   const canApprove = await canApproveRequest(
-    serviceRole,
+    serviceClient,
     {
       amount: req?.amount ?? null,
       documentType: "supplier",
@@ -439,7 +459,7 @@ export async function getSupplierApprovalContext(
 
   // Look for the latest terminal decision (Approved or Rejected)
   let decision: ApprovalContext["decision"] = null;
-  const terminalRequest = await serviceRole
+  const terminalRequest = await serviceClient
     .from("approvalRequest")
     .select("status, decisionBy, decisionAt")
     .eq("documentType", "supplier")
@@ -478,20 +498,24 @@ export async function getSupplierApprovalContext(
 }
 
 export async function getSupplierContact(
-  client: SupabaseClient<Database>,
-  supplierContactId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  supplierContactId: string,
+  supplierId?: string
 ) {
-  return client
+  let query = client
     .from("supplierContact")
     .select(
       "*, contact(id, firstName, lastName, email, mobilePhone, homePhone, workPhone, fax, title, notes)"
     )
-    .eq("id", supplierContactId)
-    .single();
+    .eq("id", supplierContactId);
+
+  if (supplierId) query = query.eq("supplierId", supplierId);
+
+  return query.single();
 }
 
 export async function getSupplierContacts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client
@@ -503,10 +527,11 @@ export async function getSupplierContacts(
 }
 
 export async function getSupplierInteraction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
+  companyId: string,
   opportunityId: string | null
 ): Promise<
-  PostgrestSingleResponse<{
+  QuerySingleResponse<{
     id: string;
     companyId: string;
     purchasingRfq: PurchasingRFQ | null;
@@ -516,7 +541,6 @@ export async function getSupplierInteraction(
   } | null>
 > {
   if (!opportunityId) {
-    // @ts-expect-error
     return {
       data: null,
       error: null
@@ -526,14 +550,15 @@ export async function getSupplierInteraction(
   const response = await client.rpc(
     "get_supplier_interaction_with_related_records",
     {
-      supplier_interaction_id: opportunityId
+      supplier_interaction_id: opportunityId,
+      company_id: companyId
     }
   );
 
   return {
     data: response.data?.[0],
     error: response.error
-  } as unknown as PostgrestSingleResponse<{
+  } as unknown as QuerySingleResponse<{
     id: string;
     companyId: string;
     purchasingRfq: PurchasingRFQ;
@@ -544,54 +569,53 @@ export async function getSupplierInteraction(
 }
 
 export async function getSupplierInteractionDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   interactionId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/supplier-interaction/${interactionId}`);
-
-  if (result.error) {
+  try {
+    const objects = await listObjects({
+      companyId,
+      prefix: `${companyId}/supplier-interaction/${interactionId}`
+    });
+    return objects.map((object) => ({
+      ...toStorageFileObject(object, "private"),
+      bucket: "supplier-interaction"
+    }));
+  } catch (error) {
     console.error(
       "Failed to list supplier interaction documents",
-      result.error
+      error
     );
     return [];
   }
-
-  return (
-    result.data?.map((f) => ({ ...f, bucket: "supplier-interaction" })) ?? []
-  );
 }
 
 export async function getSupplierInteractionLineDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   lineId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/supplier-interaction-line/${lineId}`);
-
-  if (result.error) {
+  try {
+    const objects = await listObjects({
+      companyId,
+      prefix: `${companyId}/supplier-interaction-line/${lineId}`
+    });
+    return objects.map((object) => ({
+      ...toStorageFileObject(object, "private"),
+      bucket: "supplier-interaction-line"
+    }));
+  } catch (error) {
     console.error(
       "Failed to list supplier interaction line documents",
-      result.error
+      error
     );
     return [];
   }
-
-  return (
-    result.data?.map((f) => ({
-      ...f,
-      bucket: "supplier-interaction-line"
-    })) ?? []
-  );
 }
 
 export async function getSupplierLocations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client
@@ -603,20 +627,26 @@ export async function getSupplierLocations(
 }
 
 export async function getSupplierLocation(
-  client: SupabaseClient<Database>,
-  supplierContactId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  supplierLocationId: string,
+  supplierId?: string,
+  companyId?: string
 ) {
-  return client
+  let query = client
     .from("supplierLocation")
     .select(
       "*, address(id, addressLine1, addressLine2, city, stateProvince, country(alpha2, name), postalCode)"
     )
-    .eq("id", supplierContactId)
-    .single();
+    .eq("id", supplierLocationId);
+
+  if (supplierId) query = query.eq("supplierId", supplierId);
+  if (companyId) query = query.eq("companyId", companyId);
+
+  return query.single();
 }
 
 export async function getSupplierPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client
@@ -627,7 +657,7 @@ export async function getSupplierPayment(
 }
 
 export async function getSupplierProcessById(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierProcessId: string
 ) {
   return client
@@ -638,17 +668,24 @@ export async function getSupplierProcessById(
 }
 
 export async function getSupplierProcessesByProcess(
-  client: SupabaseClient<Database>,
-  processId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  processId: string,
+  supplierId?: string | null
 ) {
-  return client
+  let query = client
     .from("supplierProcesses")
     .select("*")
     .eq("processId", processId);
+
+  if (supplierId) {
+    query = query.eq("supplierId", supplierId);
+  }
+
+  return query;
 }
 
 export async function getSupplierProcessesBySupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client
@@ -658,7 +695,7 @@ export async function getSupplierProcessesBySupplier(
 }
 
 export async function getSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string
 ) {
   return client
@@ -669,7 +706,7 @@ export async function getSupplierQuote(
 }
 
 export async function getSupplierQuoteByInteractionId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   interactionId: string
 ) {
   return client
@@ -680,18 +717,36 @@ export async function getSupplierQuoteByInteractionId(
 }
 
 export async function getSupplierQuoteByExternalLinkId(
-  client: SupabaseClient<Database>,
-  externalLinkId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  externalLinkId: string,
+  scope?: {
+    companyId?: string;
+    documentId?: string;
+    supplierId?: string | null;
+  }
 ) {
-  return client
+  let query = client
     .from("supplierQuote")
     .select("*")
-    .eq("externalLinkId", externalLinkId)
-    .single();
+    .eq("externalLinkId", externalLinkId);
+
+  if (scope?.companyId) {
+    query = query.eq("companyId", scope.companyId);
+  }
+
+  if (scope?.documentId) {
+    query = query.eq("id", scope.documentId);
+  }
+
+  if (scope?.supplierId) {
+    query = query.eq("supplierId", scope.supplierId);
+  }
+
+  return query.single();
 }
 
 export async function getSupplierQuotes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -715,7 +770,7 @@ export async function getSupplierQuotes(
 }
 
 export async function getSupplierQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteLineId: string
 ) {
   return client
@@ -726,7 +781,7 @@ export async function getSupplierQuoteLine(
 }
 
 export async function getSupplierQuoteLines(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string
 ) {
   return client
@@ -737,7 +792,7 @@ export async function getSupplierQuoteLines(
 }
 
 export async function getSupplierQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteLineId: string
 ) {
   return client
@@ -747,7 +802,7 @@ export async function getSupplierQuoteLinePrices(
 }
 
 export async function getSupplierQuoteLinePricesByQuoteId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string
 ) {
   return client
@@ -758,7 +813,7 @@ export async function getSupplierQuoteLinePricesByQuoteId(
 }
 
 export async function getSupplierQuotesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -770,7 +825,7 @@ export async function getSupplierQuotesList(
 }
 
 export async function getSupplierShipping(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client
@@ -781,12 +836,13 @@ export async function getSupplierShipping(
 }
 
 export async function getSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
     type: string | null;
     status: string | null;
+    supplierId?: string | null;
   }
 ) {
   let query = client
@@ -798,6 +854,10 @@ export async function getSuppliers(
 
   if (args.search) {
     query = query.ilike("name", `%${args.search}%`);
+  }
+
+  if (args.supplierId) {
+    query = query.eq("id", args.supplierId);
   }
 
   if (args.type) {
@@ -818,7 +878,7 @@ export async function getSuppliers(
 }
 
 export async function getSuppliersList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -830,7 +890,7 @@ export async function getSuppliersList(
 }
 
 export async function getSupplierType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierTypeId: string
 ) {
   return client
@@ -841,7 +901,7 @@ export async function getSupplierType(
 }
 
 export async function getSupplierTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -864,7 +924,7 @@ export async function getSupplierTypes(
 }
 
 export async function getSupplierTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -875,7 +935,7 @@ export async function getSupplierTypesList(
 }
 
 export async function insertSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplier: Omit<z.infer<typeof supplierValidator>, "id"> & {
     companyId: string;
     createdBy: string;
@@ -886,7 +946,7 @@ export async function insertSupplier(
 }
 
 export async function insertSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierContact: {
     supplierId: string;
     companyId: string;
@@ -931,7 +991,7 @@ export async function insertSupplierContact(
 }
 
 export async function insertSupplierInteraction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   supplierId: string
 ) {
@@ -943,7 +1003,7 @@ export async function insertSupplierInteraction(
 }
 
 export async function insertSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierLocation: {
     supplierId: string;
     companyId: string;
@@ -990,7 +1050,7 @@ export async function insertSupplierLocation(
 }
 
 export async function finalizePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string,
   userId: string
 ) {
@@ -1000,7 +1060,7 @@ export async function finalizePurchaseOrder(
   ]);
   const { status } = getPurchaseOrderStatus(lines.data || []);
 
-  const updateData: Database["public"]["Tables"]["purchaseOrder"]["Update"] = {
+  const updateData: TableUpdate<"purchaseOrder"> = {
     status,
     updatedAt: today(getLocalTimeZone()).toString(),
     updatedBy: userId
@@ -1018,7 +1078,7 @@ export async function finalizePurchaseOrder(
 }
 
 export async function sendSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string,
   userId: string
 ) {
@@ -1039,7 +1099,7 @@ export async function sendSupplierQuote(
 }
 
 export async function updatePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrder: {
     id: string;
     status: (typeof purchaseOrderStatusType)[number];
@@ -1053,7 +1113,7 @@ export async function updatePurchaseOrder(
 }
 
 export async function updatePurchaseOrderExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   data: {
     id: string;
     exchangeRate: number;
@@ -1069,7 +1129,7 @@ export async function updatePurchaseOrderExchangeRate(
 }
 
 export async function updatePurchaseOrderFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     favorite: boolean;
@@ -1091,19 +1151,22 @@ export async function updatePurchaseOrderFavorite(
 }
 
 export async function updatePurchaseOrderStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   update: {
     id: string;
     status: (typeof purchaseOrderStatusType)[number];
     assignee: null | undefined;
     updatedBy: string;
+    companyId?: string;
   }
 ) {
-  return client.from("purchaseOrder").update(update).eq("id", update.id);
+  const { id, companyId, ...data } = update;
+  const query = client.from("purchaseOrder").update(data).eq("id", id);
+  return companyId ? query.eq("companyId", companyId) : query;
 }
 
 export async function updateSupplierAccounting(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierAccounting: z.infer<typeof supplierAccountingValidator> & {
     updatedBy: string;
   }
@@ -1115,7 +1178,7 @@ export async function updateSupplierAccounting(
 }
 
 export async function updateSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierContact: {
     contactId: string;
     contact: z.infer<typeof supplierContactValidator>;
@@ -1145,7 +1208,7 @@ export async function updateSupplierContact(
 }
 
 export async function updateSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierLocation: {
     addressId: string;
     name: string;
@@ -1182,7 +1245,7 @@ export async function updateSupplierLocation(
 }
 
 export async function updateSupplierPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierPayment: z.infer<typeof supplierPaymentValidator> & {
     updatedBy: string;
     customFields?: Json;
@@ -1195,7 +1258,7 @@ export async function updateSupplierPayment(
 }
 
 export async function updateSupplierQuoteExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   data: {
     id: string;
     exchangeRate: number;
@@ -1211,7 +1274,7 @@ export async function updateSupplierQuoteExchangeRate(
 }
 
 export async function updateSupplierQuoteFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     favorite: boolean;
@@ -1233,7 +1296,7 @@ export async function updateSupplierQuoteFavorite(
 }
 
 export async function updateSupplierQuoteStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   update: {
     id: string;
     status: (typeof supplierQuoteStatusType)[number];
@@ -1245,7 +1308,7 @@ export async function updateSupplierQuoteStatus(
 }
 
 export async function updateSupplierShipping(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierShipping: z.infer<typeof supplierShippingValidator> & {
     updatedBy: string;
     customFields?: Json;
@@ -1258,7 +1321,7 @@ export async function updateSupplierShipping(
 }
 
 export async function getSupplierTax(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierId: string
 ) {
   return client
@@ -1269,7 +1332,7 @@ export async function getSupplierTax(
 }
 
 export async function updateSupplierTax(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierTax: z.infer<typeof supplierTaxValidator> & {
     companyId: string;
     updatedBy: string;
@@ -1283,7 +1346,7 @@ export async function updateSupplierTax(
 }
 
 export async function upsertPurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrder:
     | (Omit<
         z.infer<typeof purchaseOrderValidator>,
@@ -1419,7 +1482,7 @@ export async function upsertPurchaseOrder(
 }
 
 export async function upsertPurchaseOrderDelivery(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderDelivery:
     | (z.infer<typeof purchaseOrderDeliveryValidator> & {
         companyId: string;
@@ -1448,7 +1511,7 @@ export async function upsertPurchaseOrderDelivery(
 }
 
 export async function upsertPurchaseOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderLine:
     | (Omit<z.infer<typeof purchaseOrderLineValidator>, "id"> & {
         companyId: string;
@@ -1488,22 +1551,27 @@ export async function upsertPurchaseOrderLine(
 }
 
 export async function updatePurchaseOrderLineOrder(
-  db: Kysely<KyselyDatabase>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: { id: string; sortOrder: number; updatedBy: string }[]
 ) {
-  return db.transaction().execute(async (trx) => {
-    for (const { id, sortOrder, updatedBy } of updates) {
-      await trx
-        .updateTable("purchaseOrderLine")
-        .set({ sortOrder, updatedBy })
-        .where("id", "=", id)
-        .execute();
+  const results = await Promise.all(
+    updates.map(({ id, sortOrder, updatedBy }) =>
+      client
+        .from("purchaseOrderLine")
+        .update({ sortOrder, updatedBy })
+        .eq("id", id)
+    )
+  );
+
+  for (const result of results) {
+    if (result.error) {
+      throw result.error;
     }
-  });
+  }
 }
 
 export async function upsertPurchaseOrderPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderPayment:
     | (z.infer<typeof purchaseOrderPaymentValidator> & {
         createdBy: string;
@@ -1531,7 +1599,7 @@ export async function upsertPurchaseOrderPayment(
 }
 
 export async function upsertSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplier:
     | (Omit<z.infer<typeof supplierValidator>, "id"> & {
         companyId: string;
@@ -1563,7 +1631,7 @@ export async function upsertSupplier(
 }
 
 export async function upsertSupplierProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierProcess:
     | (Omit<z.infer<typeof supplierProcessValidator>, "id"> & {
         companyId: string;
@@ -1587,12 +1655,13 @@ export async function upsertSupplierProcess(
     .from("supplierProcess")
     .update(sanitize(supplierProcess))
     .eq("id", supplierProcess.id)
+    .eq("supplierId", supplierProcess.supplierId)
     .select("id")
     .single();
 }
 
 export async function upsertSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuote:
     | (Omit<
         z.infer<typeof supplierQuoteValidator>,
@@ -1727,7 +1796,7 @@ export async function upsertSupplierQuote(
 }
 
 export async function upsertSupplierQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteLine:
     | (Omit<z.infer<typeof supplierQuoteLineValidator>, "id"> & {
         companyId: string;
@@ -1773,22 +1842,27 @@ export async function upsertSupplierQuoteLine(
 }
 
 export async function updateSupplierQuoteLineOrder(
-  db: Kysely<KyselyDatabase>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: { id: string; sortOrder: number; updatedBy: string }[]
 ) {
-  return db.transaction().execute(async (trx) => {
-    for (const { id, sortOrder, updatedBy } of updates) {
-      await trx
-        .updateTable("supplierQuoteLine")
-        .set({ sortOrder, updatedBy })
-        .where("id", "=", id)
-        .execute();
+  const results = await Promise.all(
+    updates.map(({ id, sortOrder, updatedBy }) =>
+      client
+        .from("supplierQuoteLine")
+        .update({ sortOrder, updatedBy })
+        .eq("id", id)
+    )
+  );
+
+  for (const result of results) {
+    if (result.error) {
+      throw result.error;
     }
-  });
+  }
 }
 
 export async function upsertSupplierType(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierType:
     | (Omit<z.infer<typeof supplierTypeValidator>, "id"> & {
         companyId: string;
@@ -1820,14 +1894,14 @@ export async function upsertSupplierType(
 // ============================================================
 
 export async function deletePurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string
 ) {
   return client.from("purchasingRfq").delete().eq("id", purchasingRfqId);
 }
 
 export async function deletePurchasingRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqLineId: string
 ) {
   return client
@@ -1837,14 +1911,14 @@ export async function deletePurchasingRFQLine(
 }
 
 export async function getPurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("purchasingRfqs").select("*").eq("id", id).single();
 }
 
 export async function getPurchasingRFQs(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1866,7 +1940,7 @@ export async function getPurchasingRFQs(
 }
 
 export async function getPurchasingRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   lineId: string
 ) {
   return client
@@ -1877,7 +1951,7 @@ export async function getPurchasingRFQLine(
 }
 
 export async function getPurchasingRFQLines(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string
 ) {
   return client
@@ -1888,17 +1962,47 @@ export async function getPurchasingRFQLines(
 }
 
 export async function getPurchasingRFQSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string
 ) {
-  return client
+  const rfqSuppliers = await client
     .from("purchasingRfqSupplier")
-    .select("*, supplier:supplierId(id, name)")
+    .select("*")
     .eq("purchasingRfqId", purchasingRfqId);
+
+  if (rfqSuppliers.error || !rfqSuppliers.data) {
+    return rfqSuppliers;
+  }
+
+  const supplierIds = [
+    ...new Set(rfqSuppliers.data.map((row) => row.supplierId))
+  ];
+  const companyIds = [
+    ...new Set(rfqSuppliers.data.map((row) => row.companyId).filter(Boolean))
+  ];
+  const suppliers =
+    supplierIds.length > 0
+      ? await client
+          .from("supplier")
+          .select("id, name")
+          .in("id", supplierIds)
+          .in("companyId", companyIds)
+      : { data: [] };
+  const suppliersById = new Map(
+    suppliers.data?.map((supplier) => [supplier.id, supplier] as const) ?? []
+  );
+
+  return {
+    ...rfqSuppliers,
+    data: rfqSuppliers.data.map((row) => ({
+      ...row,
+      supplier: suppliersById.get(row.supplierId) ?? null
+    }))
+  };
 }
 
 export async function upsertPurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfq: {
     id?: string;
     rfqId: string;
@@ -1929,7 +2033,7 @@ export async function upsertPurchasingRFQ(
 }
 
 export async function upsertPurchasingRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqLine:
     | {
         purchasingRfqId: string;
@@ -1975,22 +2079,27 @@ export async function upsertPurchasingRFQLine(
 }
 
 export async function updatePurchasingRFQLineOrder(
-  db: Kysely<KyselyDatabase>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: { id: string; sortOrder: number; updatedBy: string }[]
 ) {
-  return db.transaction().execute(async (trx) => {
-    for (const { id, sortOrder, updatedBy } of updates) {
-      await trx
-        .updateTable("purchasingRfqLine")
-        .set({ order: sortOrder, updatedBy })
-        .where("id", "=", id)
-        .execute();
+  const results = await Promise.all(
+    updates.map(({ id, sortOrder, updatedBy }) =>
+      client
+        .from("purchasingRfqLine")
+        .update({ order: sortOrder, updatedBy })
+        .eq("id", id)
+    )
+  );
+
+  for (const result of results) {
+    if (result.error) {
+      throw result.error;
     }
-  });
+  }
 }
 
 export async function upsertPurchasingRFQSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string,
   supplierIds: string[],
   companyId: string,
@@ -2021,7 +2130,7 @@ export async function upsertPurchasingRFQSuppliers(
 }
 
 export async function updatePurchasingRFQStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     status: (typeof purchasingRfqStatusType)[number];
@@ -2043,7 +2152,7 @@ export async function updatePurchasingRFQStatus(
 }
 
 export async function getLinkedSupplierQuotes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string
 ) {
   return client
@@ -2058,7 +2167,7 @@ export async function getLinkedSupplierQuotes(
 }
 
 export async function getLinkedPurchasingRfqs(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string
 ) {
   return client
@@ -2073,7 +2182,7 @@ export async function getLinkedPurchasingRfqs(
 }
 
 export async function getLinkedPurchasingRfqsForInteraction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierInteractionId: string
 ) {
   // First get all supplier quote IDs in this interaction
@@ -2102,7 +2211,7 @@ export async function getLinkedPurchasingRfqsForInteraction(
 
 // Get sibling quotes (quotes sharing any RFQ with current quote)
 export async function getSiblingQuotesForQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   supplierQuoteId: string
 ) {
   // First get all RFQ IDs linked to this quote
@@ -2132,7 +2241,7 @@ export async function getSiblingQuotesForQuote(
 
 // Direct Order→RFQ lookup (more efficient than going through interaction)
 export async function getLinkedPurchasingRfqsForOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchaseOrderId: string
 ) {
   return client
@@ -2147,7 +2256,7 @@ export async function getLinkedPurchasingRfqsForOrder(
 }
 
 export async function getSupplierQuotesForComparison(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string
 ) {
   // 1. Get all supplier quote IDs linked to this RFQ with supplier info
@@ -2210,11 +2319,41 @@ export async function getSupplierQuotesForComparison(
 
 // Get RFQ suppliers with their supplier info
 export async function getPurchasingRFQSuppliersWithLinks(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   purchasingRfqId: string
 ) {
-  return client
+  const rfqSuppliers = await client
     .from("purchasingRfqSupplier")
-    .select("*, supplier:supplierId(id, name)")
+    .select("*")
     .eq("purchasingRfqId", purchasingRfqId);
+
+  if (rfqSuppliers.error || !rfqSuppliers.data) {
+    return rfqSuppliers;
+  }
+
+  const supplierIds = [
+    ...new Set(rfqSuppliers.data.map((row) => row.supplierId))
+  ];
+  const companyIds = [
+    ...new Set(rfqSuppliers.data.map((row) => row.companyId).filter(Boolean))
+  ];
+  const suppliers =
+    supplierIds.length > 0
+      ? await client
+          .from("supplier")
+          .select("id, name")
+          .in("id", supplierIds)
+          .in("companyId", companyIds)
+      : { data: [] };
+  const suppliersById = new Map(
+    suppliers.data?.map((supplier) => [supplier.id, supplier] as const) ?? []
+  );
+
+  return {
+    ...rfqSuppliers,
+    data: rfqSuppliers.data.map((row) => ({
+      ...row,
+      supplier: suppliersById.get(row.supplierId) ?? null
+    }))
+  };
 }

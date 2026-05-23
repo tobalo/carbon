@@ -10,7 +10,6 @@
 
 import process from "node:process";
 import { parseArgs } from "node:util";
-import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import {
   accountDefaults,
@@ -30,9 +29,8 @@ import {
   scrapReasons,
   sequences,
   unitOfMeasures
-} from "../supabase/functions/lib/seed.data.ts";
-import { getPostgresConnectionPool } from "./client.ts";
-import type { Database } from "./types.ts";
+} from "./seed.data.ts";
+import { getPostgresConnectionPool } from "./postgres.ts";
 
 // Load environment variables
 dotenv.config();
@@ -95,73 +93,39 @@ async function seedDev() {
 
   console.log(`\nSeeding development environment for: ${email}\n`);
 
-  // Initialize Supabase admin client
-  const supabaseAdmin = createClient<Database>(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  );
-
   // Initialize PostgreSQL connection pool
   const pgPool = getPostgresConnectionPool(1);
   const client = await pgPool.connect();
 
   try {
-    // Step 1: Check if user already exists (via Supabase Auth API - cannot be in transaction)
+    // Step 1: Check if user already exists.
     console.log("1. Checking for existing user...");
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u: any) => u.email === (email ?? "")
+    const existingUserResult = await client.query<{ id: string }>(
+      `SELECT id FROM "user" WHERE email = $1`,
+      [email]
     );
+    const existingUser = existingUserResult.rows[0];
 
     let userId: string;
 
     if (existingUser) {
       console.log(`   User ${email} already exists, using existing user.`);
       userId = existingUser.id;
-
-      // Update password to known value
-      const { error: updateError } =
-        await supabaseAdmin.auth.admin.updateUserById(userId, {
-          password: DEV_PASSWORD
-        });
-      if (updateError) {
-        console.warn(
-          `   Warning: Could not update password: ${updateError.message}`
-        );
-      } else {
-        console.log(`   Password updated to: ${DEV_PASSWORD}`);
-      }
     } else {
       // Create new user
       console.log("   Creating new user...");
-      const { data: newUser, error: createError } =
-        await supabaseAdmin.auth.admin.createUser({
-          email,
-          password: DEV_PASSWORD,
-          email_confirm: true,
-          app_metadata: {
-            role: "employee",
-            provider: "email",
-            providers: ["email"]
-          }
-        });
-
-      if (createError) {
-        throw new Error(`Failed to create user: ${createError.message}`);
-      }
-
-      if (!newUser.user) {
-        throw new Error("Failed to create user: No user returned");
-      }
-
-      userId = newUser.user.id;
+      const firstName = inferFirstNameFromEmail(email);
+      const userResult = await client.query<{ id: string }>(
+        `INSERT INTO "user" (id, email, "firstName", "lastName")
+         VALUES (xid(), $1, $2, '')
+         RETURNING id`,
+        [email, firstName]
+      );
+      userId = userResult.rows[0]!.id;
       console.log(`   User created with ID: ${userId}`);
+      console.log(
+        `   Create the matching Better Auth credentials separately; default dev password is: ${DEV_PASSWORD}`
+      );
     }
 
     // Step 2: Update user's first name (inferred from email)
@@ -202,12 +166,6 @@ async function seedDev() {
 
       // Seed the company with all default data
       console.log("7. Seeding company with default data...");
-
-      // Create storage bucket
-      await client.query(
-        `INSERT INTO storage.buckets (id, name, public) VALUES ($1, $2, false)`,
-        [companyId, companyId]
-      );
 
       // Link user to company
       await client.query(
@@ -366,15 +324,17 @@ async function seedDev() {
 
       // Seed accounts (chart of accounts) - insert in order, resolving parentKey to parentId
       const accountIdByKey: Record<string, string> = {};
-      for (const { key, parentKey, ...acc } of accounts) {
+      for (const rawAccount of accounts as readonly Record<string, any>[]) {
+        const { key, parentKey, ...acc } = rawAccount;
+        const accountKey = key ?? acc.number;
         const result = await client.query(
           `INSERT INTO account (number, name, "isGroup", "accountType", "incomeBalance", class, "parentId", "isSystem", "companyGroupId", "createdBy")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'system') RETURNING id`,
           [
             acc.number,
             acc.name,
-            acc.isGroup,
-            acc.accountType,
+            acc.isGroup ?? !acc.directPosting,
+            acc.accountType ?? acc.accountCategory,
             acc.incomeBalance,
             acc.class,
             parentKey ? (accountIdByKey[parentKey] ?? null) : null,
@@ -383,7 +343,7 @@ async function seedDev() {
           ]
         );
         if (result.rows[0]?.id) {
-          accountIdByKey[key] = result.rows[0].id;
+          accountIdByKey[accountKey] = result.rows[0].id;
         }
       }
 
@@ -397,8 +357,12 @@ async function seedDev() {
       }
 
       // Resolve account numbers to IDs for account defaults
-      const resolveAccountId = (number: string) =>
-        accountIdByKey[number] ?? null;
+      const resolveAccountId = (number: string | undefined) =>
+        number ? (accountIdByKey[number] ?? null) : null;
+      const accountDefaultsByKey = accountDefaults as unknown as Record<
+        string,
+        string | undefined
+      >;
 
       // Seed account defaults
       await client.query(
@@ -423,49 +387,49 @@ async function seedDev() {
           $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40
         )`,
         [
-          resolveAccountId(accountDefaults.salesAccount),
-          resolveAccountId(accountDefaults.salesDiscountAccount),
-          resolveAccountId(accountDefaults.costOfGoodsSoldAccount),
-          resolveAccountId(accountDefaults.purchaseVarianceAccount),
-          resolveAccountId(accountDefaults.inventoryAdjustmentVarianceAccount),
-          resolveAccountId(accountDefaults.materialVarianceAccount),
-          resolveAccountId(accountDefaults.laborAndMachineVarianceAccount),
-          resolveAccountId(accountDefaults.overheadVarianceAccount),
-          resolveAccountId(accountDefaults.lotSizeVarianceAccount),
-          resolveAccountId(accountDefaults.subcontractingVarianceAccount),
-          resolveAccountId(accountDefaults.laborAbsorptionAccount),
-          resolveAccountId(accountDefaults.indirectCostAccount),
-          resolveAccountId(accountDefaults.maintenanceAccount),
-          resolveAccountId(accountDefaults.assetDepreciationExpenseAccount),
-          resolveAccountId(accountDefaults.assetGainsAndLossesAccount),
-          resolveAccountId(accountDefaults.serviceChargeAccount),
-          resolveAccountId(accountDefaults.interestAccount),
-          resolveAccountId(accountDefaults.supplierPaymentDiscountAccount),
-          resolveAccountId(accountDefaults.customerPaymentDiscountAccount),
-          resolveAccountId(accountDefaults.roundingAccount),
-          resolveAccountId(accountDefaults.assetAquisitionCostAccount),
+          resolveAccountId(accountDefaultsByKey.salesAccount),
+          resolveAccountId(accountDefaultsByKey.salesDiscountAccount),
+          resolveAccountId(accountDefaultsByKey.costOfGoodsSoldAccount),
+          resolveAccountId(accountDefaultsByKey.purchaseVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.inventoryAdjustmentVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.materialVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.laborAndMachineVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.overheadVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.lotSizeVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.subcontractingVarianceAccount),
+          resolveAccountId(accountDefaultsByKey.laborAbsorptionAccount),
+          resolveAccountId(accountDefaultsByKey.indirectCostAccount),
+          resolveAccountId(accountDefaultsByKey.maintenanceAccount),
+          resolveAccountId(accountDefaultsByKey.assetDepreciationExpenseAccount),
+          resolveAccountId(accountDefaultsByKey.assetGainsAndLossesAccount),
+          resolveAccountId(accountDefaultsByKey.serviceChargeAccount),
+          resolveAccountId(accountDefaultsByKey.interestAccount),
+          resolveAccountId(accountDefaultsByKey.supplierPaymentDiscountAccount),
+          resolveAccountId(accountDefaultsByKey.customerPaymentDiscountAccount),
+          resolveAccountId(accountDefaultsByKey.roundingAccount),
+          resolveAccountId(accountDefaultsByKey.assetAquisitionCostAccount),
           resolveAccountId(
-            accountDefaults.assetAquisitionCostOnDisposalAccount
+            accountDefaultsByKey.assetAquisitionCostOnDisposalAccount
           ),
-          resolveAccountId(accountDefaults.accumulatedDepreciationAccount),
+          resolveAccountId(accountDefaultsByKey.accumulatedDepreciationAccount),
           resolveAccountId(
-            accountDefaults.accumulatedDepreciationOnDisposalAccount
+            accountDefaultsByKey.accumulatedDepreciationOnDisposalAccount
           ),
-          resolveAccountId(accountDefaults.inventoryAccount),
-          resolveAccountId(accountDefaults.workInProgressAccount),
-          resolveAccountId(accountDefaults.receivablesAccount),
-          resolveAccountId(accountDefaults.bankCashAccount),
-          resolveAccountId(accountDefaults.bankLocalCurrencyAccount),
-          resolveAccountId(accountDefaults.bankForeignCurrencyAccount),
-          resolveAccountId(accountDefaults.prepaymentAccount),
-          resolveAccountId(accountDefaults.payablesAccount),
-          resolveAccountId(accountDefaults.goodsReceivedNotInvoicedAccount),
-          resolveAccountId(accountDefaults.inventoryShippedNotInvoicedAccount),
-          resolveAccountId(accountDefaults.salesTaxPayableAccount),
-          resolveAccountId(accountDefaults.purchaseTaxPayableAccount),
-          resolveAccountId(accountDefaults.reverseChargeSalesTaxPayableAccount),
-          resolveAccountId(accountDefaults.retainedEarningsAccount),
-          resolveAccountId(accountDefaults.currencyTranslationAccount),
+          resolveAccountId(accountDefaultsByKey.inventoryAccount),
+          resolveAccountId(accountDefaultsByKey.workInProgressAccount),
+          resolveAccountId(accountDefaultsByKey.receivablesAccount),
+          resolveAccountId(accountDefaultsByKey.bankCashAccount),
+          resolveAccountId(accountDefaultsByKey.bankLocalCurrencyAccount),
+          resolveAccountId(accountDefaultsByKey.bankForeignCurrencyAccount),
+          resolveAccountId(accountDefaultsByKey.prepaymentAccount),
+          resolveAccountId(accountDefaultsByKey.payablesAccount),
+          resolveAccountId(accountDefaultsByKey.goodsReceivedNotInvoicedAccount),
+          resolveAccountId(accountDefaultsByKey.inventoryShippedNotInvoicedAccount),
+          resolveAccountId(accountDefaultsByKey.salesTaxPayableAccount),
+          resolveAccountId(accountDefaultsByKey.purchaseTaxPayableAccount),
+          resolveAccountId(accountDefaultsByKey.reverseChargeSalesTaxPayableAccount),
+          resolveAccountId(accountDefaultsByKey.retainedEarningsAccount),
+          resolveAccountId(accountDefaultsByKey.currencyTranslationAccount),
           companyId
         ]
       );

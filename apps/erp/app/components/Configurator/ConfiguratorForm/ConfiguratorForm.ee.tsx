@@ -187,7 +187,7 @@ function ParameterField({ parameter }: ParameterFieldProps) {
               <SelectValue placeholder={t`Select an option`} />
             </SelectTrigger>
             <SelectContent>
-              {parameter.listOptions?.map((option) => (
+              {parameter.listOptions?.map((option: any) => (
                 <SelectItem key={option} value={option}>
                   {option}
                 </SelectItem>

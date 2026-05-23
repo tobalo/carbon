@@ -1,6 +1,8 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { msg } from "@lingui/core/macro";
 import type { LoaderFunctionArgs } from "react-router";
@@ -24,14 +26,15 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "purchasing"
   });
+  const { client, companyId, userId } = auth;
 
   const { supplierId } = params;
   if (!supplierId) throw new Error("Could not find supplierId");
+  assertSupplierAccountScope(auth, supplierId);
 
-  const serviceRole = getCarbonServiceRole();
   // Kick off approval in parallel — it only needs supplier.status, so we chain
   // off the supplier fetch rather than waiting for the whole Promise.all to
   // settle.
@@ -45,7 +48,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       getSupplierTax(client, supplierId),
       supplierPromise.then((s) =>
         getSupplierApprovalContext(
-          serviceRole,
+          client,
           supplierId,
           s.data?.status ?? null,
           companyId,

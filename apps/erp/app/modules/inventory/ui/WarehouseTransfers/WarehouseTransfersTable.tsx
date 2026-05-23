@@ -18,7 +18,7 @@ import { ConfirmDelete } from "~/components/Modals";
 import {
   useDateFormatter,
   usePermissions,
-  useRealtime,
+  usePollingRevalidation,
   useUrlParams
 } from "~/hooks";
 import { useCustomColumns } from "~/hooks/useCustomColumns";
@@ -35,7 +35,7 @@ type WarehouseTransfersTableProps = {
 
 const WarehouseTransfersTable = memo(
   ({ data, count }: WarehouseTransfersTableProps) => {
-    useRealtime(
+    usePollingRevalidation(
       "warehouseTransfer",
       `id=in.(${data.map((d) => d.id).join(",")})`
     );

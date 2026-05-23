@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { Checkbox, MenuIcon, MenuItem, useDisclosure } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
 import { useNumberFormatter } from "@react-aria/i18n";
@@ -77,7 +77,7 @@ const GaugeCalibrationRecordsTable = memo(
     const [suppliers] = useSuppliers();
 
     const routeData = useRouteData<{
-      companySettings: Database["public"]["Tables"]["companySettings"]["Row"];
+      companySettings: TableRow<"companySettings">;
     }>(path.to.authenticatedRoot);
     const isMetric = routeData?.companySettings?.useMetric ?? false;
 

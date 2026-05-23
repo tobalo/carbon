@@ -1,5 +1,8 @@
 import { error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type {
   ActionFunctionArgs,
@@ -11,9 +14,10 @@ import { path } from "~/utils/path";
 import { supplierLocationsQuery } from "~/utils/react-query";
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     delete: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId, supplierLocationId } = params;
   if (!supplierId || !supplierLocationId) {
@@ -25,6 +29,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       )
     );
   }
+  assertSupplierAccountScope(auth, supplierId);
 
   const { error: deleteSupplierLocationError } = await deleteSupplierLocation(
     client,

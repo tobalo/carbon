@@ -58,9 +58,19 @@ jobs:
 
     env:
       IMAGE_TAG: ${{ github.sha }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      AUTH_PROVIDER: better_auth
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      CARBON_CONTROL_DATABASE_URL: ${{ secrets.CARBON_CONTROL_DATABASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+      S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      S3_PRIVATE_BUCKET: ${{ secrets.S3_PRIVATE_BUCKET }}
+      S3_PUBLIC_BASE_URL: ${{ secrets.S3_PUBLIC_BASE_URL }}
+      S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+      S3_REGION: ${{ secrets.S3_REGION }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
 
     steps:
       - uses: actions/checkout@v4

@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { Input, TextArea, ValidatedForm } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import {
@@ -62,7 +62,7 @@ import type {
 } from "~/modules/purchasing/types";
 import type { Company } from "~/modules/settings";
 import { getCompany, getCompanySettings } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage, getExternalLink } from "~/modules/shared";
 import type { action } from "~/routes/api+/purchasing.digital-quote.$id";
 import { path } from "~/utils/path";
 
@@ -74,6 +74,10 @@ enum QuoteState {
   Valid,
   Expired,
   NotFound
+}
+
+function isExpired(date: string | null | undefined) {
+  return Boolean(date && new Date(date) < new Date());
 }
 
 type SelectedLine = {
@@ -95,8 +99,27 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     };
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const quote = await getSupplierQuoteByExternalLinkId(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const externalLink = await getExternalLink(serviceClient, id);
+  const externalLinkExpired =
+    externalLink.data?.documentType === "SupplierQuote" &&
+    isExpired(externalLink.data.expiresAt);
+  if (
+    externalLink.error ||
+    externalLink.data?.documentType !== "SupplierQuote" ||
+    externalLinkExpired
+  ) {
+    return {
+      state: externalLinkExpired ? QuoteState.Expired : QuoteState.NotFound,
+      data: null
+    };
+  }
+
+  const quote = await getSupplierQuoteByExternalLinkId(serviceClient, id, {
+    companyId: externalLink.data.companyId,
+    documentId: externalLink.data.documentId,
+    supplierId: externalLink.data.supplierId
+  });
 
   if (quote.error) {
     return {
@@ -107,12 +130,15 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   // Update lastAccessedAt on externalLink when the page is loaded
   if (quote.data.externalLinkId) {
-    await serviceRole
+    await serviceClient
       .from("externalLink")
       .update({
         lastAccessedAt: new Date().toISOString()
       } as any)
-      .eq("id", quote.data.externalLinkId);
+      .eq("id", quote.data.externalLinkId)
+      .eq("companyId", quote.data.companyId)
+      .eq("documentType", "SupplierQuote")
+      .eq("documentId", quote.data.id);
   }
 
   if (
@@ -128,10 +154,10 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   const [company, companySettings, quoteLines, quoteLinePrices] =
     await Promise.all([
-      getCompany(serviceRole, quote.data.companyId),
-      getCompanySettings(serviceRole, quote.data.companyId),
-      getSupplierQuoteLines(serviceRole, quote.data.id),
-      getSupplierQuoteLinePricesByQuoteId(serviceRole, quote.data.id)
+      getCompany(serviceClient, quote.data.companyId),
+      getCompanySettings(serviceClient, quote.data.companyId),
+      getSupplierQuoteLines(serviceClient, quote.data.id),
+      getSupplierQuoteLinePricesByQuoteId(serviceClient, quote.data.id)
     ]);
 
   const thumbnailPaths = quoteLines.data?.reduce<Record<string, string | null>>(
@@ -151,7 +177,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
             if (!path) {
               return null;
             }
-            return getBase64ImageFromSupabase(serviceRole, path).then(
+            return getBase64ImageFromStorage(serviceClient, path).then(
               (data) => ({
                 id,
                 data

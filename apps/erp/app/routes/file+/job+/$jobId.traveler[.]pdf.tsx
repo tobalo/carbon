@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { Footer, JobTravelerPageContent } from "@carbon/documents/pdf";
 import type { JSONContent } from "@carbon/react";
 import { getPreferenceHeaders } from "@carbon/react";
@@ -19,19 +18,17 @@ import {
   getTrackedEntityByJobId
 } from "~/modules/production/production.service";
 import { getCompany, getCompanySettings } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {});
+  const { client, companyId } = await requirePermissions(request, {});
   const { locale } = getPreferenceHeaders(request);
 
   const { jobId } = params;
   if (!jobId) throw new Error("Could not find job id");
 
-  const serviceRole = await getCarbonServiceRole();
-
   // Get the job first
-  const job = await getJob(serviceRole, jobId);
+  const job = await getJob(client, jobId, companyId);
   if (job.error || !job.data) {
     console.error(job.error);
     throw new Error("Failed to load job");
@@ -43,10 +40,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   // Get all make methods for this job
-  const jobMakeMethods = await serviceRole
+  const jobMakeMethods = await client
     .from("jobMakeMethod")
-    .select("*, ...item(itemType:type)")
+    .select("*")
     .eq("jobId", jobId)
+    .eq("companyId", companyId)
     .order("createdAt", { ascending: true });
 
   if (jobMakeMethods.error || !jobMakeMethods.data) {
@@ -55,8 +53,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const [company, companySettings] = await Promise.all([
-    getCompany(serviceRole, job.data.companyId ?? ""),
-    getCompanySettings(serviceRole, job.data.companyId ?? "")
+    getCompany(client, job.data.companyId ?? ""),
+    getCompanySettings(client, job.data.companyId ?? "")
   ]);
   if (company.error) {
     console.error(company.error);
@@ -67,10 +65,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Error("Failed to load company settings");
   }
 
-  const customer = await serviceRole
+  const customer = await client
     .from("customer")
     .select("*")
     .eq("id", job.data.customerId ?? "")
+    .eq("companyId", companyId)
     .maybeSingle();
 
   // Get job notes if they exist
@@ -78,7 +77,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Compute BOM IDs for all make methods
   const bomIdMap = new Map<string, string>();
-  const methodTree = await getJobMethodTree(serviceRole, jobId);
+  const methodTree = await getJobMethodTree(client, jobId, companyId);
   if (!methodTree.error && methodTree.data?.length > 0) {
     const flatMethods = flattenTree(methodTree.data[0]);
     const bomIds = generateBomIds(flatMethods);
@@ -91,11 +90,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const makeMethodsWithData = await Promise.all(
     jobMakeMethods.data.map(async (makeMethod) => {
       const [operations, item] = await Promise.all([
-        getJobOperationsByMethodId(serviceRole, makeMethod.id),
-        serviceRole
+        getJobOperationsByMethodId(client, makeMethod.id, companyId),
+        client
           .from("item")
-          .select("*, modelUpload(thumbnailPath)")
+          .select("*")
           .eq("id", makeMethod.itemId ?? "")
+          .eq("companyId", companyId)
           .single()
       ]);
 
@@ -111,12 +111,30 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         throw new Error(`Failed to load item for make method ${makeMethod.id}`);
       }
 
+      const modelUpload = item.data.modelUploadId
+        ? await client
+            .from("modelUpload")
+            .select("thumbnailPath")
+            .eq("id", item.data.modelUploadId)
+            .eq("companyId", companyId)
+            .single()
+        : { data: null };
+      const itemWithModelUpload = {
+        ...item.data,
+        modelUpload: modelUpload.data
+      };
+
       // Get thumbnail if it exists
       let thumbnail: string | null = null;
-      if (item.data.thumbnailPath || item.data.modelUpload?.thumbnailPath) {
-        thumbnail = await getBase64ImageFromSupabase(
-          serviceRole,
-          item.data.thumbnailPath ?? item.data.modelUpload?.thumbnailPath ?? ""
+      if (
+        itemWithModelUpload.thumbnailPath ||
+        itemWithModelUpload.modelUpload?.thumbnailPath
+      ) {
+        thumbnail = await getBase64ImageFromStorage(
+          client,
+          itemWithModelUpload.thumbnailPath ??
+            itemWithModelUpload.modelUpload?.thumbnailPath ??
+            ""
         );
       }
 
@@ -127,8 +145,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         makeMethod.parentMaterialId === null
       ) {
         const trackedEntity = await getTrackedEntityByJobId(
-          serviceRole,
-          job.data!.id!
+          client,
+          job.data!.id!,
+          companyId
         );
         if (!trackedEntity.error && trackedEntity.data) {
           batchNumber = trackedEntity.data.readableId ?? undefined;
@@ -138,7 +157,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       return {
         makeMethod,
         operations: operations.data,
-        item: item.data,
+        item: itemWithModelUpload,
         thumbnail,
         batchNumber,
         bomId: bomIdMap.get(makeMethod.id)

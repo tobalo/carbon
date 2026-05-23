@@ -1,6 +1,7 @@
 "use client";
 
 import { useCarbon } from "@carbon/auth";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import {
   Button,
   Modal,
@@ -56,10 +57,13 @@ export function EndShift() {
     });
 
     if (!carbon) return;
-    const { data, error } = await getActiveJobOperationsByEmployee(carbon, {
-      employeeId: user.id,
-      companyId: user.company.id
-    });
+    const { data, error } = await getActiveJobOperationsByEmployee(
+      carbon as unknown as DatabaseQueryClient,
+      {
+        employeeId: user.id,
+        companyId: user.company.id
+      }
+    );
     if (error) {
       toast.error(t`Failed to fetch active operations`);
     }

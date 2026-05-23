@@ -18,7 +18,12 @@ export const handle: Handle = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const {
+    client,
+    companyId,
+    role,
+    supplierId: scopedSupplierId
+  } = await requirePermissions(request, {
     view: "purchasing",
     bypassRls: true
   });
@@ -37,6 +42,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       search,
       type,
       status,
+      supplierId: role === "supplier" ? scopedSupplierId : null,
       limit,
       offset,
       sorts,

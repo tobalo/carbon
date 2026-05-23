@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Array as ArrayInput,
   Hidden,
@@ -66,6 +65,7 @@ import { usePermissions, useRouteData, useUser } from "~/hooks";
 import { qualityDocumentStepValidator } from "~/modules/quality/quality.models";
 import { procedureStepType } from "~/modules/shared";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import type { QualityDocument, QualityDocumentStep } from "../../types";
 
 export default function QualityDocumentExplorer() {
@@ -94,7 +94,7 @@ export default function QualityDocumentExplorer() {
   );
 
   const maxSortOrder =
-    steps.reduce((acc, attr) => Math.max(acc, attr.sortOrder), 0) ?? 0;
+    steps.reduce((acc: any, attr: any) => Math.max(acc, attr.sortOrder), 0) ?? 0;
 
   const qualityDocumentStepInitialValues = {
     id: selectedStep?.id,
@@ -181,8 +181,11 @@ export default function QualityDocumentExplorer() {
 
   const stepMap = useMemo(
     () =>
-      steps.reduce<Record<string, QualityDocumentStep>>(
-        (acc, attr) => ({ ...acc, [attr.id]: attr }),
+      steps.reduce(
+        (acc: Record<string, QualityDocumentStep>, attr: any) => ({
+          ...acc,
+          [attr.id]: attr
+        }),
         {}
       ) ?? {},
     [steps]
@@ -491,7 +494,6 @@ function QualityDocumentStepForm({
     }
   });
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -526,7 +528,11 @@ function QualityDocumentStepForm({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

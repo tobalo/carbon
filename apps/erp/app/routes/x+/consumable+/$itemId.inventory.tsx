@@ -22,15 +22,14 @@ import {
   getPickMethod,
   pickMethodWithShelfLifeValidator,
   type shelfLifeModes,
-  upsertPickMethod,
-  upsertPickMethodWithShelfLife
+  upsertPickMethod
 } from "~/modules/items";
+import { upsertPickMethodWithShelfLife } from "~/modules/items/items.server";
 import { getItemRulesDataForItem } from "~/modules/items/itemRules.server";
 import { PickMethodForm } from "~/modules/items/ui/Item";
 import ItemRuleAssignments from "~/modules/items/ui/ItemRules/ItemRuleAssignments";
 import { getLocationsList } from "~/modules/resources";
 import { getUserDefaults } from "~/modules/users/users.server";
-import { getDatabaseClient } from "~/services/database.server";
 import { useItems } from "~/stores/items";
 import type { ListItem } from "~/types";
 import { getCustomFields, setCustomFields } from "~/utils/form";
@@ -153,8 +152,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const trackedEntityIds = pluckUnique(
-    itemStorageUnitQuantities.data,
-    (row) => row.trackedEntityId
+    itemStorageUnitQuantities.data as any[],
+    (row: any) => row.trackedEntityId
   );
 
   const [
@@ -211,7 +210,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   } = validation.data;
 
   try {
-    await upsertPickMethodWithShelfLife(getDatabaseClient(), {
+    await upsertPickMethodWithShelfLife({
       itemId,
       locationId: pickMethodFields.locationId,
       defaultStorageUnitId: pickMethodFields.defaultStorageUnitId,

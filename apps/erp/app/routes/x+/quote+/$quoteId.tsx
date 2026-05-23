@@ -5,8 +5,8 @@ import { VStack } from "@carbon/react";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { DndContext } from "@dnd-kit/core";
 import { msg } from "@lingui/core/macro";
-import type { FileObject } from "@supabase/storage-js";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { FileObject } from "@carbon/storage";
+import type { QueryResponse } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import {
   Outlet,
@@ -88,8 +88,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     getQuotePayment(client, quoteId),
     getQuoteLines(client, quoteId),
     getQuoteLinePricesByQuoteId(client, quoteId),
-    getOpportunity(client, quote.data?.opportunityId),
-    getQuoteMethodTrees(client, quoteId),
+    getOpportunity(client, companyId, quote.data?.opportunityId),
+    getQuoteMethodTrees(client, quoteId, companyId),
     getOpportunityDocuments(client, companyId, quote.data?.opportunityId ?? ""),
     getCompanySettings(client, companyId)
   ]);
@@ -129,7 +129,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
   }
 
-  let salesOrderLines: PostgrestResponse<SalesOrderLine> | null = null;
+  let salesOrderLines: QueryResponse<SalesOrderLine> | null = null;
   if (
     opportunity.data?.salesOrders.length &&
     opportunity.data.salesOrders[0]?.id
@@ -141,9 +141,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const defaultCc =
-    // @ts-expect-error TS18048 - TODO: fix type
     customer.data?.defaultCc?.length > 0
-      ? // @ts-expect-error TS18047 - TODO: fix type
+      ?
         customer.data.defaultCc
       : (companySettings.data?.defaultCustomerCc ?? []);
 

@@ -1,11 +1,15 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { useMount, VStack } from "@carbon/react";
 import type { LoaderFunctionArgs } from "react-router";
 import { Outlet, redirect, useLoaderData } from "react-router";
 import { usePanels } from "~/components/Layout";
 import {
+  getJob,
   getJobOperationsList,
   getProductionQuantities,
   getScrapReasons
@@ -15,9 +19,10 @@ import { path, requestReferrer } from "~/utils/path";
 import { getGenericQueryFilters } from "~/utils/query";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "production"
   });
+  const { client, companyId } = auth;
 
   const { jobId } = params;
   if (!jobId) throw new Error("Could not find jobId");
@@ -27,6 +32,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const search = searchParams.get("search");
   const { limit, offset, sorts, filters } =
     getGenericQueryFilters(searchParams);
+
+  const job = await getJob(client, jobId);
+  if (job.error) {
+    throw redirect(
+      path.to.jobs,
+      await flash(request, error(job.error, "Failed to fetch job"))
+    );
+  }
+  assertCustomerAccountScope(auth, job.data?.customerId);
 
   const operations = await getJobOperationsList(client, jobId);
   if (operations.error) {

@@ -1,10 +1,9 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { TrackedEntityAttributes } from "@carbon/utils";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 
-export async function action({ request, context }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
   const { client, companyId } = await requirePermissions(request, {
     create: "inventory"
   });
@@ -14,6 +13,18 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const receiptLineId = formData.get("receiptLineId") as string;
   const receiptId = formData.get("receiptId") as string;
   const trackingType = formData.get("trackingType") as "batch" | "serial";
+
+  const { data: receiptLine, error: receiptLineError } = await client
+    .from("receiptLine")
+    .select("id")
+    .eq("id", receiptLineId)
+    .eq("receiptId", receiptId)
+    .eq("companyId", companyId)
+    .single();
+
+  if (receiptLineError || !receiptLine) {
+    return data({ error: "Receipt line not found" }, { status: 404 });
+  }
 
   if (trackingType === "batch") {
     const batchNumber = formData.get("batchNumber") as string;
@@ -49,11 +60,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       console.error(error);
     }
 
-    const serviceRole = await getCarbonServiceRole();
-    // Use a transaction to ensure data consistency
-    const { error } = await serviceRole.rpc(
+    const { error } = await client.rpc(
       "update_receipt_line_batch_tracking",
       {
+        p_company_id: companyId,
         p_tracked_entity_id: trackedEntityId,
         p_receipt_line_id: receiptLineId,
         p_receipt_id: receiptId,
@@ -121,11 +131,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
     }
 
-    const serviceRole = await getCarbonServiceRole();
-    // Use a transaction to ensure data consistency
-    const { error } = await serviceRole.rpc(
+    const { error } = await client.rpc(
       "update_receipt_line_serial_tracking",
       {
+        p_company_id: companyId,
         p_tracked_entity_id: existingEntityWithIndex?.id,
         p_receipt_line_id: receiptLineId,
         p_receipt_id: receiptId,

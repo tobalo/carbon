@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -36,7 +35,7 @@ import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "purchasing"
   });
 
@@ -44,11 +43,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   if (!id) throw new Error("Could not find id");
   if (!lineId) throw new Error("Could not find lineId");
 
-  const serviceRole = await getCarbonServiceRole();
-
   const [line, prices] = await Promise.all([
-    getSupplierQuoteLine(serviceRole, lineId),
-    getSupplierQuoteLinePrices(serviceRole, lineId)
+    getSupplierQuoteLine(client, lineId),
+    getSupplierQuoteLinePrices(client, lineId)
   ]);
 
   if (line.error) {
@@ -58,9 +55,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
   }
 
+  if (line.data.companyId !== companyId) {
+    throw redirect(path.to.supplierQuote(id));
+  }
+
   return {
     line: line.data,
-    files: getSupplierInteractionLineDocuments(serviceRole, companyId, lineId),
+    files: getSupplierInteractionLineDocuments(client, companyId, lineId),
     pricesByQuantity: (prices?.data ?? []).reduce<
       Record<number, SupplierQuoteLinePrice>
     >((acc, price) => {
@@ -72,7 +73,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "purchasing"
   });
 
@@ -84,6 +85,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
     view: "purchasing"
   });
   const quote = await getSupplierQuote(viewClient, id);
+  if (quote.error) {
+    throw redirect(
+      path.to.supplierQuote(id),
+      await flash(request, error(quote.error, "Failed to load supplier quote"))
+    );
+  }
+
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.supplierQuote(id));
+  }
+
   await requireUnlocked({
     request,
     isLocked: isSupplierQuoteLocked(quote.data?.status),

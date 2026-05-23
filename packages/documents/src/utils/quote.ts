@@ -1,7 +1,7 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 
 export function getLineDescription(
-  line: Database["public"]["Views"]["quoteLines"]["Row"]
+  line: TableRow<"quoteLines">
 ) {
   const customerPartNumber = line.customerPartId
     ? ` (${line.customerPartId} ${
@@ -12,7 +12,7 @@ export function getLineDescription(
 }
 
 export function getLineDescriptionDetails(
-  line: Database["public"]["Views"]["quoteLines"]["Row"]
+  line: TableRow<"quoteLines">
 ) {
   return line?.description ? `${line.description}` : "";
 }

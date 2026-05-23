@@ -3,17 +3,26 @@ import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
-import { deleteItem } from "~/modules/items";
+import { assertSupplierItemScope, deleteItem } from "~/modules/items";
 import { path, requestReferrer } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     delete: "parts"
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   const deletion = await deleteItem(client, itemId);
   if (deletion.error) {

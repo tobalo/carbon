@@ -30,7 +30,7 @@ export class NotificationPipeline {
 
           try {
             await service.send(event, {
-              serviceRole: this.context.serviceRole || this.context.client
+              serviceClient: this.context.serviceClient || this.context.client
             });
           } catch (error) {
             console.error(

@@ -1,4 +1,4 @@
-import { SUPABASE_URL, useCarbon } from "@carbon/auth";
+import { IMAGE_RESIZER_URL, useCarbon } from "@carbon/auth";
 import { Button, File as FileUpload, HStack, toast } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { nanoid } from "nanoid";
@@ -6,6 +6,7 @@ import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useUser } from "~/hooks";
 import { getPrivateUrl } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 export function ItemThumbnailUpload({
   path,
   itemId,
@@ -81,13 +82,14 @@ export function ItemThumbnailUpload({
         formData.append("contained", "true");
 
         try {
-          const response = await fetch(
-            `${SUPABASE_URL}/functions/v1/image-resizer`,
-            {
-              method: "POST",
-              body: formData
-            }
-          );
+          if (!IMAGE_RESIZER_URL) {
+            throw new Error("IMAGE_RESIZER_URL is not set");
+          }
+
+          const response = await fetch(IMAGE_RESIZER_URL, {
+            method: "POST",
+            body: formData
+          });
 
           // Get content type from response to determine if it's JPG or PNG
           const contentType =
@@ -113,15 +115,11 @@ export function ItemThumbnailUpload({
             type: contentType
           });
 
-          const { data, error } = await carbon.storage
-            .from("private")
-            .upload(
-              `${company.id}/thumbnails/${itemId}/${fileName}`,
-              thumbnailFile,
-              {
-                upsert: true
-              }
-            );
+          const { data, error } = await uploadStorageObject({
+            bucket: "private",
+            path: `${company.id}/thumbnails/${itemId}/${fileName}`,
+            file: thumbnailFile
+          });
 
           if (error) {
             toast.error(t`Failed to upload thumbnail`);

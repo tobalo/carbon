@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -16,7 +15,7 @@ import { setCustomFields } from "~/utils/form";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "production"
   });
 
@@ -32,8 +31,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const insertJobMaterial = await upsertJobMaterial(serviceRole, {
+  const job = await client
+    .from("job")
+    .select("id, status")
+    .eq("id", jobId)
+    .eq("companyId", companyId)
+    .single();
+  if (job.error) {
+    return data(
+      { id: null },
+      await flash(request, error(job.error, "Job not found"))
+    );
+  }
+
+  const insertJobMaterial = await upsertJobMaterial(client, {
     ...validation.data,
     jobId,
     companyId,
@@ -65,19 +76,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  // Check if job is released (not Draft or Planned)
-  const job = await serviceRole
-    .from("job")
-    .select("status")
-    .eq("id", jobId)
-    .single();
   const isReleased = !["Draft", "Planned"].includes(job.data?.status ?? "");
 
   if (validation.data.methodType === "Make to Order") {
-    const materialMakeMethod = await serviceRole
+    const materialMakeMethod = await client
       .from("jobMaterialWithMakeMethodId")
       .select("*")
       .eq("id", jobMaterialId)
+      .eq("companyId", companyId)
       .single();
     if (materialMakeMethod.error) {
       return data(
@@ -90,7 +96,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         )
       );
     }
-    const makeMethod = await upsertJobMaterialMakeMethod(serviceRole, {
+    const makeMethod = await upsertJobMaterialMakeMethod(client, {
       sourceId: validation.data.itemId,
       targetId: materialMakeMethod.data?.jobMaterialMakeMethodId!,
       companyId,
@@ -113,7 +119,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // Recalculate for ALL material types if job is released
   if (isReleased) {
     const promises = [
-      recalculateJobMakeMethodRequirements(serviceRole, {
+      recalculateJobMakeMethodRequirements(client, {
         id: validation.data.jobMakeMethodId,
         companyId,
         userId
@@ -122,7 +128,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     if (validation.data.jobOperationId) {
       promises.push(
-        recalculateJobOperationDependencies(serviceRole, {
+        recalculateJobOperationDependencies(client, {
           jobId,
           companyId,
           userId

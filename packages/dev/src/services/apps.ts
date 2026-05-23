@@ -22,8 +22,8 @@ function isNoiseLine(line: string): boolean {
   return NOISE_PATTERNS.some((re) => re.test(plain));
 }
 
-// `portless` inherits `crbn`'s `process.env`; a stale shell `SUPABASE_URL`
-// (e.g. `http://127.0.0.1:54321`) would otherwise win over `crbn`'s repo-root
+// `portless` inherits `crbn`'s `process.env`; stale shell variables can
+// otherwise win over `crbn`'s repo-root
 // `.env.local`. Merge the same `.env*` stack as ERP Vite (app then repo, last
 // wins) so spawned dev servers always see worktree URLs.
 function spawnAppEnv(repoRoot: string, appId: string): NodeJS.ProcessEnv {
@@ -58,7 +58,7 @@ export function spawnApps(opts: {
 }): Promise<void> {
   const { root, apps, ports, portless } = opts;
 
-  // When portless is active, apps talk to Supabase over HTTPS using
+  // When portless is active, apps talk to local services over HTTPS using
   // portless's self-signed CA. Tell Node to trust it.
   const caPath = join(homedir(), ".portless", "ca.pem");
   const extraCaEnv =

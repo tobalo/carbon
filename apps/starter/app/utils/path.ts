@@ -1,4 +1,4 @@
-import { getAppUrl, SUPABASE_URL } from "@carbon/auth";
+import { getAppUrl, getPublicStorageUrl } from "@carbon/auth";
 import { generatePath } from "react-router";
 
 const x = "/x"; // from ~/routes/x+ folder
@@ -34,7 +34,7 @@ export const removeSubdomain = (url?: string): string => {
 };
 
 export const getStoragePath = (bucket: string, path: string) => {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return getPublicStorageUrl(path, bucket);
 };
 
 export const requestReferrer = (request: Request) => {

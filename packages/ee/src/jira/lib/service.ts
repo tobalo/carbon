@@ -1,6 +1,5 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { adfToTiptap } from "./richtext";
 import type { JiraCredentials, JiraIssue, JiraIssueMapping } from "./types";
 import { JiraIssueMappingSchema } from "./types";
@@ -10,7 +9,7 @@ import { mapJiraStatusToCarbonStatus } from "./utils";
  * Get the Jira integration for a company.
  */
 export async function getJiraIntegration(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return await client
@@ -18,6 +17,7 @@ export async function getJiraIntegration(
     .select("*")
     .eq("companyId", companyId)
     .eq("id", "jira")
+    .eq("active", true)
     .limit(1);
 }
 
@@ -25,7 +25,7 @@ export async function getJiraIntegration(
  * Update Jira credentials in the integration metadata.
  */
 export async function updateJiraCredentials(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   credentials: JiraCredentials
 ) {
@@ -47,7 +47,8 @@ export async function updateJiraCredentials(
       } as any
     })
     .eq("companyId", companyId)
-    .eq("id", "jira");
+    .eq("id", "jira")
+    .eq("active", true);
 }
 
 /**
@@ -79,7 +80,7 @@ export function issueToMapping(
  * Link an action task to a Jira issue.
  */
 export async function linkActionToJiraIssue(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   input: {
     actionId: string;
@@ -123,14 +124,15 @@ export async function linkActionToJiraIssue(
     .select("nonConformanceId");
 
   // Delete any existing Jira mapping for this action
-  // Use service role to bypass RLS (no DELETE policy for authenticated users)
-  const serviceRoleForLink = getCarbonServiceRole();
-  await serviceRoleForLink
+  // Use the service client to bypass RLS (no DELETE policy for authenticated users)
+  const serviceClientForLink = getCarbonServiceClient();
+  await serviceClientForLink
     .from("externalIntegrationMapping")
     .delete()
     .eq("entityType", "nonConformanceActionTask")
     .eq("entityId", input.actionId)
-    .eq("integration", "jira");
+    .eq("integration", "jira")
+    .eq("companyId", companyId);
 
   // Create the new mapping
   await client.from("externalIntegrationMapping").insert({
@@ -149,21 +151,22 @@ export async function linkActionToJiraIssue(
  * Unlink an action task from a Jira issue.
  */
 export async function unlinkActionFromJiraIssue(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   input: {
     actionId: string;
     assignee?: string | null;
   }
 ) {
-  // Delete the Jira mapping using service role to bypass RLS
-  const serviceRole = getCarbonServiceRole();
-  await serviceRole
+  // Delete the Jira mapping using the service client to bypass RLS
+  const serviceClient = getCarbonServiceClient();
+  await serviceClient
     .from("externalIntegrationMapping")
     .delete()
     .eq("entityType", "nonConformanceActionTask")
     .eq("entityId", input.actionId)
-    .eq("integration", "jira");
+    .eq("integration", "jira")
+    .eq("companyId", companyId);
 
   // Return the nonConformanceId for the action task
   return client
@@ -177,7 +180,7 @@ export async function unlinkActionFromJiraIssue(
  * Get Jira issue metadata from the external integration mapping.
  */
 export const getJiraIssueFromExternalId = async (
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   actionId: string
 ): Promise<JiraIssueMapping | null> => {
@@ -203,25 +206,42 @@ export const getJiraIssueFromExternalId = async (
  * Get employees that match email addresses.
  */
 export const getCompanyEmployees = async (
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   emails: string[]
 ) => {
+  if (emails.length === 0) return [];
+
   const users = await client
+    .from("user")
+    .select("id, email")
+    .in("email", emails);
+
+  if (users.error || !users.data?.length) return [];
+
+  const usersById = new Map(users.data.map((user) => [user.id, user]));
+  const memberships = await client
     .from("userToCompany")
-    .select("userId,user(email)")
+    .select("userId")
     .eq("companyId", companyId)
     .eq("role", "employee")
-    .in("user.email", emails);
+    .in("userId", Array.from(usersById.keys()));
 
-  return users.data ?? [];
+  if (memberships.error) return [];
+
+  return (memberships.data ?? []).flatMap((membership) => {
+    const user = usersById.get(membership.userId);
+    return user
+      ? [{ userId: membership.userId, user: { email: user.email } }]
+      : [];
+  });
 };
 
 /**
  * Update the cached Jira issue metadata in the mapping.
  */
 export async function updateJiraIssueMapping(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   actionId: string,
   mapping: JiraIssueMapping

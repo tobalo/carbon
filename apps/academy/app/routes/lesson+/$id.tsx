@@ -64,7 +64,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   const { course } = context;
-  const client = getCarbon(session.accessToken);
+  const client = getCarbon(session.accessToken, session.userId);
 
   const insert = await client.from("lessonCompletion").insert({
     userId: session.userId,

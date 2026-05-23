@@ -132,7 +132,7 @@ The system tracks:
 1. **Webhook Verification** - Validates Stripe signatures
 2. **Idempotency** - Prevents duplicate customer creation
 3. **Role-Based Access** - Plans and usage data protected by RLS
-4. **Service Role Operations** - Admin operations use service role
+4. **Service Client Operations** - Admin operations use the service client
 
 ## Bypass Mechanism
 

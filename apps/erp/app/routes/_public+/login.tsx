@@ -5,10 +5,10 @@ import {
   CLOUDFLARE_TURNSTILE_SECRET_KEY,
   CLOUDFLARE_TURNSTILE_SITE_KEY,
   CONTROLLED_ENVIRONMENT,
-  carbonClient,
   error,
   magicLinkValidator,
-  RATE_LIMIT
+  RATE_LIMIT,
+  startOAuthSignIn
 } from "@carbon/auth";
 import {
   sendMagicLink,
@@ -216,13 +216,11 @@ export default function LoginRoute() {
   }, [fetcher.data, mode, redirectTo]);
 
   const onSignInWithGoogle = async () => {
-    const { error } = await carbonClient.auth.signInWithOAuth({
+    const { error } = await startOAuthSignIn({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/callback${
-          redirectTo ? `?redirectTo=${redirectTo}` : ""
-        }`
-      }
+      redirectTo: `${window.location.origin}/callback${
+        redirectTo ? `?redirectTo=${redirectTo}` : ""
+      }`
     });
 
     if (error) {
@@ -231,14 +229,12 @@ export default function LoginRoute() {
   };
 
   const onSignInWithAzure = async () => {
-    const { error } = await carbonClient.auth.signInWithOAuth({
+    const { error } = await startOAuthSignIn({
       provider: "azure",
-      options: {
-        scopes: "email",
-        redirectTo: `${window.location.origin}/callback${
-          redirectTo ? `?redirectTo=${redirectTo}` : ""
-        }`
-      }
+      scopes: "email",
+      redirectTo: `${window.location.origin}/callback${
+        redirectTo ? `?redirectTo=${redirectTo}` : ""
+      }`
     });
 
     if (error) {

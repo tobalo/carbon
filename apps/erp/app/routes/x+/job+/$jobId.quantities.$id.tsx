@@ -1,10 +1,14 @@
 import { assertIsPost, error, notFound, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data, redirect, useLoaderData } from "react-router";
 import {
+  getJob,
   getJobOperations,
   getProductionQuantity,
   productionQuantityValidator,
@@ -14,16 +18,23 @@ import { ProductionQuantityForm } from "~/modules/production/ui/Jobs";
 import { getParams, path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "production"
   });
+  const { client, companyId } = auth;
 
   const { id, jobId } = params;
   if (!id) throw notFound("id not found");
   if (!jobId) throw notFound("jobId not found");
 
+  const job = await getJob(client, jobId);
+  if (job.error) {
+    throw notFound("Failed to fetch job");
+  }
+  assertCustomerAccountScope(auth, job.data?.customerId);
+
   const [productionQuantity, jobOperations] = await Promise.all([
-    getProductionQuantity(client, id),
+    getProductionQuantity(client, id, companyId),
     getJobOperations(client, jobId)
   ]);
 

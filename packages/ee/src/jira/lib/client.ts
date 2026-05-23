@@ -1,5 +1,5 @@
 import { JIRA_CLIENT_ID, JIRA_CLIENT_SECRET } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { getJiraIntegration, updateJiraCredentials } from "./service";
 import type {
   CreateJiraIssueInput,
@@ -165,8 +165,8 @@ export class JiraClient {
    * Get authentication headers, refreshing token if needed.
    */
   async getAuthHeaders(companyId: string): Promise<Record<string, string>> {
-    const serviceRole = getCarbonServiceRole();
-    const { data } = await getJiraIntegration(serviceRole, companyId);
+    const serviceClient = getCarbonServiceClient();
+    const { data } = await getJiraIntegration(serviceClient, companyId);
     const integration = data?.[0];
 
     if (!integration) {
@@ -188,7 +188,7 @@ export class JiraClient {
         };
 
         // Update stored credentials
-        await updateJiraCredentials(serviceRole, companyId, newCredentials);
+        await updateJiraCredentials(serviceClient, companyId, newCredentials);
 
         return {
           Authorization: `Bearer ${refreshed.accessToken}`,
@@ -209,8 +209,8 @@ export class JiraClient {
    * Get the cloud ID for API requests.
    */
   async getCloudId(companyId: string): Promise<string> {
-    const serviceRole = getCarbonServiceRole();
-    const { data } = await getJiraIntegration(serviceRole, companyId);
+    const serviceClient = getCarbonServiceClient();
+    const { data } = await getJiraIntegration(serviceClient, companyId);
     const integration = data?.[0];
 
     if (!integration) {
@@ -224,8 +224,8 @@ export class JiraClient {
    * Get the site URL for linking.
    */
   async getSiteUrl(companyId: string): Promise<string> {
-    const serviceRole = getCarbonServiceRole();
-    const { data } = await getJiraIntegration(serviceRole, companyId);
+    const serviceClient = getCarbonServiceClient();
+    const { data } = await getJiraIntegration(serviceClient, companyId);
     const integration = data?.[0];
 
     if (!integration) {

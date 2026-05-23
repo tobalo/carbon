@@ -1,7 +1,8 @@
 import { gzipSync } from "node:zlib";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { auditConfig } from "@carbon/database/audit.config";
 import type { AuditLogEntry } from "@carbon/database/audit.types";
+import { removeObject, uploadObject } from "@carbon/storage";
 import { inngest } from "../../client";
 
 // Type for RPC calls
@@ -17,7 +18,7 @@ type AuditArchiveRpcClient = {
 };
 
 async function archiveCompanyLogs(
-  client: AuditArchiveRpcClient & ReturnType<typeof getCarbonServiceRole>,
+  client: AuditArchiveRpcClient & ReturnType<typeof getCarbonServiceClient>,
   companyId: string,
   cutoffDate: Date
 ): Promise<{ recordsArchived: number; recordsDeleted: number }> {
@@ -50,19 +51,14 @@ async function archiveCompanyLogs(
   const month = String(nowDate.getMonth() + 1).padStart(2, "0");
   const day = String(nowDate.getDate()).padStart(2, "0");
   const timestamp = `${year}-${month}-${day}`;
-  const archivePath = `audit-logs/${companyId}/${year}/${month}/${timestamp}.jsonl.gz`;
+  const archivePath = `${companyId}/audit-logs/${year}/${month}/${timestamp}.jsonl.gz`;
 
-  // Upload to storage
-  const { error: uploadError } = await client.storage
-    .from(auditConfig.archiveBucket)
-    .upload(archivePath, gzipped, {
-      contentType: "application/gzip",
-      upsert: true
-    });
-
-  if (uploadError) {
-    throw new Error(`Failed to upload archive: ${uploadError.message}`);
-  }
+  await uploadObject({
+    companyId,
+    key: archivePath,
+    body: gzipped,
+    contentType: "application/gzip"
+  });
 
   // Get date range from records
   const startDate = records[0]!.createdAt;
@@ -80,7 +76,7 @@ async function archiveCompanyLogs(
 
   if (archiveError) {
     // Try to clean up uploaded file
-    await client.storage.from(auditConfig.archiveBucket).remove([archivePath]);
+    await removeObject({ companyId, key: archivePath });
     throw new Error(`Failed to record archive: ${archiveError.message}`);
   }
 
@@ -113,7 +109,7 @@ export const auditArchiveFunction = inngest.createFunction(
   { cron: "0 2 * * *" },
   async ({ step }) => {
     const results = await step.run("archive-audit-logs", async () => {
-      const client = getCarbonServiceRole();
+      const client = getCarbonServiceClient();
 
       // Calculate cutoff date
       const cutoffDate = new Date();
@@ -127,7 +123,8 @@ export const auditArchiveFunction = inngest.createFunction(
       const { data: companies, error: companiesError } = await client
         .from("company")
         .select("id")
-        .eq("auditLogEnabled", true);
+        .eq("auditLogEnabled", true)
+        .eq("active", true);
 
       if (companiesError) {
         console.error("Failed to fetch companies", companiesError);
@@ -145,7 +142,7 @@ export const auditArchiveFunction = inngest.createFunction(
         try {
           const archived = await archiveCompanyLogs(
             client as unknown as AuditArchiveRpcClient &
-              ReturnType<typeof getCarbonServiceRole>,
+              ReturnType<typeof getCarbonServiceClient>,
             company.id,
             cutoffDate
           );

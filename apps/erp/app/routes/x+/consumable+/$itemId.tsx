@@ -15,6 +15,7 @@ import {
 import { ResizablePanels } from "~/components/Layout";
 import type { ConsumableSummary, ItemFile } from "~/modules/items";
 import {
+  assertSupplierItemScope,
   getConsumable,
   getItemFiles,
   getMaterialUsedIn,
@@ -38,10 +39,11 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts",
     bypassRls: true
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
@@ -49,7 +51,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const [consumableSummary, supplierParts, pickMethods, tags] =
     await Promise.all([
       getConsumable(client, itemId, companyId),
-      getSupplierParts(client, itemId, companyId),
+      getSupplierParts(
+        client,
+        itemId,
+        companyId,
+        role === "supplier" ? supplierId : undefined
+      ),
       getPickMethods(client, itemId, companyId),
       getTagsList(client, companyId, "consumable")
     ]);
@@ -63,6 +70,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       )
     );
   }
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   return {
     consumableSummary: consumableSummary.data,
@@ -133,7 +148,6 @@ export default function ConsumableRoute() {
                         key: "methodMaterials",
                         name: "Method Materials",
                         module: "parts",
-                        // @ts-expect-error
                         children: methodMaterials
                       },
                       {

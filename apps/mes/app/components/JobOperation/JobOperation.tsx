@@ -1,6 +1,6 @@
 import type { Result } from "@carbon/auth";
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
+import type { TableInsert } from "@carbon/database/schema";
 import type { JSONContent } from "@carbon/react";
 import {
   Badge,
@@ -54,7 +54,7 @@ import {
   labelSizes
 } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestSingleResponse } from "@supabase/supabase-js";
+import type { QuerySingleResponse } from "@carbon/database/query-client";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { FaTasks } from "react-icons/fa";
@@ -162,7 +162,7 @@ type JobOperationProps = {
   thumbnailPath: string | null;
   trackedEntities: TrackedEntity[];
   workCenter: Promise<
-    PostgrestSingleResponse<{
+    QuerySingleResponse<{
       name: string;
       id: string;
       isBlocked: boolean | null;
@@ -305,7 +305,7 @@ export const JobOperation = ({
         );
 
         // Create inspection steps for actions that don't have them
-        const newSteps: Database["public"]["Tables"]["jobOperationStep"]["Insert"][] =
+        const newSteps: TableInsert<"jobOperationStep">[] =
           [];
         let maxSortOrder = Math.max(
           ...resolvedProcedure.attributes.map((s) => s.sortOrder ?? 0),
@@ -865,7 +865,7 @@ export const JobOperation = ({
                                             progress={
                                               (attributes.filter((a) =>
                                                 a.jobOperationStepRecord.some(
-                                                  (r) => r.index === activeStep
+                                                  (r: any) => r.index === activeStep
                                                 )
                                               ).length /
                                                 attributes.length) *
@@ -877,7 +877,7 @@ export const JobOperation = ({
                                               {
                                                 attributes.filter((a) =>
                                                   a.jobOperationStepRecord.some(
-                                                    (r) =>
+                                                    (r: any) =>
                                                       r.index === activeStep
                                                   )
                                                 ).length
@@ -1221,7 +1221,7 @@ export const JobOperation = ({
 
                                       {kittedChildren &&
                                         kittedChildren.map(
-                                          (kittedChild, index) => (
+                                          (kittedChild: any, index: number) => (
                                             <Tr
                                               key={`kittedChild-${kittedChild.id}`}
                                               className={cn(
@@ -1825,7 +1825,7 @@ export const JobOperation = ({
                                         progress={
                                           (attributes.filter((a) =>
                                             a.jobOperationStepRecord.some(
-                                              (r) => r.index === activeStep
+                                              (r: any) => r.index === activeStep
                                             )
                                           ).length /
                                             attributes.length) *
@@ -1837,7 +1837,7 @@ export const JobOperation = ({
                                           {
                                             attributes.filter((a) =>
                                               a.jobOperationStepRecord.some(
-                                                (r) => r.index === activeStep
+                                                (r: any) => r.index === activeStep
                                               )
                                             ).length
                                           }{" "}
@@ -2374,7 +2374,7 @@ export const JobOperation = ({
           onClose={onDeselectStep}
           id={
             selectedStep?.jobOperationStepRecord.find(
-              (r) => r.index === activeStep
+              (r: any) => r.index === activeStep
             )?.id ?? ""
           }
           title={t`Delete Step`}
@@ -2391,7 +2391,7 @@ function recordSetIsStarted(
 ) {
   return attributes.some((att) =>
     att.jobOperationStepRecord.some(
-      (record) =>
+      (record: any) =>
         record.index === activeStep &&
         (record.value !== null ||
           record.numericValue !== null ||

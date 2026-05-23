@@ -13,7 +13,7 @@ import type { MetaFunction } from "react-router";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { GroupedContentSidebar } from "~/components/Layout";
 import { CollapsibleSidebarProvider } from "~/components/Layout/Navigation";
-import { useSwaggerDocs } from "~/hooks/useSwaggerDocs";
+import { useApiDocsSchema } from "~/hooks/useApiDocsSchema";
 import type { ValidLang } from "~/modules/api";
 import {
   ApiDocsProvider,
@@ -147,7 +147,7 @@ function ApiDocsConfigInputs() {
               </label>
               <Input
                 size="sm"
-                placeholder="https://your-api-url.supabase.co"
+                placeholder="https://api.example.com"
                 value={apiUrl}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setApiUrl(e.target.value)
@@ -193,6 +193,11 @@ function ApiDocsConfigInputs() {
 
 const tableBlacklist = new Set([
   "apiKey",
+  "apiKeyRateLimit",
+  "authAccount",
+  "authSession",
+  "authUser",
+  "authVerification",
   "challengeAttempt",
   "documentTransaction",
   "feedback",
@@ -208,7 +213,7 @@ const tableBlacklist = new Set([
 ]);
 
 function useApiDocsMenu(): RouteGroup[] {
-  const swaggerDocsSchema = useSwaggerDocs();
+  const apiDocsSchema = useApiDocsSchema();
   const selectedLang = useSelectedLang();
   const result: RouteGroup[] = [
     {
@@ -222,11 +227,11 @@ function useApiDocsMenu(): RouteGroup[] {
     }
   ];
 
-  const tables = Object.keys(swaggerDocsSchema?.definitions ?? {}).sort();
+  const tables = Object.keys(apiDocsSchema?.definitions ?? {}).sort();
   const isTable = (table: string): boolean => {
-    if (!swaggerDocsSchema?.paths) return false;
+    if (!apiDocsSchema?.paths) return false;
     const tableKey = `/${table}`;
-    return Object.keys(swaggerDocsSchema.paths[tableKey] ?? {}).some(
+    return Object.keys(apiDocsSchema.paths[tableKey] ?? {}).some(
       (x) => x.toUpperCase() === "POST"
     );
   };

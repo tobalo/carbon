@@ -29,6 +29,7 @@ import { ResizablePanels } from "~/components/Layout";
 import { flattenTree } from "~/components/TreeView";
 import type { ItemFile, ToolSummary } from "~/modules/items";
 import {
+  assertSupplierItemScope,
   getItemFiles,
   getMakeMethodById,
   getMakeMethods,
@@ -53,17 +54,23 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts",
     bypassRls: true
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
 
   const [toolSummary, supplierParts, pickMethods, tags] = await Promise.all([
     getTool(client, itemId, companyId),
-    getSupplierParts(client, itemId, companyId),
+    getSupplierParts(
+      client,
+      itemId,
+      companyId,
+      role === "supplier" ? supplierId : undefined
+    ),
     getPickMethods(client, itemId, companyId),
     getTagsList(client, companyId, "tool")
   ]);
@@ -77,6 +84,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       )
     );
   }
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   const url = new URL(request.url);
   const requestedMethodId = url.searchParams.get("methodId");
@@ -98,7 +113,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       );
       if (fullMethod.error || !fullMethod.data) return null;
 
-      const tree = await getMethodTree(client, fullMethod.data.id);
+      const tree = await getMethodTree(client, fullMethod.data.id, companyId);
       if (tree.error) return null;
 
       const methods = tree.data.length > 0 ? flattenTree(tree.data[0]) : [];
@@ -265,7 +280,6 @@ export default function ToolRoute() {
                                   key: "methodMaterials",
                                   name: t`Method Materials`,
                                   module: "parts",
-                                  // @ts-expect-error
                                   children: methodMaterials
                                 },
                                 {
@@ -411,7 +425,6 @@ export default function ToolRoute() {
                                 key: "methodMaterials",
                                 name: "Method Materials",
                                 module: "parts",
-                                // @ts-expect-error
                                 children: methodMaterials
                               },
                               {

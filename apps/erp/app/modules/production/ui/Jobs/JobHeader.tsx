@@ -553,7 +553,7 @@ export function JobStartModal({
         .select("*")
         .eq("jobId", job.id!),
       carbon.from("jobOperation").select("*").eq("jobId", job.id!),
-      getJobMethodTree(carbon, job.id!)
+      getJobMethodTree(carbon, job.id!, job.companyId!)
     ]);
 
     // Check for existing purchase order lines for outside operations
@@ -648,7 +648,7 @@ export function JobStartModal({
     // top-level make method
     uniqueMakeMethodIds.add(makeMethod.data?.id!);
 
-    const flatMethod =
+    const flatMethod: any[] =
       methodTree.data && methodTree.data.length > 0
         ? flattenTree(methodTree.data[0])
         : [];

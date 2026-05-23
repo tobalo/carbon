@@ -11,7 +11,7 @@ import { getTagsList } from "~/modules/shared";
 import type { Handle } from "~/utils/handle";
 import { path } from "~/utils/path";
 import { getGenericQueryFilters } from "~/utils/query";
-import { useRealtime } from "../../../hooks";
+import { usePollingRevalidation } from "../../../hooks";
 
 export const handle: Handle = {
   breadcrumb: msg`Parts`,
@@ -19,15 +19,20 @@ export const handle: Handle = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts",
     bypassRls: true
   });
+  const { client, companyId, role, supplierId: scopedSupplierId } = auth;
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const search = searchParams.get("search");
-  const supplierId = searchParams.get("supplierId");
+  if (role === "supplier" && !scopedSupplierId) {
+    throw new Response("Supplier account is not scoped", { status: 403 });
+  }
+  const supplierId =
+    role === "supplier" ? scopedSupplierId : searchParams.get("supplierId");
 
   const { limit, offset, sorts, filters } =
     getGenericQueryFilters(searchParams);
@@ -61,7 +66,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function PartsSearchRoute() {
   const { count, parts, tags } = useLoaderData<typeof loader>();
 
-  useRealtime("part");
+  usePollingRevalidation("part");
 
   return (
     <VStack spacing={0} className="h-full">

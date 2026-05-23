@@ -1,11 +1,23 @@
-import type { Database } from "@carbon/database";
+import { and, dbService, eq, inArray, withAuth } from "@carbon/database/drizzle";
+import {
+  approvalRequestTable,
+  periodTable,
+  purchaseOrderLineTable,
+  purchaseOrderTable,
+  qualityDocumentTable,
+  type QueryDatabase,
+  supplierTable
+} from "@carbon/database/schema";
 import { SalesOrderEmail } from "@carbon/documents/email";
 import { trigger } from "@carbon/jobs";
 import { redis } from "@carbon/kv";
+import { signDownload, uploadObject } from "@carbon/storage";
+import { getPurchaseOrderStatus } from "@carbon/utils";
 import type { CalendarDate } from "@internationalized/date";
 import { startOfWeek } from "@internationalized/date";
 import { renderAsync } from "@react-email/components";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { nanoid } from "nanoid";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import { getPaymentTermsList } from "~/modules/accounting";
 import {
@@ -16,13 +28,248 @@ import {
 } from "~/modules/sales";
 import { getCompany } from "~/modules/settings";
 import { getUser } from "~/modules/users/users.server";
-import { getDatabaseClient } from "~/services/database.server";
 import { stripSpecialCharacters } from "~/utils/string";
 import { upsertDocument } from "../documents/documents.service";
 import type { CustomFieldsTableType } from "../settings";
 
+export async function approveRequest(
+  id: string,
+  userId: string,
+  notes?: string
+) {
+  const timestamp = new Date().toISOString();
+
+  try {
+    const result = await withAuth({ kind: "user", userId }, async (db) => {
+      const [approvalRequest] = await db
+        .select({
+          id: approvalRequestTable.id,
+          status: approvalRequestTable.status,
+          documentType: approvalRequestTable.documentType,
+          documentId: approvalRequestTable.documentId,
+          companyId: approvalRequestTable.companyId
+        })
+        .from(approvalRequestTable)
+        .where(eq(approvalRequestTable.id, id))
+        .limit(1);
+
+      if (!approvalRequest) {
+        throw new Error("Approval request not found");
+      }
+
+      if (approvalRequest.status !== "Pending") {
+        throw new Error("Approval request is not pending");
+      }
+
+      const [updatedApproval] = await db
+        .update(approvalRequestTable)
+        .set({
+          status: "Approved",
+          decisionBy: userId,
+          decisionAt: timestamp,
+          decisionNotes: notes || null,
+          updatedBy: userId,
+          updatedAt: timestamp
+        })
+        .where(eq(approvalRequestTable.id, id))
+        .returning({
+          id: approvalRequestTable.id,
+          documentType: approvalRequestTable.documentType,
+          documentId: approvalRequestTable.documentId
+        });
+
+      if (!updatedApproval) {
+        throw new Error("Failed to update approval request");
+      }
+
+      if (approvalRequest.documentType === "purchaseOrder") {
+        const lines = await db
+          .select({
+            purchaseOrderLineType:
+              purchaseOrderLineTable.purchaseOrderLineType,
+            invoicedComplete: purchaseOrderLineTable.invoicedComplete,
+            receivedComplete: purchaseOrderLineTable.receivedComplete
+          })
+          .from(purchaseOrderLineTable)
+          .where(
+            eq(
+              purchaseOrderLineTable.purchaseOrderId,
+              approvalRequest.documentId
+            )
+          );
+
+        const { status: calculatedStatus } = getPurchaseOrderStatus(lines);
+
+        const [poUpdate] = await db
+          .update(purchaseOrderTable)
+          .set({
+            status: calculatedStatus,
+            updatedBy: userId,
+            updatedAt: timestamp
+          })
+          .where(
+            and(
+              eq(purchaseOrderTable.id, approvalRequest.documentId),
+              eq(purchaseOrderTable.status, "Needs Approval")
+            )
+          )
+          .returning({ id: purchaseOrderTable.id });
+
+        if (!poUpdate) {
+          throw new Error(
+            "Failed to update purchase order status - it may no longer be in 'Needs Approval' state"
+          );
+        }
+      } else if (approvalRequest.documentType === "qualityDocument") {
+        const [qualityDocumentUpdate] = await db
+          .update(qualityDocumentTable)
+          .set({
+            status: "Active",
+            updatedBy: userId,
+            updatedAt: timestamp
+          })
+          .where(eq(qualityDocumentTable.id, approvalRequest.documentId))
+          .returning({ id: qualityDocumentTable.id });
+
+        if (!qualityDocumentUpdate) {
+          throw new Error("Failed to update quality document status");
+        }
+      } else if (approvalRequest.documentType === "supplier") {
+        const [supplierUpdate] = await db
+          .update(supplierTable)
+          .set({
+            supplierStatus: "Active",
+            updatedBy: userId,
+            updatedAt: timestamp
+          })
+          .where(eq(supplierTable.id, approvalRequest.documentId))
+          .returning({ id: supplierTable.id });
+
+        if (!supplierUpdate) {
+          throw new Error("Failed to update supplier status");
+        }
+      }
+
+      return updatedApproval;
+    });
+
+    return { data: result, error: null };
+  } catch (error) {
+    return {
+      error: {
+        message:
+          error instanceof Error ? error.message : "Failed to process approval"
+      },
+      data: null
+    };
+  }
+}
+
+export async function rejectRequest(
+  id: string,
+  userId: string,
+  notes?: string
+) {
+  const timestamp = new Date().toISOString();
+
+  try {
+    const result = await withAuth({ kind: "user", userId }, async (db) => {
+      const [approvalRequest] = await db
+        .select({
+          id: approvalRequestTable.id,
+          status: approvalRequestTable.status,
+          documentType: approvalRequestTable.documentType,
+          documentId: approvalRequestTable.documentId
+        })
+        .from(approvalRequestTable)
+        .where(eq(approvalRequestTable.id, id))
+        .limit(1);
+
+      if (!approvalRequest) {
+        throw new Error("Approval request not found");
+      }
+
+      if (approvalRequest.status !== "Pending") {
+        throw new Error("Approval request is not pending");
+      }
+
+      const [updatedApproval] = await db
+        .update(approvalRequestTable)
+        .set({
+          status: "Rejected",
+          decisionBy: userId,
+          decisionAt: timestamp,
+          decisionNotes: notes || null,
+          updatedBy: userId,
+          updatedAt: timestamp
+        })
+        .where(eq(approvalRequestTable.id, id))
+        .returning({
+          id: approvalRequestTable.id,
+          documentType: approvalRequestTable.documentType,
+          documentId: approvalRequestTable.documentId
+        });
+
+      if (!updatedApproval) {
+        throw new Error("Failed to update approval request");
+      }
+
+      if (approvalRequest.documentType === "purchaseOrder") {
+        const [poUpdate] = await db
+          .update(purchaseOrderTable)
+          .set({
+            status: "Rejected",
+            updatedBy: userId,
+            updatedAt: timestamp
+          })
+          .where(
+            and(
+              eq(purchaseOrderTable.id, approvalRequest.documentId),
+              eq(purchaseOrderTable.status, "Needs Approval")
+            )
+          )
+          .returning({ id: purchaseOrderTable.id });
+
+        if (!poUpdate) {
+          throw new Error(
+            "Failed to update purchase order status - it may no longer be in 'Needs Approval' state"
+          );
+        }
+      }
+
+      if (approvalRequest.documentType === "supplier") {
+        const [supplierUpdate] = await db
+          .update(supplierTable)
+          .set({
+            supplierStatus: "Rejected",
+            updatedBy: userId,
+            updatedAt: timestamp
+          })
+          .where(eq(supplierTable.id, approvalRequest.documentId))
+          .returning({ id: supplierTable.id });
+
+        if (!supplierUpdate) {
+          throw new Error("Failed to update supplier status");
+        }
+      }
+
+      return updatedApproval;
+    });
+
+    return { data: result, error: null };
+  } catch (error) {
+    return {
+      error: {
+        message:
+          error instanceof Error ? error.message : "Failed to process rejection"
+      },
+      data: null
+    };
+  }
+}
+
 export async function assign(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     id: string;
     table: string;
@@ -51,7 +298,7 @@ export async function getCustomFieldsCacheKey(args?: {
 }
 
 export async function getCustomFieldsSchemas(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args?: {
     companyId: string;
     module?: string;
@@ -98,7 +345,7 @@ export async function getCustomFieldsSchemas(
 }
 
 /**
- * Generates a sales order PDF via the pdfLoader, uploads it to Supabase
+ * Generates a sales order PDF via the pdfLoader, uploads it to S3
  * storage under the opportunity path, and creates a document DB record.
  *
  * Returns the PDF ArrayBuffer (useful for email attachments) and the
@@ -115,8 +362,8 @@ export async function generateAndAttachSalesOrderPdf(args: {
   opportunityId: string;
   companyId: string;
   userId: string;
-  /** A service-role Supabase client for storage + DB writes */
-  serviceRole: SupabaseClient<Database>;
+  /** Database client for document writes and email context reads */
+  client: CarbonDatabaseClient<QueryDatabase>;
   /** The pdf loader imported from the sales-order pdf route */
   pdfLoader: (args: LoaderFunctionArgs) => Promise<Response>;
 }): Promise<{ file: ArrayBuffer; fileName: string; documentFilePath: string }> {
@@ -127,7 +374,7 @@ export async function generateAndAttachSalesOrderPdf(args: {
     opportunityId,
     companyId,
     userId,
-    serviceRole,
+    client,
     pdfLoader
   } = args;
 
@@ -147,23 +394,18 @@ export async function generateAndAttachSalesOrderPdf(args: {
     `${salesOrderIdentifier} - ${new Date().toISOString().slice(0, -5)}.pdf`
   );
 
-  // 2. Upload to Supabase storage
+  // 2. Upload to S3 storage
   const documentFilePath = `${companyId}/opportunity/${opportunityId}/${fileName}`;
 
-  const uploadResult = await serviceRole.storage
-    .from("private")
-    .upload(documentFilePath, file, {
-      cacheControl: `${12 * 60 * 60}`,
-      contentType: "application/pdf",
-      upsert: true
-    });
-
-  if (uploadResult.error) {
-    throw new Error("Failed to upload PDF to storage");
-  }
+  await uploadObject({
+    companyId,
+    key: documentFilePath,
+    body: new Uint8Array(file),
+    contentType: "application/pdf"
+  });
 
   // 3. Create the document DB record
-  const documentResult = await upsertDocument(serviceRole, {
+  const documentResult = await upsertDocument(client, {
     path: documentFilePath,
     name: fileName,
     size: Math.round(file.byteLength / 1024),
@@ -196,7 +438,7 @@ export async function sendSalesOrderEmail(args: {
   cc?: string[];
   documentFilePath: string;
   fileName: string;
-  serviceRole: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   locales: string[];
 }): Promise<{ success: boolean; message?: string }> {
   const {
@@ -207,7 +449,7 @@ export async function sendSalesOrderEmail(args: {
     cc: ccSelections,
     documentFilePath,
     fileName,
-    serviceRole,
+    client,
     locales
   } = args;
 
@@ -220,13 +462,13 @@ export async function sendSalesOrderEmail(args: {
     seller,
     paymentTerms
   ] = await Promise.all([
-    getCompany(serviceRole, companyId),
-    getCustomerContact(serviceRole, customerContactId),
-    getSalesOrder(serviceRole, salesOrderId),
-    getSalesOrderLines(serviceRole, salesOrderId),
-    getSalesOrderCustomerDetails(serviceRole, salesOrderId),
-    getUser(serviceRole, userId),
-    getPaymentTermsList(serviceRole, companyId)
+    getCompany(client, companyId),
+    getCustomerContact(client, customerContactId),
+    getSalesOrder(client, salesOrderId),
+    getSalesOrderLines(client, salesOrderId),
+    getSalesOrderCustomerDetails(client, salesOrderId),
+    getUser(client, userId),
+    getPaymentTermsList(client, companyId)
   ]);
 
   if (!customer?.data?.contact) {
@@ -269,9 +511,11 @@ export async function sendSalesOrderEmail(args: {
 
   const html = await renderAsync(emailTemplate);
   const text = await renderAsync(emailTemplate, { plainText: true });
-  const { data: signedUrlData } = await serviceRole.storage
-    .from("private")
-    .createSignedUrl(documentFilePath, 3600);
+  const signedUrl = await signDownload({
+    companyId,
+    key: documentFilePath,
+    expiresIn: 3600
+  });
 
   await trigger("send-email", {
     to: [seller.data.email, customer.data.contact.email!],
@@ -280,10 +524,10 @@ export async function sendSalesOrderEmail(args: {
     subject: `Order ${salesOrder.data.salesOrderId} from ${company.data.name}`,
     html,
     text,
-    attachments: signedUrlData?.signedUrl
+    attachments: signedUrl
       ? [
           {
-            path: signedUrlData.signedUrl,
+            path: signedUrl,
             filename: fileName
           }
         ]
@@ -312,18 +556,19 @@ export async function getOrCreatePeriods(
     currentStart = periodEnd.add({ days: 1 });
   }
 
-  const db = getDatabaseClient();
-
   // Check which periods already exist
-  const existingPeriods = await db
-    .selectFrom("period")
-    .selectAll()
+  const existingPeriods = await dbService
+    .select()
+    .from(periodTable)
     .where(
-      "startDate",
-      "in",
-      ranges.map((r) => r.startDate)
+      and(
+        inArray(
+          periodTable.startDate,
+          ranges.map((r) => r.startDate)
+        ),
+        eq(periodTable.periodType, "Week")
+      )
     )
-    .where("periodType", "=", "Week")
     .execute();
 
   if (existingPeriods.length === ranges.length) {
@@ -339,20 +584,19 @@ export async function getOrCreatePeriods(
     (r) => !existingStartDates.has(r.startDate)
   );
 
-  // Create missing periods in a transaction
-  const created = await db.transaction().execute(async (trx) => {
+  const created = await dbService.transaction(async (trx) => {
     return await trx
-      .insertInto("period")
+      .insert(periodTable)
       .values(
         periodsToCreate.map((p) => ({
+          id: nanoid(),
           startDate: p.startDate,
           endDate: p.endDate,
           periodType: "Week" as const,
           createdAt: new Date().toISOString()
         }))
       )
-      .returningAll()
-      .execute();
+      .returning();
   });
 
   return [...existingPeriods, ...created].map(toPlainPeriod);

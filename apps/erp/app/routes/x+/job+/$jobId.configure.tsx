@@ -1,6 +1,5 @@
 import { error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { trigger } from "@carbon/jobs";
 import type { ActionFunctionArgs } from "react-router";
@@ -27,8 +26,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
           updatedAt: new Date().toISOString(),
           updatedBy: userId
         })
-        .eq("id", jobId),
-      client.from("job").select("itemId").eq("id", jobId).single()
+        .eq("id", jobId)
+        .eq("companyId", companyId),
+      client
+        .from("job")
+        .select("itemId")
+        .eq("id", jobId)
+        .eq("companyId", companyId)
+        .single()
     ]);
 
     if (result.error) {
@@ -45,8 +50,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    const serviceRole = await getCarbonServiceRole();
-    const upsertMethod = await upsertJobMethod(serviceRole, "itemToJob", {
+    const upsertMethod = await upsertJobMethod(client, "itemToJob", {
       sourceId: job.data.itemId,
       targetId: jobId,
       companyId,

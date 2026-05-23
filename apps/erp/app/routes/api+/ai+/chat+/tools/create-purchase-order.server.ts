@@ -1,5 +1,5 @@
 import { getAppUrl } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getUserClaims } from "@carbon/auth/users.server";
 import { tool } from "ai";
 import { getCurrencyByCode } from "~/modules/accounting/accounting.service";
 import { getEmployeeJob } from "~/modules/people/people.service";
@@ -15,11 +15,36 @@ import { path } from "~/utils/path";
 import type { ChatContext } from "../agents/shared/context";
 import { createPurchaseOrderSchema } from "./create-purchase-order";
 
+function hasCompanyCreatePermission(
+  permissions: Awaited<ReturnType<typeof getUserClaims>>["permissions"],
+  module: string,
+  companyId: string
+) {
+  const permission = permissions[module];
+  return (
+    !!permission &&
+    (permission.create.includes("0") || permission.create.includes(companyId))
+  );
+}
+
 export const createPurchaseOrderTool = tool({
   description: "Create a purchase order from a list of parts and a supplier",
   inputSchema: createPurchaseOrderSchema,
   execute: async function (args, executionOptions) {
     const context = executionOptions.experimental_context as ChatContext;
+
+    const claims = await getUserClaims(context.userId, context.companyId);
+    if (
+      !hasCompanyCreatePermission(
+        claims.permissions,
+        "purchasing",
+        context.companyId
+      )
+    ) {
+      return {
+        error: "Access denied"
+      };
+    }
 
     console.log(
       "[createPurchaseOrderTool] Starting purchase order creation with args:",
@@ -35,7 +60,7 @@ export const createPurchaseOrderTool = tool({
       employeeJob
     ] = await Promise.all([
       getNextSequence(
-        getCarbonServiceRole(),
+        context.client,
         "purchaseOrder",
         context.companyId
       ),

@@ -1,3 +1,0 @@
--- This file is intentionally empty.
--- User and company seeding is now handled by the seed-dev.ts script.
--- Run: npm run db:seed:dev -- --email your@email.com

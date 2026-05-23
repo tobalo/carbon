@@ -63,7 +63,7 @@ CREATE INDEX idx_sales_order_ic_po ON "salesOrder"("intercompanyPurchaseOrderId"
 - Pro: Catches all PO creation paths (UI, API, import)
 - Con: Complex logic in Postgres, harder to debug
 
-**Option B: Edge function called from PO service**
+**Option B: Shared Node service called from PO service**
 - Pro: TypeScript, easier to maintain, access to same shared utilities
 - Con: Must be called from every PO creation path
 
@@ -87,7 +87,7 @@ CREATE INDEX idx_sales_order_ic_po ON "salesOrder"("intercompanyPurchaseOrderId"
 | File | Change |
 |------|--------|
 | New migration | Add `intercompanyPurchaseOrderId` to `salesOrder` |
-| New edge function or shared utility | `handleIntercompanyPurchaseOrder()` |
+| New Node route or shared utility | `handleIntercompanyPurchaseOrder()` |
 | PO service/route | Call auto-pairing on status transition |
 | PO detail UI | Show paired SO link |
 | SO detail UI | Show source PO link |

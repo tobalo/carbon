@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -36,9 +35,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const acknowledged = formData.get("acknowledged") === "true";
 
   // Item Rule evaluation. Single synthetic line covering the adjustment.
-  const serviceRole = getCarbonServiceRole();
   const { violations, ruleNames } = await evaluateLinesForSurface({
-    client: serviceRole,
+    client,
     companyId,
     userId,
     surface: "inventoryAdjustment",

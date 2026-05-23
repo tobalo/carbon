@@ -1,1 +1,0 @@
-ALTER TABLE "purchaseInvoiceLine" ADD COLUMN "jobOperationId" TEXT REFERENCES "jobOperation"("id");

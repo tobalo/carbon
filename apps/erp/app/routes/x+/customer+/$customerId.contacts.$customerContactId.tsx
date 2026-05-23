@@ -5,7 +5,10 @@ import {
   notFound,
   success
 } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -25,15 +28,17 @@ import { path } from "~/utils/path";
 import { customerContactsQuery } from "~/utils/react-query";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "sales"
   });
+  const { client } = auth;
 
   const { customerId, customerContactId } = params;
   if (!customerId) throw notFound("customerId not found");
   if (!customerContactId) throw notFound("customerContactId not found");
+  assertCustomerAccountScope(auth, customerId);
 
-  const contact = await getCustomerContact(client, customerContactId);
+  const contact = await getCustomerContact(client, customerContactId, customerId);
   if (contact.error) {
     throw redirect(
       path.to.customerContacts(customerId),
@@ -51,13 +56,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "sales"
   });
+  const { client } = auth;
 
   const { customerId, customerContactId } = params;
   if (!customerId) throw notFound("customerId not found");
   if (!customerContactId) throw notFound("customerContactId not found");
+  assertCustomerAccountScope(auth, customerId);
 
   const formData = await request.formData();
   const validation = await validator(customerContactValidator).validate(
@@ -75,6 +82,25 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (contactId === undefined)
     throw badRequest("contactId is undefined from form data");
+
+  const existingContact = await getCustomerContact(
+    client,
+    customerContactId,
+    customerId
+  );
+  const existingContactId = existingContact.data?.contact?.id;
+  if (existingContact.error || !existingContactId) {
+    throw redirect(
+      path.to.customerContacts(customerId),
+      await flash(
+        request,
+        error(existingContact.error, "Failed to verify customer contact")
+      )
+    );
+  }
+  if (contactId !== existingContactId) {
+    throw badRequest("contactId does not match scoped customer contact");
+  }
 
   const update = await updateCustomerContact(client, {
     contactId,

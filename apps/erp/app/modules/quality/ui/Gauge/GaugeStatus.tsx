@@ -1,8 +1,13 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  gaugeCalibrationStatusEnum,
+  gaugeRoleEnum,
+  gaugeStatusEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 
 type GaugeStatusProps = {
-  status?: Database["public"]["Enums"]["gaugeStatus"] | null;
+  status?: EnumValue<typeof gaugeStatusEnum> | null;
 };
 
 const GaugeStatus = ({ status }: GaugeStatusProps) => {
@@ -17,7 +22,7 @@ const GaugeStatus = ({ status }: GaugeStatusProps) => {
 };
 
 type GaugeCalibrationStatusProps = {
-  status?: Database["public"]["Enums"]["gaugeCalibrationStatus"] | null;
+  status?: EnumValue<typeof gaugeCalibrationStatusEnum> | null;
 };
 
 const GaugeCalibrationStatus = ({ status }: GaugeCalibrationStatusProps) => {
@@ -34,7 +39,7 @@ const GaugeCalibrationStatus = ({ status }: GaugeCalibrationStatusProps) => {
 };
 
 type GaugeRoleProps = {
-  role?: Database["public"]["Enums"]["gaugeRole"] | null;
+  role?: EnumValue<typeof gaugeRoleEnum> | null;
 };
 
 const GaugeRole = ({ role }: GaugeRoleProps) => {

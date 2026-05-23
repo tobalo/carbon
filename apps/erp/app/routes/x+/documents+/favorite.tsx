@@ -9,7 +9,7 @@ import { favoriteSchema } from "~/types/validators";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { client, userId } = await requirePermissions(request, {
-    view: "purchasing"
+    view: "documents"
   });
 
   const validation = await validator(favoriteSchema).validate(
@@ -30,7 +30,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (result.error) {
     return data(
       {},
-      await flash(request, error(result, "Failed to favorite purchase order"))
+      await flash(request, error(result, "Failed to favorite document"))
     );
   }
 

@@ -8,14 +8,14 @@ import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const { client, userId } = await requirePermissions(request, {
     delete: "documents"
   });
 
   const { documentId } = params;
   if (!documentId) throw notFound("documentId not found");
 
-  const moveToTrash = await deleteDocument(client, documentId);
+  const moveToTrash = await deleteDocument(client, documentId, userId);
 
   if (moveToTrash.error) {
     throw redirect(

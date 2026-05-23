@@ -17,7 +17,7 @@ import { useOnboarding } from "./useOnboarding";
 import { usePercentFormatter } from "./usePercentFormatter";
 import { usePermissions } from "./usePermissions";
 import { usePlanGate } from "./usePlanGate";
-import { useRealtime } from "./useRealtime";
+import { usePollingRevalidation } from "./usePollingRevalidation";
 import { useScrollPosition } from "./useScrollPosition";
 import { useSettings } from "./useSettings";
 import { useSupplierApprovalRequired } from "./useSupplierApprovalRequired";
@@ -40,7 +40,7 @@ export {
   usePercentFormatter,
   usePermissions,
   usePlanGate,
-  useRealtime,
+  usePollingRevalidation,
   useRouteData,
   useScrollPosition,
   useSettings,

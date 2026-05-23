@@ -1,8 +1,8 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 
 export interface ChatContext {
-  client: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   userId: string;
   companyId: string;
   companyGroupId: string;
@@ -23,7 +23,7 @@ export function createChatContext(params: {
   userId: string;
   companyId: string;
   companyGroupId: string;
-  client: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   fullName: string;
   companyName: string;
   country?: string;

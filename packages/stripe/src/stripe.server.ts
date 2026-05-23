@@ -1,5 +1,5 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type { TableInsert } from "@carbon/database/schema";
 import {
   CarbonEdition,
   getAppUrl,
@@ -10,7 +10,6 @@ import {
 import { redis } from "@carbon/kv";
 import { trigger } from "@carbon/lib/trigger";
 import { Edition, Plan } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { Stripe } from "stripe";
 import { z } from "zod";
 import { forwardToGtm } from "./gtm-events.server";
@@ -72,6 +71,10 @@ const allowedEventTypes = [
 ] as const;
 type AllowedEventType = (typeof allowedEventTypes)[number];
 
+type StripeQueryClient = {
+  from(table: string): any;
+};
+
 export async function createStripeCustomer({
   userId,
   companyId,
@@ -112,11 +115,11 @@ export async function createStripeCustomer({
   }
 }
 
-function getPlanById(client: SupabaseClient<Database>, planId: string) {
+function getPlanById(client: StripeQueryClient, planId: string) {
   return client.from("plan").select("*").eq("id", planId).single();
 }
 
-function getPlanByPriceId(client: SupabaseClient<Database>, priceId: string) {
+function getPlanByPriceId(client: StripeQueryClient, priceId: string) {
   return client.from("plan").select("*").eq("stripePriceId", priceId).single();
 }
 
@@ -199,8 +202,8 @@ export async function getStripeCustomerId(companyId: string) {
   if (cached) return cached;
 
   // Fallback: check companyPlan table
-  const serviceRole = getCarbonServiceRole();
-  const { data } = await serviceRole
+  const serviceClient = getCarbonServiceClient();
+  const { data } = await serviceClient
     .from("companyPlan")
     .select("stripeCustomerId")
     .eq("id", companyId)
@@ -268,8 +271,8 @@ export async function getCheckoutUrl({
     stripeCustomerId = customer.id;
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const plan = await getPlanById(serviceRole, planId);
+  const serviceClient = getCarbonServiceClient();
+  const plan = await getPlanById(serviceClient, planId);
   const checkoutSession = await stripe!.checkout.sessions.create({
     customer: stripeCustomerId,
     line_items: [
@@ -338,8 +341,8 @@ export async function getBillingPortalRedirectUrl({
 }
 
 async function upsertCompanyPlan(
-  client: SupabaseClient<Database>,
-  companyPlan: Database["public"]["Tables"]["companyPlan"]["Insert"]
+  client: StripeQueryClient,
+  companyPlan: TableInsert<"companyPlan">
 ) {
   return client.from("companyPlan").upsert(companyPlan);
 }
@@ -411,7 +414,7 @@ export async function processStripeEvent({
           data.customer_details?.email ?? undefined
         ),
         collectedTaxId
-          ? getCarbonServiceRole()
+          ? getCarbonServiceClient()
               .from("company")
               .update({ taxId: collectedTaxId })
               .eq("id", companyId)
@@ -444,14 +447,26 @@ export async function processStripeEvent({
     }
 
     try {
-      const serviceRole = getCarbonServiceRole();
+      const serviceClient = getCarbonServiceClient();
       const key = `stripe:customer:${customer}`;
+      const companyPlan = await serviceClient
+        .from("companyPlan")
+        .select("id")
+        .eq("stripeCustomerId", customer)
+        .maybeSingle();
+
+      if (!companyPlan.data?.id) {
+        await redis.del(key);
+        return;
+      }
 
       await Promise.all([
         redis.del(key),
-        serviceRole
+        redis.del(`stripe:company:${companyPlan.data.id}`),
+        serviceClient
           .from("companyPlan")
           .delete()
+          .eq("id", companyPlan.data.id)
           .eq("stripeCustomerId", customer)
       ]);
     } catch (error) {
@@ -486,11 +501,11 @@ async function sendNewCustomerNotification(
     expand: ["data.default_payment_method"]
   });
 
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
   const subscription = subscriptions.data[0];
 
   const plan = await getPlanByPriceId(
-    serviceRole,
+    serviceClient,
     subscription?.items.data[0]?.price.id ?? ""
   );
 
@@ -514,7 +529,7 @@ export async function syncStripeDataToKV(
 
   const key = `stripe:customer:${customerId}`;
   let companyId = companyIdFromMetadata;
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
 
   const subscriptions = await stripe.subscriptions.list({
     customer: customerId,
@@ -529,7 +544,7 @@ export async function syncStripeDataToKV(
   }
 
   if (!companyId) {
-    const companyPlan = await serviceRole
+    const companyPlan = await serviceClient
       .from("companyPlan")
       .select("*")
       .eq("stripeCustomerId", customerId)
@@ -540,7 +555,7 @@ export async function syncStripeDataToKV(
 
   const subscription = subscriptions.data[0];
   const plan = await getPlanByPriceId(
-    serviceRole,
+    serviceClient,
     subscription?.items.data[0]?.price.id ?? ""
   );
 
@@ -570,7 +585,7 @@ export async function syncStripeDataToKV(
   const subData = subDataResult.data;
 
   if (companyId) {
-    const companyPlanData: Database["public"]["Tables"]["companyPlan"]["Insert"] =
+    const companyPlanData: TableInsert<"companyPlan"> =
       {
         id: companyId,
         planId: plan.data?.id ?? "",
@@ -591,7 +606,7 @@ export async function syncStripeDataToKV(
 
     const [, companyPlan] = await Promise.all([
       redis.set(key, JSON.stringify(subData)),
-      upsertCompanyPlan(serviceRole, companyPlanData)
+      upsertCompanyPlan(serviceClient, companyPlanData)
     ]);
 
     if (companyPlan.error) {
@@ -626,19 +641,12 @@ export async function updateSubscriptionQuantityForCompany(companyId: string) {
   }
 
   try {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
 
     // Get company plan with plan details
-    const companyPlanResult = await serviceRole
+    const companyPlanResult = await serviceClient
       .from("companyPlan")
-      .select(
-        `
-        stripeSubscriptionId,
-        plan!inner(
-          userBasedPricing
-        )
-      `
-      )
+      .select("stripeSubscriptionId, planId")
       .eq("id", companyId)
       .single();
 
@@ -647,30 +655,44 @@ export async function updateSubscriptionQuantityForCompany(companyId: string) {
       return;
     }
 
-    const { stripeSubscriptionId, plan } = companyPlanResult.data;
+    const { stripeSubscriptionId, planId } = companyPlanResult.data;
+    const planResult = await serviceClient
+      .from("plan")
+      .select("userBasedPricing")
+      .eq("id", planId)
+      .single();
 
     // Only update if userBasedPricing is true and we have a subscription
-    if (!plan?.userBasedPricing || !stripeSubscriptionId) {
+    if (!planResult.data?.userBasedPricing || !stripeSubscriptionId) {
       return;
     }
 
     // Count active users
-    const activeUsersResult = await serviceRole
+    const membershipsResult = await serviceClient
       .from("userToCompany")
-      .select("userId, ...user(email)")
+      .select("userId")
       .eq("companyId", companyId);
 
-    if (activeUsersResult.error) {
+    if (membershipsResult.error) {
       console.error(
         `Failed to count active users for company ${companyId}:`,
-        activeUsersResult.error
+        membershipsResult.error
       );
       return;
     }
 
+    const userIds = membershipsResult.data?.map((user) => user.userId) ?? [];
+    const usersResult =
+      userIds.length > 0
+        ? await serviceClient
+            .from("user")
+            .select("id, email")
+            .in("id", userIds)
+        : { data: [] };
+
     const activeUserCount =
-      activeUsersResult.data?.filter(
-        (user) => !(user?.email).includes("@carbon.ms")
+      usersResult.data?.filter(
+        (user) => !(user.email ?? "").includes("@carbon.ms")
       ).length || 1;
 
     // Get the subscription from Stripe to find the subscription item

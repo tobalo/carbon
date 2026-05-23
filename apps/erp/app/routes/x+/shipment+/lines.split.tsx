@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
 import { splitValidator } from "~/modules/inventory";
@@ -40,9 +40,7 @@ export async function action({ request }: ActionFunctionArgs) {
     };
   }
 
-  const serviceRole = getCarbonServiceRole();
-
-  const salesOrderShipment = await serviceRole.functions.invoke<{
+  const salesOrderShipment = await invokeFunction<{
     id: string;
   }>("create", {
     body: {
@@ -53,7 +51,7 @@ export async function action({ request }: ActionFunctionArgs) {
       shipmentLineId: documentLineId,
       quantity,
       userId: userId
-    }
+    },
   });
 
   if (salesOrderShipment.error) {

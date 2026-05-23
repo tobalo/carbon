@@ -9,12 +9,9 @@
  * This prevents unnecessary syncing (e.g., items configured as push-only
  * won't be pulled from Xero, and POs configured as push-only won't try to pull).
  */
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import {
-  getPostgresClient,
-  getPostgresConnectionPool
-} from "@carbon/database/client";
-import {
+  createAccountingDatabaseClient,
   createMappingService,
   getAccountingIntegration,
   getProviderIntegration,
@@ -24,7 +21,6 @@ import {
   SyncFactory,
   type XeroProvider
 } from "@carbon/ee/accounting";
-import { PostgresDriver } from "kysely";
 import z from "zod";
 import { inngest } from "../../client";
 
@@ -107,7 +103,7 @@ export const accountingBackfillFunction = inngest.createFunction(
     const payload: ParsedBackfillPayload = BackfillPayloadSchema.parse(
       event.data
     );
-    const client = getCarbonServiceRole();
+    const client = getCarbonServiceClient();
 
     const integration = await getAccountingIntegration(
       client,
@@ -187,7 +183,7 @@ export const accountingBackfillFunction = inngest.createFunction(
         const pullResult = await step.run(
           `pull-contacts-page-${currentPage}`,
           async () => {
-            const pullClient = getCarbonServiceRole();
+            const pullClient = getCarbonServiceClient();
             const pullIntegration = await getAccountingIntegration(
               pullClient,
               payload.companyId,
@@ -200,8 +196,8 @@ export const accountingBackfillFunction = inngest.createFunction(
               pullIntegration.metadata
             ) as XeroProvider;
 
-            const pool = getPostgresConnectionPool(5);
-            const kysely = getPostgresClient(pool, PostgresDriver);
+            const accountingDatabase = createAccountingDatabaseClient(5);
+            const database = accountingDatabase.database;
 
             try {
               console.info(`[PULL] Fetching contacts page ${currentPage}`);
@@ -241,7 +237,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 const customers = response.contacts.filter((c) => c.IsCustomer);
                 if (customers.length > 0) {
                   const syncer = SyncFactory.getSyncer({
-                    database: kysely,
+                    database,
                     companyId: payload.companyId,
                     provider: pullProvider,
                     config: pullProvider.getSyncConfig("customer"),
@@ -274,7 +270,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 const vendors = response.contacts.filter((c) => c.IsSupplier);
                 if (vendors.length > 0) {
                   const syncer = SyncFactory.getSyncer({
-                    database: kysely,
+                    database,
                     companyId: payload.companyId,
                     provider: pullProvider,
                     config: pullProvider.getSyncConfig("vendor"),
@@ -310,7 +306,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 }
               };
             } finally {
-              await pool.end();
+              await accountingDatabase.close();
             }
           }
         );
@@ -352,7 +348,7 @@ export const accountingBackfillFunction = inngest.createFunction(
         const pullResult = await step.run(
           `pull-items-page-${currentPage}`,
           async () => {
-            const pullClient = getCarbonServiceRole();
+            const pullClient = getCarbonServiceClient();
             const pullIntegration = await getAccountingIntegration(
               pullClient,
               payload.companyId,
@@ -365,8 +361,8 @@ export const accountingBackfillFunction = inngest.createFunction(
               pullIntegration.metadata
             ) as XeroProvider;
 
-            const pool = getPostgresConnectionPool(5);
-            const kysely = getPostgresClient(pool, PostgresDriver);
+            const accountingDatabase = createAccountingDatabaseClient(5);
+            const database = accountingDatabase.database;
 
             try {
               console.info(`[PULL] Fetching items page ${currentPage}`);
@@ -391,7 +387,7 @@ export const accountingBackfillFunction = inngest.createFunction(
               }
 
               const syncer = SyncFactory.getSyncer({
-                database: kysely,
+                database,
                 companyId: payload.companyId,
                 provider: pullProvider,
                 config: pullProvider.getSyncConfig("item"),
@@ -422,7 +418,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 pulled: { items: syncResult.successCount }
               };
             } finally {
-              await pool.end();
+              await accountingDatabase.close();
             }
           }
         );
@@ -463,7 +459,7 @@ export const accountingBackfillFunction = inngest.createFunction(
         const pushResult = await step.run(
           `push-customers-batch-${currentBatchIndex}`,
           async () => {
-            const pushClient = getCarbonServiceRole();
+            const pushClient = getCarbonServiceClient();
             const pushIntegration = await getAccountingIntegration(
               pushClient,
               payload.companyId,
@@ -476,12 +472,12 @@ export const accountingBackfillFunction = inngest.createFunction(
               pushIntegration.metadata
             ) as XeroProvider;
 
-            const pool = getPostgresConnectionPool(5);
-            const kysely = getPostgresClient(pool, PostgresDriver);
+            const accountingDatabase = createAccountingDatabaseClient(5);
+            const database = accountingDatabase.database;
 
             try {
               const mappingService = createMappingService(
-                kysely,
+                database,
                 payload.companyId
               );
 
@@ -500,7 +496,7 @@ export const accountingBackfillFunction = inngest.createFunction(
               }
 
               const syncer = SyncFactory.getSyncer({
-                database: kysely,
+                database,
                 companyId: payload.companyId,
                 provider: pushProvider,
                 config: pushProvider.getSyncConfig("customer"),
@@ -532,7 +528,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 hasMore: unsyncedIds.length >= payload.batchSize
               };
             } finally {
-              await pool.end();
+              await accountingDatabase.close();
             }
           }
         );
@@ -569,7 +565,7 @@ export const accountingBackfillFunction = inngest.createFunction(
         const pushResult = await step.run(
           `push-vendors-batch-${currentBatchIndex}`,
           async () => {
-            const pushClient = getCarbonServiceRole();
+            const pushClient = getCarbonServiceClient();
             const pushIntegration = await getAccountingIntegration(
               pushClient,
               payload.companyId,
@@ -582,12 +578,12 @@ export const accountingBackfillFunction = inngest.createFunction(
               pushIntegration.metadata
             ) as XeroProvider;
 
-            const pool = getPostgresConnectionPool(5);
-            const kysely = getPostgresClient(pool, PostgresDriver);
+            const accountingDatabase = createAccountingDatabaseClient(5);
+            const database = accountingDatabase.database;
 
             try {
               const mappingService = createMappingService(
-                kysely,
+                database,
                 payload.companyId
               );
 
@@ -606,7 +602,7 @@ export const accountingBackfillFunction = inngest.createFunction(
               }
 
               const syncer = SyncFactory.getSyncer({
-                database: kysely,
+                database,
                 companyId: payload.companyId,
                 provider: pushProvider,
                 config: pushProvider.getSyncConfig("vendor"),
@@ -638,7 +634,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 hasMore: unsyncedIds.length >= payload.batchSize
               };
             } finally {
-              await pool.end();
+              await accountingDatabase.close();
             }
           }
         );
@@ -674,7 +670,7 @@ export const accountingBackfillFunction = inngest.createFunction(
         const pushResult = await step.run(
           `push-items-batch-${currentBatchIndex}`,
           async () => {
-            const pushClient = getCarbonServiceRole();
+            const pushClient = getCarbonServiceClient();
             const pushIntegration = await getAccountingIntegration(
               pushClient,
               payload.companyId,
@@ -687,12 +683,12 @@ export const accountingBackfillFunction = inngest.createFunction(
               pushIntegration.metadata
             ) as XeroProvider;
 
-            const pool = getPostgresConnectionPool(5);
-            const kysely = getPostgresClient(pool, PostgresDriver);
+            const accountingDatabase = createAccountingDatabaseClient(5);
+            const database = accountingDatabase.database;
 
             try {
               const mappingService = createMappingService(
-                kysely,
+                database,
                 payload.companyId
               );
 
@@ -711,7 +707,7 @@ export const accountingBackfillFunction = inngest.createFunction(
               }
 
               const syncer = SyncFactory.getSyncer({
-                database: kysely,
+                database,
                 companyId: payload.companyId,
                 provider: pushProvider,
                 config: pushProvider.getSyncConfig("item"),
@@ -743,7 +739,7 @@ export const accountingBackfillFunction = inngest.createFunction(
                 hasMore: unsyncedIds.length >= payload.batchSize
               };
             } finally {
-              await pool.end();
+              await accountingDatabase.close();
             }
           }
         );

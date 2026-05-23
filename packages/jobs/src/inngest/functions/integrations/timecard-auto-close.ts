@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { inngest } from "../../client";
 
 export const timeCardAutoCloseFunction = inngest.createFunction(
@@ -6,17 +6,18 @@ export const timeCardAutoCloseFunction = inngest.createFunction(
   // Run every Sunday at 11pm UTC (after weekly task at 9pm)
   { cron: "0 23 * * 0" },
   async ({ step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
 
     await step.run("auto-close-timecards", async () => {
       console.log(`Starting timecard auto-close: ${new Date().toISOString()}`);
 
       try {
         // 1. Get all companies with time clock enabled
-        const { data: companies, error: companiesError } = await serviceRole
-          .from("companySettings")
-          .select("id")
-          .eq("timeCardEnabled", true);
+        const { data: companySettings, error: companiesError } =
+          await serviceClient
+            .from("companySettings")
+            .select("id")
+            .eq("timeCardEnabled", true);
 
         if (companiesError) {
           console.error(`Failed to fetch companies: ${companiesError.message}`);
@@ -24,14 +25,43 @@ export const timeCardAutoCloseFunction = inngest.createFunction(
         }
 
         console.log(
-          `Found ${companies?.length || 0} companies with time clock enabled`
+          `Found ${companySettings?.length || 0} companies with time clock enabled`
+        );
+
+        const companyIds =
+          companySettings?.map((settings) => settings.id) ?? [];
+        if (companyIds.length === 0) return;
+
+        const { data: companies, error: activeCompaniesError } =
+          await serviceClient
+            .from("company")
+            .select("id, name, active")
+            .in("id", companyIds);
+
+        if (activeCompaniesError) {
+          console.error(
+            `Failed to load timecard companies: ${activeCompaniesError.message}`
+          );
+          return;
+        }
+
+        const companiesById = new Map(
+          (companies ?? []).map((company) => [company.id, company])
         );
 
         let totalClosed = 0;
 
-        for (const company of companies ?? []) {
+        for (const settings of companySettings ?? []) {
+          const company = companiesById.get(settings.id);
+          if (company?.active !== true) {
+            console.log(
+              `Skipping inactive company ${company?.name ?? settings.id}`
+            );
+            continue;
+          }
+
           // 2. Get all open time clock entries for this company
-          const { data: openEntries, error: entriesError } = await serviceRole
+          const { data: openEntries, error: entriesError } = await serviceClient
             .from("timeCardEntry")
             .select("id, employeeId, clockIn")
             .eq("companyId", company.id)
@@ -52,7 +82,7 @@ export const timeCardAutoCloseFunction = inngest.createFunction(
 
           for (const entry of openEntries) {
             // 3. Get the employee's assigned shift
-            const { data: employeeJob } = await serviceRole
+            const { data: employeeJob } = await serviceClient
               .from("employeeJob")
               .select("shiftId")
               .eq("id", entry.employeeId)
@@ -63,10 +93,11 @@ export const timeCardAutoCloseFunction = inngest.createFunction(
             let shiftId: string | null = null;
 
             if (employeeJob?.shiftId) {
-              const { data: shift } = await serviceRole
+              const { data: shift } = await serviceClient
                 .from("shift")
                 .select("startTime, endTime")
                 .eq("id", employeeJob.shiftId)
+                .eq("companyId", company.id)
                 .single();
 
               if (shift) {
@@ -98,7 +129,7 @@ export const timeCardAutoCloseFunction = inngest.createFunction(
             }
 
             // 4. Update the entry
-            const { error: updateError } = await serviceRole
+            const { error: updateError } = await serviceClient
               .from("timeCardEntry")
               .update({
                 clockOut: clockOut.toISOString(),
@@ -106,7 +137,8 @@ export const timeCardAutoCloseFunction = inngest.createFunction(
                 updatedAt: new Date().toISOString(),
                 note: "Auto-closed by system (Sunday weekly close)"
               })
-              .eq("id", entry.id);
+              .eq("id", entry.id)
+              .eq("companyId", company.id);
 
             if (updateError) {
               console.error(

@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { useRouteData } from "@carbon/react";
 import { useMemo } from "react";
 import { z } from "zod";

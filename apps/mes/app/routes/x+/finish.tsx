@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -11,17 +10,16 @@ import { path } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { userId, companyId } = await requirePermissions(request, {});
+  const { client, userId, companyId } = await requirePermissions(request, {});
 
   const formData = await request.formData();
   const validation = await validator(finishValidator).validate(formData);
-  const serviceRole = await getCarbonServiceRole();
 
   if (validation.error) {
     return validationError(validation.error);
   }
 
-  const finishOperation = await finishJobOperation(serviceRole, {
+  const finishOperation = await finishJobOperation(client, {
     ...validation.data,
     userId,
     companyId

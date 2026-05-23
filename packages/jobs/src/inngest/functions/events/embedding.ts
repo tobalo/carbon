@@ -1,6 +1,6 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { z } from "zod";
 import { inngest } from "../../client.js";
+import { invokeFunction } from "../../../lib/functions.js";
 
 // Fields that affect embeddings for each table
 const EMBEDDING_FIELDS: Record<string, string[]> = {
@@ -38,10 +38,9 @@ export const embeddingFunction = inngest.createFunction(
       const payload = EmbeddingPayloadSchema.parse(event.data);
 
       const results = { processed: 0, skipped: 0, failed: 0 };
-      const client = getCarbonServiceRole();
 
       // Filter to only records that need embedding
-      const jobs: { id: string; table: string }[] = [];
+      const jobs: { id: string; table: string; companyId: string }[] = [];
 
       for (const record of payload.records) {
         const { event } = record;
@@ -65,7 +64,11 @@ export const embeddingFunction = inngest.createFunction(
           }
         }
 
-        jobs.push({ id: event.recordId, table: event.table });
+        jobs.push({
+          id: event.recordId,
+          table: event.table,
+          companyId: record.companyId
+        });
       }
 
       if (jobs.length === 0) {
@@ -75,20 +78,19 @@ export const embeddingFunction = inngest.createFunction(
         return results;
       }
 
-      // Call the embed edge function directly with a batch
-      // The edge function expects: [{ jobId, id, table }]
+      // The embed function expects: [{ jobId, id, table }]
       // jobId is used for pgmq cleanup — pass -1 since we're not coming from the queue
       const batch = jobs.map((job, i) => ({
         jobId: -(i + 1),
         ...job
       }));
 
-      const { error } = await client.functions.invoke("embed", {
+      const { error } = await invokeFunction("embed", {
         body: batch
       });
 
       if (error) {
-        console.error(`Embed edge function failed: ${error.message}`);
+        console.error(`Embed function route failed: ${error.message}`);
         results.failed = jobs.length;
       } else {
         results.processed = jobs.length;

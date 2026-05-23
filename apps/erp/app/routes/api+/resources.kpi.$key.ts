@@ -1,7 +1,7 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getPreferenceHeaders } from "@carbon/react";
 import { parseDateTime, toCalendarDateTime } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import { MaintenanceKPIs } from "~/modules/resources/resources.models";
 import { groupDataByDay, groupDataByMonth } from "~/utils/chart";
@@ -491,7 +491,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 async function getCompletedDispatchesQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     workCenterId,
@@ -523,7 +523,7 @@ async function getCompletedDispatchesQuery(
 }
 
 async function getReactiveDispatchesQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     workCenterId,
@@ -554,7 +554,7 @@ async function getReactiveDispatchesQuery(
 }
 
 async function getProductionEventsQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     workCenterId,
@@ -585,7 +585,7 @@ async function getProductionEventsQuery(
 }
 
 async function getReactiveDispatchesByWorkCenterQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     start,
@@ -598,19 +598,46 @@ async function getReactiveDispatchesByWorkCenterQuery(
 ) {
   const endWithTime = end.includes("T") ? end : `${end}T23:59:59`;
 
-  return client
+  const dispatches = await client
     .from("maintenanceDispatch")
-    .select("id, workCenterId, workCenter:workCenterId(name), createdAt")
+    .select("id, workCenterId, createdAt")
     .eq("companyId", companyId)
     .eq("source", "Reactive")
     .not("workCenterId", "is", null)
     .gte("createdAt", start)
     .lte("createdAt", endWithTime)
     .order("createdAt", { ascending: false });
+
+  const workCenterIds = [
+    ...new Set(
+      dispatches.data?.map((dispatch) => dispatch.workCenterId).filter(Boolean)
+    )
+  ];
+  const workCenters =
+    workCenterIds.length > 0
+      ? await client
+          .from("workCenter")
+          .select("id, name")
+          .eq("companyId", companyId)
+          .in("id", workCenterIds)
+      : { data: [] };
+  const workCentersById = new Map(
+    workCenters.data?.map((workCenter) => [workCenter.id, workCenter] as const)
+  );
+
+  return {
+    ...dispatches,
+    data: dispatches.data?.map((dispatch) => ({
+      ...dispatch,
+      workCenter: dispatch.workCenterId
+        ? workCentersById.get(dispatch.workCenterId) ?? null
+        : null
+    }))
+  };
 }
 
 async function getDispatchItemsQuery(
-  client: SupabaseClient,
+  client: CarbonDatabaseClient,
   {
     companyId,
     workCenterId,
@@ -625,40 +652,46 @@ async function getDispatchItemsQuery(
 ) {
   const endWithTime = end.includes("T") ? end : `${end}T23:59:59`;
 
-  // Get items from completed dispatches
-  let query = client
+  const items = await client
     .from("maintenanceDispatchItem")
-    .select(
-      `
-      id,
-      quantity,
-      totalCost,
-      maintenanceDispatch:maintenanceDispatchId(
-        id,
-        workCenterId,
-        completedAt
-      )
-    `
-    )
+    .select("id, quantity, totalCost, maintenanceDispatchId")
     .eq("companyId", companyId);
 
-  const result = await query;
+  const dispatchIds = [
+    ...new Set(
+      items.data?.map((item) => item.maintenanceDispatchId).filter(Boolean)
+    )
+  ];
+  let dispatchQuery =
+    dispatchIds.length > 0
+      ? client
+          .from("maintenanceDispatch")
+          .select("id, workCenterId, completedAt")
+          .eq("companyId", companyId)
+          .in("id", dispatchIds)
+          .not("completedAt", "is", null)
+          .gte("completedAt", start)
+          .lte("completedAt", endWithTime)
+      : null;
 
-  // Filter by date and work center in JavaScript since we need to filter on joined table
+  if (dispatchQuery && workCenterId) {
+    dispatchQuery = dispatchQuery.eq("workCenterId", workCenterId);
+  }
+
+  const dispatches = dispatchQuery ? await dispatchQuery : { data: [] };
+  const dispatchesById = new Map(
+    dispatches.data?.map((dispatch) => [dispatch.id, dispatch] as const)
+  );
+
   const filtered =
-    result.data?.filter((item) => {
-      const dispatch = item.maintenanceDispatch as any;
-      if (!dispatch?.completedAt) return false;
-      if (dispatch.completedAt < start || dispatch.completedAt > endWithTime)
-        return false;
-      if (workCenterId && dispatch.workCenterId !== workCenterId) return false;
-      return true;
-    }) ?? [];
+    items.data?.filter((item) =>
+      dispatchesById.has(item.maintenanceDispatchId)
+    ) ?? [];
 
   // Flatten the data to include completedAt at top level for grouping
   const flattenedData = filtered.map((item) => ({
     ...item,
-    completedAt: (item.maintenanceDispatch as any)?.completedAt
+    completedAt: dispatchesById.get(item.maintenanceDispatchId)?.completedAt
   }));
 
   return { data: flattenedData };

@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -17,7 +16,7 @@ import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "purchasing"
   });
 
@@ -28,6 +27,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
     view: "purchasing"
   });
   const quote = await getSupplierQuote(viewClient, supplierQuoteId);
+  if (quote.error) {
+    throw redirect(
+      path.to.supplierQuote(supplierQuoteId),
+      await flash(request, error(quote.error, "Failed to load supplier quote"))
+    );
+  }
+
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.supplierQuote(supplierQuoteId));
+  }
+
   await requireUnlocked({
     request,
     isLocked: isSupplierQuoteLocked(quote.data?.status),
@@ -47,8 +57,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
   const { id, ...d } = validation.data;
 
-  const serviceRole = getCarbonServiceRole();
-  const createQuotationLine = await upsertSupplierQuoteLine(serviceRole, {
+  const createQuotationLine = await upsertSupplierQuoteLine(client, {
     ...d,
     companyId,
     createdBy: userId,

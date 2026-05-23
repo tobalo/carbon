@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import {
   createIssueSlackThread,
   syncIssueAssignmentToSlack,
@@ -14,11 +13,11 @@ export class SlackNotificationService implements NotificationService {
 
   async send(
     event: NotificationEvent,
-    context: { serviceRole: SupabaseClient<Database> }
+    context: { serviceClient: DatabaseQueryClient }
   ): Promise<void> {
     switch (event.type) {
       case "issue.created":
-        await createIssueSlackThread(context.serviceRole, {
+        await createIssueSlackThread(context.serviceClient, {
           carbonUrl: event.carbonUrl,
           companyId: event.companyId,
           description: event.data.description,
@@ -31,7 +30,7 @@ export class SlackNotificationService implements NotificationService {
         break;
 
       case "issue.status.changed":
-        await syncIssueStatusToSlack(context.serviceRole, {
+        await syncIssueStatusToSlack(context.serviceClient, {
           companyId: event.companyId,
           nonConformanceId: event.data.nonConformanceId,
           newStatus: event.data.status,
@@ -41,7 +40,7 @@ export class SlackNotificationService implements NotificationService {
         break;
 
       case "task.status.changed":
-        await syncIssueTaskToSlack(context.serviceRole, {
+        await syncIssueTaskToSlack(context.serviceClient, {
           companyId: event.companyId,
           id: event.data.id,
           status: event.data.status,
@@ -52,7 +51,7 @@ export class SlackNotificationService implements NotificationService {
         break;
 
       case "task.assigned":
-        await syncIssueAssignmentToSlack(context.serviceRole, {
+        await syncIssueAssignmentToSlack(context.serviceClient, {
           nonConformanceId: event.data.id,
           companyId: event.companyId,
           userId: event.userId,

@@ -1,4 +1,8 @@
-import type { Database, Json } from "@carbon/database";
+import type {
+  Json,
+  EnumValue,
+  itemTypeEnum
+} from "@carbon/database/schema";
 import {
   Badge,
   Count,
@@ -54,7 +58,7 @@ export function UsedInSkeleton() {
 }
 
 export type UsedInKey =
-  | Database["public"]["Enums"]["itemType"]
+  | EnumValue<typeof itemTypeEnum>
   | "issues"
   | "jobMaterials"
   | "jobs"

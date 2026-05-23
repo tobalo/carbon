@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { log } from "@clack/prompts";
 import { execa } from "execa";
 import { COMPOSE_DEV_FILE, COMPOSE_SHARED_FILE } from "../constants.js";
@@ -24,23 +25,17 @@ export type Container = {
 // ---------------------------------------------------------------------------
 
 export async function bootStack(root: string, slug: string) {
-  await execStrict(
-    "docker",
-    devArgs(slug, "--env-file", ".env.local", "up", "-d"),
-    root
-  );
+  await execStrict("docker", devArgs(root, slug, "up", "-d"), root);
 }
 
-// `docker compose restart` a subset of services. Used by the storage-stuck
-// heal path: after re-applying init.sql we restart storage/gotrue/postgrest so
-// they reconnect with the freshly-rotated supabase role passwords.
+// `docker compose restart` a subset of services.
 export async function restartServices(
   root: string,
   slug: string,
   services: string[]
 ) {
   if (services.length === 0) return;
-  await execa("docker", devArgs(slug, "restart", ...services), {
+  await execa("docker", devArgs(root, slug, "restart", ...services), {
     cwd: root,
     reject: false,
     stdio: "ignore"
@@ -58,7 +53,7 @@ export async function pullStack(
 ) {
   const proc = execa(
     "docker",
-    devArgs(slug, "--env-file", ".env.local", "--progress", "plain", "pull"),
+    devArgs(root, slug, "--progress", "plain", "pull"),
     { cwd: root, reject: false, all: true }
   );
 
@@ -83,7 +78,7 @@ export async function devComposeImageRefs(
 ): Promise<string[] | null> {
   const r = await execa(
     "docker",
-    devArgs(slug, "--env-file", ".env.local", "config", "--images"),
+    devArgs(root, slug, "config", "--images"),
     { cwd: root, reject: false }
   );
   if (r.exitCode !== 0) return null;
@@ -114,7 +109,7 @@ export async function stopStack(
   slug: string,
   withVolumes: boolean
 ) {
-  const args = devArgs(slug, "down");
+  const args = devArgs(root, slug, "down");
   if (withVolumes) args.push("-v");
   await execa("docker", args, { cwd: root, stdio: "ignore", reject: false });
 }
@@ -139,7 +134,7 @@ export async function bootSharedRedis(root: string) {
 export async function destroyProjectVolumes(cwd: string, project: string) {
   await execa(
     "docker",
-    ["compose", "-f", COMPOSE_DEV_FILE, "-p", project, "down", "-v"],
+    projectArgs(cwd, project, "down", "-v"),
     { cwd, stdio: "ignore", reject: false }
   );
 }
@@ -154,7 +149,7 @@ export async function listContainers(
 ): Promise<Container[]> {
   const r = await execa(
     "docker",
-    devArgs(slug, "ps", "-a", "--format", "json"),
+    devArgs(root, slug, "ps", "-a", "--format", "json"),
     { cwd: root, reject: false }
   );
   if (r.exitCode !== 0 || !r.stdout?.trim()) return [];
@@ -215,7 +210,7 @@ export async function listComposeServices(
 ): Promise<string[]> {
   const r = await execa(
     "docker",
-    devArgs(slug, "--env-file", ".env.local", "config", "--services"),
+    devArgs(root, slug, "config", "--services"),
     { cwd: root, reject: false }
   );
   if (r.exitCode !== 0) return [];
@@ -236,7 +231,7 @@ export async function tailServiceLogs(
 ): Promise<string> {
   const r = await execa(
     "docker",
-    devArgs(slug, "logs", "--tail", String(lines), "--no-color", service),
+    devArgs(root, slug, "logs", "--tail", String(lines), "--no-color", service),
     { cwd: root, reject: false }
   );
   return ((r.stdout ?? "") + (r.stderr ?? "")).trim();
@@ -284,8 +279,14 @@ export async function flushDb(db: number) {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-function devArgs(slug: string, ...rest: string[]): string[] {
-  return ["compose", "-f", COMPOSE_DEV_FILE, "-p", projectName(slug), ...rest];
+function projectArgs(root: string, project: string, ...rest: string[]): string[] {
+  const args = ["compose", "-f", COMPOSE_DEV_FILE, "-p", project];
+  if (existsSync(`${root}/.env.local`)) args.push("--env-file", ".env.local");
+  return [...args, ...rest];
+}
+
+function devArgs(root: string, slug: string, ...rest: string[]): string[] {
+  return projectArgs(root, projectName(slug), ...rest);
 }
 
 async function execStrict(cmd: string, args: string[], cwd: string) {

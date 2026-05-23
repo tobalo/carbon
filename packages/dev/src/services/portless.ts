@@ -107,7 +107,7 @@ export function startProxyDaemon(root: string) {
   }).unref();
 }
 
-// Must match render-env.ts hostnames + the api.carbon.dev OAuth alias.
+// Must match render-env.ts hostnames.
 const PORTLESS_TLD = "dev";
 
 type PrivilegeIssue =
@@ -365,13 +365,9 @@ export async function pruneStaleRoutes() {
   });
 }
 
-// Branch-independent OAuth callback host. Last `crbn up` wins. Keep in sync
-// with SUPABASE_AUTH_EXTERNAL_*_REDIRECT_URI in render-env.ts.
-const STABLE_OAUTH_ALIAS = "api.carbon";
-
 // Always prefix with the branch name (last `/`-segment, sanitized) so every
 // worktree — including main — gets a distinct `<app>.<branch>.dev` host.
-// Bare hosts (`erp.dev`, `api.dev`) are forbidden; falls back to `fallback`
+// Bare hosts (`erp.dev`, `storage.dev`) are forbidden; falls back to `fallback`
 // (typically the worktree slug) when branch is missing/HEAD-detached.
 // e.g. `feat/boo` → `boo`, `main` → `main`.
 export function branchToPrefix(
@@ -403,11 +399,10 @@ function aliasMap(
   return [
     { name: withPrefix("erp", branchPrefix), port: ports.PORT_ERP },
     { name: withPrefix("mes", branchPrefix), port: ports.PORT_MES },
-    { name: withPrefix("api", branchPrefix), port: ports.PORT_API },
-    { name: withPrefix("studio", branchPrefix), port: ports.PORT_STUDIO },
+    { name: withPrefix("storage", branchPrefix), port: ports.PORT_STORAGE },
+    { name: withPrefix("console", branchPrefix), port: ports.PORT_CONSOLE },
     { name: withPrefix("mail", branchPrefix), port: ports.PORT_INBUCKET },
-    { name: withPrefix("inngest", branchPrefix), port: ports.PORT_INNGEST },
-    { name: STABLE_OAUTH_ALIAS, port: ports.PORT_API }
+    { name: withPrefix("inngest", branchPrefix), port: ports.PORT_INNGEST }
   ];
 }
 

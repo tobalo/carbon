@@ -351,7 +351,7 @@ const MaterialsTable = memo(({ data, tags, count }: MaterialsTableProps) => {
         header: t`Tags`,
         cell: ({ row }) => (
           <HStack spacing={0} className="gap-1">
-            {(row.original.tags || []).map((tag) => (
+            {(row.original.tags || []).map((tag: any) => (
               <Badge key={tag} variant="secondary">
                 {tag}
               </Badge>
@@ -475,7 +475,7 @@ const MaterialsTable = memo(({ data, tags, count }: MaterialsTableProps) => {
       selectedRows.forEach((row) => {
         if (row.id) formData.append("items", row.id);
       });
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value);
       fetcher.submit(formData, {
         method: "post",

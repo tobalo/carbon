@@ -24,7 +24,7 @@ import {
 import { convertKbToString } from "@carbon/utils";
 import { useDndContext, useDraggable } from "@dnd-kit/core";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "@carbon/storage";
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 import {
@@ -40,6 +40,7 @@ import DocumentIcon from "~/components/DocumentIcon";
 import { useDateFormatter, usePermissions, useUser } from "~/hooks";
 import { getDocumentType } from "~/modules/shared";
 import { path } from "~/utils/path";
+import { removeStorageObjects, uploadStorageObject } from "~/utils/storage";
 import { stripSpecialCharacters } from "~/utils/string";
 import type { Opportunity } from "../../types";
 import { useOptimisticDocumentDrag } from "../SalesRFQ/useOptimiticDocumentDrag";
@@ -311,19 +312,20 @@ export const useOpportunityDocuments = ({
 
   const deleteAttachment = useCallback(
     async (attachment: FileObject) => {
-      const result = await carbon?.storage
-        .from("private")
-        .remove([getPath(attachment)]);
+      const result = await removeStorageObjects({
+        bucket: "private",
+        paths: [getPath(attachment)]
+      });
 
-      if (!result || result.error) {
-        toast.error(result?.error?.message || "Error deleting file");
+      if (result.error) {
+        toast.error(result.error.message || "Error deleting file");
         return;
       }
 
       toast.success(t`${attachment.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [carbon?.storage, getPath, revalidator, t]
+    [getPath, revalidator, t]
   );
 
   const download = useCallback(
@@ -377,21 +379,15 @@ export const useOpportunityDocuments = ({
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getPath(file);
         toast.info(t`Uploading ${file.name}`);
 
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadStorageObject({
+          bucket: "private",
+          path: fileName,
+          file
+        });
 
         if (fileUpload.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -406,7 +402,7 @@ export const useOpportunityDocuments = ({
       }
       revalidator.revalidate();
     },
-    [getPath, createDocumentRecord, carbon, revalidator, t]
+    [getPath, createDocumentRecord, revalidator, t]
   );
 
   return {

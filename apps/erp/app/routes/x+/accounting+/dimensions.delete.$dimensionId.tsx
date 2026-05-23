@@ -8,13 +8,13 @@ import { deleteDimension, getDimension } from "~/modules/accounting";
 import { getParams, path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const { client, companyGroupId } = await requirePermissions(request, {
     view: "accounting"
   });
   const { dimensionId } = params;
   if (!dimensionId) throw notFound("dimensionId not found");
 
-  const dimension = await getDimension(client, dimensionId);
+  const dimension = await getDimension(client, dimensionId, companyGroupId);
   if (dimension.error) {
     throw redirect(
       `${path.to.dimensions}?${getParams(request)}`,

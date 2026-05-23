@@ -1,9 +1,10 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { SalesInvoiceEmail } from "@carbon/documents/email";
 import { validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
+import { signDownload, uploadObject } from "@carbon/storage";
 import { renderAsync } from "@react-email/components";
 import { parseAcceptLanguage } from "intl-parse-accept-language";
 import type { ActionFunctionArgs } from "react-router";
@@ -47,7 +48,8 @@ export async function action(args: ActionFunctionArgs) {
     .update({
       status: "Pending"
     })
-    .eq("id", invoiceId);
+    .eq("id", invoiceId)
+    .eq("companyId", companyId);
 
   if (setPendingState.error) {
     return {
@@ -56,17 +58,15 @@ export async function action(args: ActionFunctionArgs) {
     };
   }
 
-  const serviceRole = getCarbonServiceRole();
-
   try {
-    const postSalesInvoice = await serviceRole.functions.invoke(
+    const postSalesInvoice = await invokeFunction(
       "post-sales-invoice",
       {
         body: {
           invoiceId: invoiceId,
           userId: userId,
           companyId: companyId
-        }
+        },
       }
     );
 
@@ -76,7 +76,8 @@ export async function action(args: ActionFunctionArgs) {
         .update({
           status: "Draft"
         })
-        .eq("id", invoiceId);
+        .eq("id", invoiceId)
+        .eq("companyId", companyId);
 
       return {
         success: false,
@@ -90,7 +91,8 @@ export async function action(args: ActionFunctionArgs) {
       .update({
         status: "Draft"
       })
-      .eq("id", invoiceId);
+      .eq("id", invoiceId)
+      .eq("companyId", companyId);
 
     return {
       success: false,
@@ -98,7 +100,7 @@ export async function action(args: ActionFunctionArgs) {
     };
   }
 
-  const salesInvoice = await getSalesInvoice(serviceRole, invoiceId);
+  const salesInvoice = await getSalesInvoice(client, invoiceId);
   if (salesInvoice.error) {
     return {
       success: false,
@@ -140,22 +142,21 @@ export async function action(args: ActionFunctionArgs) {
 
     documentFilePath = `${companyId}/opportunity/${salesInvoice.data.opportunityId}/${fileName}`;
 
-    const documentFileUpload = await serviceRole.storage
-      .from("private")
-      .upload(documentFilePath, file, {
-        cacheControl: `${12 * 60 * 60}`,
-        contentType: "application/pdf",
-        upsert: true
+    try {
+      await uploadObject({
+        companyId,
+        key: documentFilePath,
+        body: new Uint8Array(file),
+        contentType: "application/pdf"
       });
-
-    if (documentFileUpload.error) {
+    } catch {
       return {
         success: false,
         message: "Failed to upload file"
       };
     }
 
-    const createDocument = await upsertDocument(serviceRole, {
+    const createDocument = await upsertDocument(client, {
       path: documentFilePath,
       name: fileName,
       size: Math.round(file.byteLength / 1024),
@@ -214,14 +215,14 @@ export async function action(args: ActionFunctionArgs) {
           seller,
           paymentTerms
         ] = await Promise.all([
-          getCompany(serviceRole, companyId),
-          getCustomerContact(serviceRole, customerContact),
-          getSalesInvoice(serviceRole, invoiceId),
-          getSalesInvoiceLines(serviceRole, invoiceId),
-          getSalesInvoiceCustomerDetails(serviceRole, invoiceId),
-          getSalesInvoiceShipment(serviceRole, invoiceId),
-          getUser(serviceRole, userId),
-          getPaymentTermsList(serviceRole, companyId)
+          getCompany(client, companyId),
+          getCustomerContact(client, customerContact),
+          getSalesInvoice(client, invoiceId),
+          getSalesInvoiceLines(client, invoiceId),
+          getSalesInvoiceCustomerDetails(client, invoiceId),
+          getSalesInvoiceShipment(client, invoiceId),
+          getUser(client, userId),
+          getPaymentTermsList(client, companyId)
         ]);
 
         if (!customer?.data?.contact) {
@@ -268,7 +269,6 @@ export async function action(args: ActionFunctionArgs) {
         }
 
         const emailTemplate = SalesInvoiceEmail({
-          // @ts-expect-error TS2739 - TODO: fix type
           company: company.data,
           locale: locales?.[0] ?? "en-US",
           salesInvoice: salesInvoice.data,
@@ -276,7 +276,6 @@ export async function action(args: ActionFunctionArgs) {
           salesInvoiceLocations: salesInvoiceLocations.data,
           salesInvoiceShipment: salesInvoiceShipment.data,
           recipient: {
-            // @ts-expect-error TS2322 - TODO: fix type
             email: customer.data.contact.email,
             firstName: customer.data.contact.firstName ?? undefined,
             lastName: customer.data.contact.lastName ?? undefined
@@ -291,9 +290,11 @@ export async function action(args: ActionFunctionArgs) {
 
         const html = await renderAsync(emailTemplate);
         const text = await renderAsync(emailTemplate, { plainText: true });
-        const { data: signedUrlData } = await serviceRole.storage
-          .from("private")
-          .createSignedUrl(documentFilePath, 3600);
+        const signedUrl = await signDownload({
+          companyId,
+          key: documentFilePath,
+          expiresIn: 3600
+        });
 
         await trigger("send-email", {
           to: [seller.data.email, customer.data.contact.email!],
@@ -302,10 +303,10 @@ export async function action(args: ActionFunctionArgs) {
           subject: `Invoice ${salesInvoice.data.invoiceId} from ${company.data.name}`,
           html,
           text,
-          attachments: signedUrlData?.signedUrl
+          attachments: signedUrl
             ? [
                 {
-                  path: signedUrlData.signedUrl,
+                  path: signedUrl,
                   filename: fileName
                 }
               ]

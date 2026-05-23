@@ -6,25 +6,45 @@ import { useRouteData } from "@carbon/react";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect, useNavigate, useParams } from "react-router";
 import type { MaterialSummary } from "~/modules/items";
-import { supplierPartValidator, upsertSupplierPart } from "~/modules/items";
+import {
+  assertSupplierItemScope,
+  supplierPartValidator,
+  upsertSupplierPart
+} from "~/modules/items";
 import { SupplierPartForm } from "~/modules/items/ui/Item";
 import { setCustomFields } from "~/utils/form";
 import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     create: "parts"
   });
+  const { client, companyId, userId, role, supplierId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   const formData = await request.formData();
   const validation = await validator(supplierPartValidator).validate(formData);
 
   if (validation.error) {
     return validationError(validation.error);
+  }
+
+  if (
+    validation.data.itemId !== itemId ||
+    (role === "supplier" && validation.data.supplierId !== supplierId)
+  ) {
+    throw new Response("Supplier part scope mismatch", { status: 403 });
   }
 
   // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration

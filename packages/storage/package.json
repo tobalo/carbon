@@ -1,0 +1,30 @@
+{
+  "name": "@carbon/storage",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.940.0",
+    "@aws-sdk/s3-request-presigner": "^3.940.0"
+  },
+  "devDependencies": {
+    "@carbon/config": "workspace:*",
+    "@types/node": "20.19.39",
+    "rimraf": "catalog:",
+    "tsx": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./sign": "./src/sign.ts"
+  },
+  "private": true,
+  "scripts": {
+    "clean": "rimraf .turbo node_modules dist",
+    "dev": "tsup --watch",
+    "lint": "biome lint --write ",
+    "smoke:minio": "tsx scripts/smoke-minio.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "sideEffects": false,
+  "version": "0.0.0"
+}

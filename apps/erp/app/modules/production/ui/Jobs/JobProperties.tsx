@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import {
   DatePicker,
   InputControlled,
@@ -17,7 +17,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { LuCopy, LuLink, LuUnlink2 } from "react-icons/lu";
 import { RiProgress8Line } from "react-icons/ri";
@@ -57,7 +57,7 @@ const JobProperties = () => {
   const routeData = useRouteData<{
     job: Job;
     tags: { name: string }[];
-    trackedEntities: Promise<PostgrestResponse<TrackedEntity>>;
+    trackedEntities: Promise<QueryResponse<TrackedEntity>>;
   }>(path.to.job(jobId));
 
   const fetcher = useFetcher<typeof action>();
@@ -80,7 +80,7 @@ const JobProperties = () => {
       const formData = new FormData();
 
       formData.append("ids", jobId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value?.toString() ?? "");
       fetcher.submit(formData, {
         method: "post",

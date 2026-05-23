@@ -1,1 +1,0 @@
-ALTER TABLE "salesOrder" ALTER COLUMN "orderDate" DROP NOT NULL;

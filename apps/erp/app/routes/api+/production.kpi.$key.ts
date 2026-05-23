@@ -186,17 +186,25 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         };
       }
 
-      const [jobOperations, productionEvents] = await Promise.all([
-        client
-          .from("jobOperation")
-          .select("*")
-          .in("jobId", jobs.data?.map((job) => job.id) ?? []),
-        client
-          .from("productionEvent")
-          .select("*, ...jobOperation(jobId)")
-          .eq("companyId", companyId)
-          .in("jobOperation.jobId", jobs.data?.map((job) => job.id) ?? [])
-      ]);
+      const jobOperations = await client
+        .from("jobOperation")
+        .select("*")
+        .eq("companyId", companyId)
+        .in("jobId", jobs.data?.map((job) => job.id) ?? []);
+      const operationIds = jobOperations.data?.map((operation) => operation.id);
+      const productionEvents =
+        operationIds && operationIds.length > 0
+          ? await client
+              .from("productionEvent")
+              .select("*")
+              .eq("companyId", companyId)
+              .in("jobOperationId", operationIds)
+          : { data: [] };
+      const jobIdByOperationId = new Map(
+        jobOperations.data?.map(
+          (operation) => [operation.id, operation.jobId] as const
+        ) ?? []
+      );
 
       const jobOperationsByJobId = jobOperations.data?.reduce(
         (acc, operation) => {
@@ -211,10 +219,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
       const productionEventsByJobId = productionEvents.data?.reduce(
         (acc, event) => {
-          if (!acc[event.jobId]) {
-            acc[event.jobId] = [];
+          const jobId = jobIdByOperationId.get(event.jobOperationId);
+          if (!jobId) {
+            return acc;
           }
-          acc[event.jobId].push(event);
+          if (!acc[jobId]) {
+            acc[jobId] = [];
+          }
+          acc[jobId].push(event);
           return acc;
         },
         {} as Record<string, typeof productionEvents.data>
@@ -233,14 +245,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
         // Calculate estimated time from job operations
         const operations = jobOperationsByJobId?.[jobId] || [];
-        const estimatedTime = operations.reduce((total, operation) => {
+        const estimatedTime = operations.reduce((total: any, operation: any) => {
           const withDurations = makeDurations(operation);
           return total + withDurations.duration;
         }, 0);
 
         // Calculate actual time from production events
         const events = productionEventsByJobId?.[jobId] || [];
-        const actualTime = events.reduce((total, event) => {
+        const actualTime = events.reduce((total: any, event: any) => {
           const startTime = new Date(event.startTime).getTime();
           const endTime = event.endTime
             ? new Date(event.endTime).getTime()

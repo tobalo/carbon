@@ -115,7 +115,6 @@ const InventoryTable = memo(
               <ItemThumbnail
                 size="sm"
                 thumbnailPath={row.original.thumbnailPath}
-                // @ts-expect-error
                 type={row.original.type}
               />
 
@@ -485,7 +484,7 @@ const InventoryTable = memo(
               ).storageTypeIds ?? [];
             return (
               <HStack spacing={0} className="gap-1">
-                {ids.map((id) => {
+                {ids.map((id: any) => {
                   const st = (storageTypes ?? []).find((s) => s.id === id);
                   return <Enumerable key={id} value={st?.name ?? null} />;
                 })}
@@ -517,7 +516,7 @@ const InventoryTable = memo(
               ).storageUnitIds ?? [];
             return (
               <HStack spacing={0} className="gap-1">
-                {ids.map((id) => {
+                {ids.map((id: any) => {
                   const opt = storageUnitOptions.find((o) => o.value === id);
                   const label = typeof opt?.label === "string" ? opt.label : id;
                   return <Enumerable key={id} value={label} />;

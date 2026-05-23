@@ -1,5 +1,5 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { inngest } from "../../client";
+import { invokeFunction } from "../../../lib/functions";
 
 /**
  * Unified scheduling function that handles both initial scheduling and rescheduling.
@@ -16,7 +16,6 @@ export const rescheduleJobFunction = inngest.createFunction(
   },
   { event: "carbon/reschedule-job" },
   async ({ event, step }) => {
-    const serviceRole = getCarbonServiceRole();
     const {
       jobId,
       companyId,
@@ -31,7 +30,12 @@ export const rescheduleJobFunction = inngest.createFunction(
       );
 
       try {
-        const { data, error } = await serviceRole.functions.invoke("schedule", {
+        const { data, error } = await invokeFunction<{
+          operationsScheduled: number;
+          conflictsDetected: number;
+          workCentersAffected: string[];
+          assemblyDepth: number;
+        }>("schedule", {
           body: {
             jobId,
             companyId,
@@ -43,6 +47,10 @@ export const rescheduleJobFunction = inngest.createFunction(
 
         if (error) {
           throw new Error(error.message || `Failed to ${mode} schedule job`);
+        }
+
+        if (!data) {
+          throw new Error(`No schedule result returned for job ${jobId}`);
         }
 
         console.info(

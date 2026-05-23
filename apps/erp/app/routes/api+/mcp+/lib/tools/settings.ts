@@ -173,7 +173,7 @@ export const registerSettingsTools: RegisterTools = (server, ctx) => {
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await deleteApiKey(ctx.client, params.id);
+      const result = await deleteApiKey(ctx.client, params.id, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: settings_deleteApiKey"),
   );
@@ -551,7 +551,7 @@ export const registerSettingsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getSubsidiaries(ctx.client, params.companyGroupId);
+      const result = await getSubsidiaries(ctx.client, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: settings_getSubsidiaries"),
   );
@@ -653,7 +653,7 @@ export const registerSettingsTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await insertCompany(ctx.client, params.company, params.companyGroupId);
+      const result = await insertCompany(ctx.client, params.company, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: settings_insertCompany"),
   );

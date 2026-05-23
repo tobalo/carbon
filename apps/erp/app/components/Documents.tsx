@@ -33,6 +33,7 @@ import type { OptimisticFileObject } from "~/modules/shared";
 import { getDocumentType } from "~/modules/shared";
 import type { ModelUpload, StorageItem } from "~/types";
 import { path } from "~/utils/path";
+import { removeStorageObjects, uploadStorageObject } from "~/utils/storage";
 import { stripSpecialCharacters } from "~/utils/string";
 
 type DocumentsProps = {
@@ -99,19 +100,20 @@ const Documents = ({
 
   const deleteFile = useCallback(
     async (file: StorageItem) => {
-      const fileDelete = await carbon?.storage
-        .from("private")
-        .remove([getReadPath(file)]);
+      const fileDelete = await removeStorageObjects({
+        bucket: "private",
+        paths: [getReadPath(file)]
+      });
 
-      if (!fileDelete || fileDelete.error) {
-        toast.error(fileDelete?.error?.message || t`Error deleting file`);
+      if (fileDelete.error) {
+        toast.error(fileDelete.error.message || t`Error deleting file`);
         return;
       }
 
       toast.success(t`${file.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [carbon?.storage, getReadPath, revalidator, t]
+    [getReadPath, revalidator, t]
   );
 
   const downloadModel = useCallback(
@@ -190,20 +192,14 @@ const Documents = ({
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getWritePath({ name: file.name });
         toast.info(t`Uploading ${file.name}`);
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadStorageObject({
+          bucket: "private",
+          path: fileName,
+          file
+        });
 
         if (fileUpload.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -232,7 +228,6 @@ const Documents = ({
     },
     [
       getWritePath,
-      carbon,
       revalidator,
       submit,
       sourceDocument,

@@ -1,3 +1,4 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import type { Result } from "@carbon/auth";
 import { error, success, useCarbon } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
@@ -107,8 +108,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const currentStorageUnitId =
     itemStorageUnitQuantities.data
-      ?.sort((a, b) => b.quantity - a.quantity)
-      .find((q) => q.trackedEntityId === trackedEntityId)?.storageUnitId ??
+      ?.sort((a: any, b: any) => b.quantity - a.quantity)
+      .find((q: any) => q.trackedEntityId === trackedEntityId)?.storageUnitId ??
     null;
 
   // Determine the type of transfer based on tracking requirements
@@ -130,7 +131,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     companyId
   };
 
-  const { error: functionError } = await client.functions.invoke(
+  const { error: functionError } = await invokeFunction(
     "post-stock-transfer",
     {
       body: JSON.stringify(functionPayload)

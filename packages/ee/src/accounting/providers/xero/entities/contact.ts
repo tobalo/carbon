@@ -1,4 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import { createMappingService } from "../../../core/external-mapping";
 import { type Accounting, BaseEntitySyncer } from "../../../core/types";
 import { throwXeroApiError } from "../../../core/utils";
@@ -79,7 +79,7 @@ export class ContactSyncer extends BaseEntitySyncer<
   }
 
   protected async linkEntities(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     localId: string,
     remoteId: string,
     remoteUpdatedAt?: Date
@@ -139,45 +139,39 @@ export class ContactSyncer extends BaseEntitySyncer<
 
     // First, get the first contact ID for each customer (subquery)
     // We use a lateral join pattern to get the first contact per customer
-    const rows = await (this.database as any)
-      .selectFrom("customer")
-      .leftJoin("customerTax", "customerTax.customerId", "customer.id")
-      .leftJoin(
-        "customerLocation",
-        "customerLocation.customerId",
-        "customer.id"
-      )
-      .leftJoin("address", "address.id", "customerLocation.addressId")
-      .leftJoin("customerContact", "customerContact.customerId", "customer.id")
-      .leftJoin("contact", "contact.id", "customerContact.contactId")
-      .select([
-        "customer.id",
-        "customer.name",
-        "customer.companyId",
-        "customerTax.taxId as taxId",
-        "customer.phone",
-        "customer.fax",
-        "customer.website",
-        "customer.currencyCode",
-        "customer.updatedAt",
-        "customerLocation.name as locationName",
-        "address.addressLine1",
-        "address.addressLine2",
-        "address.city",
-        "address.postalCode",
-        // Contact details from linked contact
-        "contact.firstName as contactFirstName",
-        "contact.lastName as contactLastName",
-        "contact.email as contactEmail",
-        "contact.mobilePhone as contactMobilePhone",
-        "contact.homePhone as contactHomePhone",
-        "contact.workPhone as contactWorkPhone"
-      ])
-      .where("customer.id", "in", ids)
-      .where("customer.companyId", "=", this.companyId)
-      .execute();
+    const { rows } = await this.database.execute<EntityRow>(sql`
+      select
+        c.id,
+        c.name,
+        c."companyId",
+        ct."taxId" as "taxId",
+        c.phone,
+        c.fax,
+        c.website,
+        c."currencyCode",
+        c."updatedAt",
+        cl.name as "locationName",
+        a."addressLine1",
+        a."addressLine2",
+        a.city,
+        a."postalCode",
+        co."firstName" as "contactFirstName",
+        co."lastName" as "contactLastName",
+        co.email as "contactEmail",
+        co."mobilePhone" as "contactMobilePhone",
+        co."homePhone" as "contactHomePhone",
+        co."workPhone" as "contactWorkPhone"
+      from customer c
+      left join "customerTax" ct on ct."customerId" = c.id
+      left join "customerLocation" cl on cl."customerId" = c.id
+      left join address a on a.id = cl."addressId"
+      left join "customerContact" cc on cc."customerId" = c.id
+      left join contact co on co.id = cc."contactId"
+      where c.id = any(${ids}::text[])
+        and c."companyId" = ${this.companyId}
+    `);
 
-    return this.groupAndTransformRows(rows as EntityRow[], true);
+    return this.groupAndTransformRows(rows, true);
   }
 
   private async fetchSuppliersByIds(
@@ -185,45 +179,39 @@ export class ContactSyncer extends BaseEntitySyncer<
   ): Promise<Map<string, Accounting.Contact>> {
     if (ids.length === 0) return new Map();
 
-    const rows = await (this.database as any)
-      .selectFrom("supplier")
-      .leftJoin("supplierTax", "supplierTax.supplierId", "supplier.id")
-      .leftJoin(
-        "supplierLocation",
-        "supplierLocation.supplierId",
-        "supplier.id"
-      )
-      .leftJoin("address", "address.id", "supplierLocation.addressId")
-      .leftJoin("supplierContact", "supplierContact.supplierId", "supplier.id")
-      .leftJoin("contact", "contact.id", "supplierContact.contactId")
-      .select([
-        "supplier.id",
-        "supplier.name",
-        "supplier.companyId",
-        "supplierTax.taxId as taxId",
-        "supplier.phone",
-        "supplier.fax",
-        "supplier.website",
-        "supplier.currencyCode",
-        "supplier.updatedAt",
-        "supplierLocation.name as locationName",
-        "address.addressLine1",
-        "address.addressLine2",
-        "address.city",
-        "address.postalCode",
-        // Contact details from linked contact
-        "contact.firstName as contactFirstName",
-        "contact.lastName as contactLastName",
-        "contact.email as contactEmail",
-        "contact.mobilePhone as contactMobilePhone",
-        "contact.homePhone as contactHomePhone",
-        "contact.workPhone as contactWorkPhone"
-      ])
-      .where("supplier.id", "in", ids)
-      .where("supplier.companyId", "=", this.companyId)
-      .execute();
+    const { rows } = await this.database.execute<EntityRow>(sql`
+      select
+        s.id,
+        s.name,
+        s."companyId",
+        st."taxId" as "taxId",
+        s.phone,
+        s.fax,
+        s.website,
+        s."currencyCode",
+        s."updatedAt",
+        sl.name as "locationName",
+        a."addressLine1",
+        a."addressLine2",
+        a.city,
+        a."postalCode",
+        co."firstName" as "contactFirstName",
+        co."lastName" as "contactLastName",
+        co.email as "contactEmail",
+        co."mobilePhone" as "contactMobilePhone",
+        co."homePhone" as "contactHomePhone",
+        co."workPhone" as "contactWorkPhone"
+      from supplier s
+      left join "supplierTax" st on st."supplierId" = s.id
+      left join "supplierLocation" sl on sl."supplierId" = s.id
+      left join address a on a.id = sl."addressId"
+      left join "supplierContact" sc on sc."supplierId" = s.id
+      left join contact co on co.id = sc."contactId"
+      where s.id = any(${ids}::text[])
+        and s."companyId" = ${this.companyId}
+    `);
 
-    return this.groupAndTransformRows(rows as EntityRow[], false);
+    return this.groupAndTransformRows(rows, false);
   }
 
   private groupAndTransformRows(
@@ -429,7 +417,7 @@ export class ContactSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.Contact>,
     remoteId: string
   ): Promise<string> {
@@ -467,23 +455,25 @@ export class ContactSyncer extends BaseEntitySyncer<
    * Used for smart matching during backfill when no ID mapping exists yet.
    */
   private async findLocalEntityByName(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     name: string,
     isVendor: boolean
   ): Promise<string | null> {
     const table = isVendor ? "supplier" : "customer";
-    const match = await tx
-      .selectFrom(table)
-      .select("id")
-      .where("name", "=", name)
-      .where("companyId", "=", this.companyId)
-      .executeTakeFirst();
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      select id
+      from ${sql.identifier(table)}
+      where name = ${name}
+        and "companyId" = ${this.companyId}
+      limit 1
+    `);
+    const match = rows[0];
 
     return match?.id ?? null;
   }
 
   private async upsertEntity(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.Contact>,
     existingId: string | null,
     isVendor: boolean
@@ -491,41 +481,50 @@ export class ContactSyncer extends BaseEntitySyncer<
     const table = isVendor ? "supplier" : "customer";
 
     if (existingId) {
-      await tx
-        .updateTable(table)
-        .set({
-          name: data.name,
-          website: data.website,
-          phone: data.workPhone,
-          fax: data.fax,
-          currencyCode: data.currencyCode,
-          updatedAt: new Date().toISOString()
-        })
-        .where("id", "=", existingId)
-        .execute();
+      await tx.execute(sql`
+        update ${sql.identifier(table)}
+        set
+          name = ${data.name},
+          website = ${data.website},
+          phone = ${data.workPhone},
+          fax = ${data.fax},
+          "currencyCode" = ${data.currencyCode},
+          "updatedAt" = ${new Date().toISOString()}
+        where id = ${existingId}
+      `);
       return existingId;
     }
 
-    const result = await tx
-      .insertInto(table)
-      .values({
-        companyId: this.companyId,
-        name: data.name!,
-        website: data.website,
-        phone: data.workPhone,
-        fax: data.fax,
-        currencyCode: data.currencyCode,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      })
-      .returning("id")
-      .executeTakeFirstOrThrow();
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into ${sql.identifier(table)} (
+        "companyId",
+        name,
+        website,
+        phone,
+        fax,
+        "currencyCode",
+        "createdAt",
+        "updatedAt"
+      ) values (
+        ${this.companyId},
+        ${data.name!},
+        ${data.website},
+        ${data.workPhone},
+        ${data.fax},
+        ${data.currencyCode},
+        ${new Date().toISOString()},
+        ${new Date().toISOString()}
+      )
+      returning id
+    `);
+    const result = rows[0];
+    if (!result) throw new Error("Failed to create accounting contact entity");
 
     return result.id;
   }
 
   private async upsertEntityTax(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     entityId: string,
     taxId: string | null,
     isVendor: boolean
@@ -533,25 +532,26 @@ export class ContactSyncer extends BaseEntitySyncer<
     const table = isVendor ? "supplierTax" : "customerTax";
     const fkColumn = isVendor ? "supplierId" : "customerId";
 
-    await (tx as any)
-      .insertInto(table)
-      .values({
-        [fkColumn]: entityId,
-        taxId,
-        companyId: this.companyId,
-        updatedAt: new Date().toISOString()
-      })
-      .onConflict((oc: any) =>
-        oc.column(fkColumn).doUpdateSet({
-          taxId,
-          updatedAt: new Date().toISOString()
-        })
+    await tx.execute(sql`
+      insert into ${sql.identifier(table)} (
+        ${sql.identifier(fkColumn)},
+        "taxId",
+        "companyId",
+        "updatedAt"
+      ) values (
+        ${entityId},
+        ${taxId},
+        ${this.companyId},
+        ${new Date().toISOString()}
       )
-      .execute();
+      on conflict (${sql.identifier(fkColumn)}) do update set
+        "taxId" = excluded."taxId",
+        "updatedAt" = excluded."updatedAt"
+    `);
   }
 
   private async upsertContactAndLink(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.Contact>,
     _remoteId: string,
     entityId: string,
@@ -563,11 +563,13 @@ export class ContactSyncer extends BaseEntitySyncer<
     // Find existing contact person via the junction table (not the mapping
     // table). The contact person is a child of the customer/supplier and
     // doesn't need its own external integration mapping.
-    const existingJunction = await tx
-      .selectFrom(junctionTable)
-      .select("contactId")
-      .where(fkColumn as any, "=", entityId)
-      .executeTakeFirst();
+    const { rows: junctionRows } = await tx.execute<{ contactId: string }>(sql`
+      select "contactId"
+      from ${sql.identifier(junctionTable)}
+      where ${sql.identifier(fkColumn)} = ${entityId}
+      limit 1
+    `);
+    const existingJunction = junctionRows[0];
 
     // Xero contacts often only have a company Name with no FirstName/LastName.
     // Fall back to the entity name so the contact person isn't blank.
@@ -578,44 +580,59 @@ export class ContactSyncer extends BaseEntitySyncer<
 
     if (existingJunction) {
       // Update existing contact person
-      await tx
-        .updateTable("contact")
-        .set({
-          email: data.email ?? null,
-          firstName,
-          lastName,
-          workPhone: data.workPhone ?? null,
-          mobilePhone: data.mobilePhone ?? null,
-          homePhone: data.homePhone ?? null,
-          fax: data.fax ?? null
-        })
-        .where("id", "=", existingJunction.contactId)
-        .execute();
+      await tx.execute(sql`
+        update contact
+        set
+          email = ${data.email ?? null},
+          "firstName" = ${firstName},
+          "lastName" = ${lastName},
+          "workPhone" = ${data.workPhone ?? null},
+          "mobilePhone" = ${data.mobilePhone ?? null},
+          "homePhone" = ${data.homePhone ?? null},
+          fax = ${data.fax ?? null}
+        where id = ${existingJunction.contactId}
+      `);
       contactId = existingJunction.contactId;
     } else {
       // Insert new contact person
-      const result = await tx
-        .insertInto("contact")
-        .values({
-          companyId: this.companyId,
-          email: data.email ?? null,
-          firstName,
-          lastName,
-          workPhone: data.workPhone ?? null,
-          mobilePhone: data.mobilePhone ?? null,
-          homePhone: data.homePhone ?? null,
-          fax: data.fax ?? null,
-          isCustomer: !isVendor
-        })
-        .returning("id")
-        .executeTakeFirstOrThrow();
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        insert into contact (
+          "companyId",
+          email,
+          "firstName",
+          "lastName",
+          "workPhone",
+          "mobilePhone",
+          "homePhone",
+          fax,
+          "isCustomer"
+        ) values (
+          ${this.companyId},
+          ${data.email ?? null},
+          ${firstName},
+          ${lastName},
+          ${data.workPhone ?? null},
+          ${data.mobilePhone ?? null},
+          ${data.homePhone ?? null},
+          ${data.fax ?? null},
+          ${!isVendor}
+        )
+        returning id
+      `);
+      const result = rows[0];
+      if (!result) throw new Error("Failed to create accounting contact");
       contactId = result.id;
 
       // Create the junction link
-      await tx
-        .insertInto(junctionTable)
-        .values({ [fkColumn]: entityId, contactId } as any)
-        .execute();
+      await tx.execute(sql`
+        insert into ${sql.identifier(junctionTable)} (
+          ${sql.identifier(fkColumn)},
+          "contactId"
+        ) values (
+          ${entityId},
+          ${contactId}
+        )
+      `);
     }
   }
 

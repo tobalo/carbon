@@ -1,5 +1,5 @@
 import { assertIsPost, notFound } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
@@ -11,6 +11,11 @@ import {
 } from "~/modules/purchasing/purchasing.models";
 import { getSupplierQuoteByExternalLinkId } from "~/modules/purchasing/purchasing.service";
 import { getCompanySettings } from "~/modules/settings";
+import { getExternalLink } from "~/modules/shared";
+
+function isExpired(date: string | null | undefined) {
+  return Boolean(date && new Date(date) < new Date());
+}
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
@@ -21,8 +26,24 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = String(formData.get("intent"));
 
-  const serviceRole = getCarbonServiceRole();
-  const quote = await getSupplierQuoteByExternalLinkId(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const externalLink = await getExternalLink(serviceClient, id);
+  if (
+    externalLink.error ||
+    externalLink.data?.documentType !== "SupplierQuote" ||
+    isExpired(externalLink.data.expiresAt)
+  ) {
+    return {
+      success: false,
+      message: "Quote not found"
+    };
+  }
+
+  const quote = await getSupplierQuoteByExternalLinkId(serviceClient, id, {
+    companyId: externalLink.data.companyId,
+    documentId: externalLink.data.documentId,
+    supplierId: externalLink.data.supplierId
+  });
 
   if (quote.error || !quote.data) {
     console.error("Quote not found", quote.error);
@@ -33,7 +54,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const companySettings = await getCompanySettings(
-    serviceRole,
+    serviceClient,
     quote.data.companyId
   );
 
@@ -55,7 +76,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       const now = new Date().toISOString();
 
       // Update supplierQuote
-      await serviceRole
+      const declineQuote = await serviceClient
         .from("supplierQuote")
         .update({
           status: "Declined",
@@ -68,11 +89,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
             declinedAt: now
           }
         })
-        .eq("id", quote.data.id);
+        .eq("id", quote.data.id)
+        .eq("companyId", quote.data.companyId)
+        .eq("externalLinkId", id);
+
+      if (declineQuote.error) {
+        console.error("Failed to decline supplier quote", declineQuote.error);
+        return { success: false, message: "Failed to decline quote" };
+      }
 
       // Update externalLink if it exists
       if (quote.data.externalLinkId) {
-        await serviceRole
+        await serviceClient
           .from("externalLink")
           .update({
             declinedAt: now,
@@ -80,7 +108,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
             declinedByEmail: digitalSupplierQuoteSubmittedByEmail,
             declineNote: note ?? null
           } as any)
-          .eq("id", quote.data.externalLinkId);
+          .eq("id", quote.data.externalLinkId)
+          .eq("companyId", quote.data.companyId)
+          .eq("documentType", "SupplierQuote")
+          .eq("documentId", quote.data.id);
       }
 
       return {
@@ -136,6 +167,26 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
 
       const selectedLines = parseResult.data;
+      const submittedLineIds = Object.keys(selectedLines);
+
+      if (submittedLineIds.length === 0) {
+        return { success: false, message: "Invalid selected lines data" };
+      }
+
+      const validLines = await serviceClient
+        .from("supplierQuoteLine")
+        .select("id")
+        .eq("supplierQuoteId", quote.data.id)
+        .eq("companyId", quote.data.companyId)
+        .in("id", submittedLineIds);
+      const validLineIds = new Set(
+        (validLines.data ?? []).map((line) => line.id)
+      );
+
+      if (validLines.error || validLineIds.size !== submittedLineIds.length) {
+        console.error("Invalid supplier quote lines", validLines.error);
+        return { success: false, message: "Invalid selected lines data" };
+      }
 
       // Update prices for all selected quantities across all lines
       // First, collect all price records that need to be updated/inserted
@@ -146,6 +197,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }> = [];
 
       for (const [lineId, lineSelections] of Object.entries(selectedLines)) {
+        if (!validLineIds.has(lineId)) {
+          return { success: false, message: "Invalid selected lines data" };
+        }
+
         // lineSelections is Record<number, SelectedLine>
         for (const [quantityStr, selectedLine] of Object.entries(
           lineSelections
@@ -163,12 +218,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
         }
       }
 
+      if (priceRecordsToProcess.length === 0) {
+        return { success: false, message: "Invalid selected lines data" };
+      }
+
       // Batch check which price records exist
       const existingPriceChecks = await Promise.all(
         priceRecordsToProcess.map(({ lineId, quantity }) =>
-          serviceRole
+          serviceClient
             .from("supplierQuoteLinePrice")
             .select("id")
+            .eq("supplierQuoteId", quote.data.id)
             .eq("supplierQuoteLineId", lineId)
             .eq("quantity", quantity)
             .maybeSingle()
@@ -186,7 +246,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         if (existingPrice.data) {
           // Update existing price record
           priceUpdates.push(
-            serviceRole
+            serviceClient
               .from("supplierQuoteLinePrice")
               .update({
                 supplierUnitPrice: selectedLine.supplierUnitPrice ?? 0,
@@ -196,6 +256,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
                 updatedAt: new Date().toISOString(),
                 updatedBy: quote.data.createdBy
               })
+              .eq("supplierQuoteId", quote.data.id)
               .eq("supplierQuoteLineId", lineId)
               .eq("quantity", quantity)
           );
@@ -216,17 +277,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
 
       // Execute all updates and inserts
-      await Promise.all([
+      const priceResults = await Promise.all([
         ...priceUpdates,
         priceInserts.length > 0
-          ? serviceRole.from("supplierQuoteLinePrice").insert(priceInserts)
+          ? serviceClient.from("supplierQuoteLinePrice").insert(priceInserts)
           : Promise.resolve({ data: null, error: null })
       ]);
+
+      const priceError = priceResults.find((result) => result.error)?.error;
+      if (priceError) {
+        console.error("Failed to update supplier quote prices", priceError);
+        return { success: false, message: "Failed to update pricing" };
+      }
 
       const now = new Date().toISOString();
 
       // Update quote status to Active (submit moves from Draft to Active)
-      await serviceRole
+      const submitQuote = await serviceClient
         .from("supplierQuote")
         .update({
           status: "Active",
@@ -238,18 +305,28 @@ export async function action({ request, params }: ActionFunctionArgs) {
             lastSubmittedAt: now
           }
         })
-        .eq("id", quote.data.id);
+        .eq("id", quote.data.id)
+        .eq("companyId", quote.data.companyId)
+        .eq("externalLinkId", id);
+
+      if (submitQuote.error) {
+        console.error("Failed to submit supplier quote", submitQuote.error);
+        return { success: false, message: "Failed to submit quote" };
+      }
 
       // Update externalLink if it exists
       if (quote.data.externalLinkId) {
-        await serviceRole
+        await serviceClient
           .from("externalLink")
           .update({
             submittedAt: now,
             submittedBy: digitalSupplierQuoteSubmittedBy,
             submittedByEmail: digitalSupplierQuoteSubmittedByEmail
           } as any)
-          .eq("id", quote.data.externalLinkId);
+          .eq("id", quote.data.externalLinkId)
+          .eq("companyId", quote.data.companyId)
+          .eq("documentType", "SupplierQuote")
+          .eq("documentId", quote.data.id);
       }
 
       if (companySettings.error) {
@@ -298,14 +375,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
 
       // Update the supplierQuoteLine with the new notes
-      const updateResult = await serviceRole
+      const updateResult = await serviceClient
         .from("supplierQuoteLine")
         .update({
           externalNotes: notes,
           updatedAt: new Date().toISOString()
         })
         .eq("id", lineId)
-        .eq("supplierQuoteId", quote.data.id);
+        .eq("supplierQuoteId", quote.data.id)
+        .eq("companyId", quote.data.companyId);
 
       if (updateResult.error) {
         console.error("Failed to update notes", updateResult.error);

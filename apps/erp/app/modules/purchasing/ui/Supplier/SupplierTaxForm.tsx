@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -20,6 +19,7 @@ import { Enumerable } from "~/components/Enumerable";
 import { Boolean, Hidden, Input, Select, Submit } from "~/components/Form";
 import { usePermissions, useUser } from "~/hooks";
 import { taxExemptionReasons } from "~/modules/sales/sales.models";
+import { uploadStorageObject } from "~/utils/storage";
 import { supplierTaxValidator } from "../../purchasing.models";
 
 type SupplierTaxFormProps = {
@@ -34,7 +34,6 @@ const SupplierTaxForm = ({ initialValues }: SupplierTaxFormProps) => {
     value: reason
   }));
   const permissions = usePermissions();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const companyId = company.id;
   const [certificatePath, setCertificatePath] = useState(
@@ -47,23 +46,25 @@ const SupplierTaxForm = ({ initialValues }: SupplierTaxFormProps) => {
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
-      if (!file || !carbon) return;
+      if (!file) return;
 
       const fileExtension = file.name.split(".").pop();
       const fileName = `${companyId}/tax-certificates/${nanoid()}.${fileExtension}`;
 
-      const result = await carbon.storage
-        .from("private")
-        .upload(fileName, file);
+      const result = await uploadStorageObject({
+        bucket: "private",
+        path: fileName,
+        file
+      });
 
-      if (result.error) {
+      if (result.error || !result.data?.path) {
         toast.error("Failed to upload certificate");
       } else {
         setCertificatePath(result.data.path);
         toast.success("Certificate uploaded");
       }
     },
-    [carbon, companyId]
+    [companyId]
   );
 
   return (

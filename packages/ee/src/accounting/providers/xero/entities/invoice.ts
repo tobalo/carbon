@@ -1,4 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import { createMappingService } from "../../../core/external-mapping";
 import {
   type Accounting,
@@ -104,7 +104,7 @@ export class SalesInvoiceSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async linkEntities(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     localId: string,
     remoteId: string,
     remoteUpdatedAt?: Date
@@ -122,13 +122,11 @@ export class SalesInvoiceSyncer extends BaseEntitySyncer<
     );
 
     // Also update updatedAt on salesInvoice
-    await tx
-      .updateTable("salesInvoice")
-      .set({
-        updatedAt: new Date().toISOString()
-      })
-      .where("id", "=", localId)
-      .execute();
+    await tx.execute(sql`
+      update "salesInvoice"
+      set "updatedAt" = ${new Date().toISOString()}
+      where id = ${localId}
+    `);
   }
 
   // =================================================================
@@ -161,58 +159,53 @@ export class SalesInvoiceSyncer extends BaseEntitySyncer<
     if (ids.length === 0) return new Map();
 
     // Fetch invoice headers
-    const invoiceRows = await this.database
-      .selectFrom("salesInvoice")
-      .select([
-        "salesInvoice.id",
-        "salesInvoice.invoiceId",
-        "salesInvoice.companyId",
-        "salesInvoice.customerId",
-        "salesInvoice.status",
-        "salesInvoice.currencyCode",
-        "salesInvoice.exchangeRate",
-        "salesInvoice.dateIssued",
-        "salesInvoice.dateDue",
-        "salesInvoice.datePaid",
-        "salesInvoice.customerReference",
-        "salesInvoice.subtotal",
-        "salesInvoice.totalTax",
-        "salesInvoice.totalDiscount",
-        "salesInvoice.totalAmount",
-        "salesInvoice.balance",
-        "salesInvoice.updatedAt"
-      ])
-      .where("salesInvoice.id", "in", ids)
-      .where("salesInvoice.companyId", "=", this.companyId)
-      .execute();
+    const { rows: invoiceRows } = await this.database.execute<InvoiceRow>(sql`
+      select
+        si.id,
+        si."invoiceId",
+        si."companyId",
+        si."customerId",
+        si.status,
+        si."currencyCode",
+        si."exchangeRate",
+        si."dateIssued",
+        si."dateDue",
+        si."datePaid",
+        si."customerReference",
+        si.subtotal,
+        si."totalTax",
+        si."totalDiscount",
+        si."totalAmount",
+        si.balance,
+        si."updatedAt"
+      from "salesInvoice" si
+      where si.id = any(${ids}::text[])
+        and si."companyId" = ${this.companyId}
+    `);
 
     if (invoiceRows.length === 0) return new Map();
 
     // Fetch invoice lines with item codes
-    const lineRows = await this.database
-      .selectFrom("salesInvoiceLine")
-      .leftJoin("item", "item.id", "salesInvoiceLine.itemId")
-      .select([
-        "salesInvoiceLine.id",
-        "salesInvoiceLine.invoiceId",
-        "salesInvoiceLine.invoiceLineType",
-        "salesInvoiceLine.itemId",
-        "salesInvoiceLine.description",
-        "salesInvoiceLine.quantity",
-        "salesInvoiceLine.unitPrice",
-        "salesInvoiceLine.taxPercent",
-        "item.readableIdWithRevision as itemReadableIdWithRevision"
-      ])
-      .where(
-        "salesInvoiceLine.invoiceId",
-        "in",
-        invoiceRows.map((r) => r.id)
-      )
-      .execute();
+    const invoiceIds = invoiceRows.map((r) => r.id);
+    const { rows: lineRows } = await this.database.execute<InvoiceLineRow>(sql`
+      select
+        sil.id,
+        sil."invoiceId",
+        sil."invoiceLineType",
+        sil."itemId",
+        sil.description,
+        sil.quantity,
+        sil."unitPrice",
+        sil."taxPercent",
+        i."readableIdWithRevision" as "itemReadableIdWithRevision"
+      from "salesInvoiceLine" sil
+      left join item i on i.id = sil."itemId"
+      where sil."invoiceId" = any(${invoiceIds}::text[])
+    `);
 
     // Group lines by invoice ID
     const linesByInvoiceId = new Map<string, InvoiceLineRow[]>();
-    for (const line of lineRows as InvoiceLineRow[]) {
+    for (const line of lineRows) {
       const existing = linesByInvoiceId.get(line.invoiceId) ?? [];
       existing.push(line);
       linesByInvoiceId.set(line.invoiceId, existing);
@@ -220,7 +213,7 @@ export class SalesInvoiceSyncer extends BaseEntitySyncer<
 
     // Transform to Accounting.SalesInvoice
     const result = new Map<string, Accounting.SalesInvoice>();
-    for (const row of invoiceRows as InvoiceRow[]) {
+    for (const row of invoiceRows) {
       const lines = linesByInvoiceId.get(row.id) ?? [];
 
       result.set(row.id, {
@@ -440,7 +433,7 @@ export class SalesInvoiceSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.SalesInvoice>,
     remoteId: string
   ): Promise<string> {
@@ -453,23 +446,22 @@ export class SalesInvoiceSyncer extends BaseEntitySyncer<
     }
 
     // Update invoice header (mapping is handled by linkEntities in base class)
-    await tx
-      .updateTable("salesInvoice")
-      .set({
-        status: data.status,
-        dateIssued: data.dateIssued,
-        dateDue: data.dateDue,
-        customerReference: data.customerReference,
-        subtotal: data.subtotal,
-        totalTax: data.totalTax,
-        totalAmount: data.totalAmount,
-        balance: data.balance,
-        currencyCode: data.currencyCode,
-        exchangeRate: data.exchangeRate,
-        updatedAt: new Date().toISOString()
-      })
-      .where("id", "=", existingLocalId)
-      .execute();
+    await tx.execute(sql`
+      update "salesInvoice"
+      set
+        status = ${data.status},
+        "dateIssued" = ${data.dateIssued},
+        "dateDue" = ${data.dateDue},
+        "customerReference" = ${data.customerReference},
+        subtotal = ${data.subtotal},
+        "totalTax" = ${data.totalTax},
+        "totalAmount" = ${data.totalAmount},
+        balance = ${data.balance},
+        "currencyCode" = ${data.currencyCode},
+        "exchangeRate" = ${data.exchangeRate},
+        "updatedAt" = ${new Date().toISOString()}
+      where id = ${existingLocalId}
+    `);
 
     // Note: We don't update line items from Xero to preserve Carbon's line structure
     // Lines are only updated from Carbon -> Xero direction

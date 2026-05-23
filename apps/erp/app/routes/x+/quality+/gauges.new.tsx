@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
@@ -40,7 +39,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const useNextSequence = !gaugeId;
   if (useNextSequence) {
     const nextSequence = await getNextSequence(
-      getCarbonServiceRole(),
+      client,
       "gauge",
       companyId
     );

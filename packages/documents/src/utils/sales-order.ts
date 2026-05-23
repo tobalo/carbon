@@ -1,7 +1,7 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 
 export function getLineDescription(
-  line: Database["public"]["Views"]["salesOrderLines"]["Row"]
+  line: TableRow<"salesOrderLines">
 ) {
   switch (line?.salesOrderLineType) {
     case "Fixed Asset":
@@ -20,7 +20,7 @@ export function getLineDescription(
 }
 
 export function getLineDescriptionDetails(
-  line: Database["public"]["Views"]["salesOrderLines"]["Row"]
+  line: TableRow<"salesOrderLines">
 ) {
   switch (line?.salesOrderLineType) {
     case "Fixed Asset":
@@ -37,7 +37,7 @@ export function getLineDescriptionDetails(
 }
 
 export function getLineSubtotal(
-  line: Database["public"]["Views"]["salesOrderLines"]["Row"]
+  line: TableRow<"salesOrderLines">
 ) {
   if (line?.saleQuantity && line?.convertedUnitPrice) {
     return (
@@ -51,7 +51,7 @@ export function getLineSubtotal(
 }
 
 export function getLineTaxableSubtotal(
-  line: Database["public"]["Views"]["salesOrderLines"]["Row"]
+  line: TableRow<"salesOrderLines">
 ) {
   if (line?.saleQuantity && line?.convertedUnitPrice) {
     return (
@@ -64,7 +64,7 @@ export function getLineTaxableSubtotal(
 }
 
 export function getLineTaxesAndFees(
-  line: Database["public"]["Views"]["salesOrderLines"]["Row"]
+  line: TableRow<"salesOrderLines">
 ) {
   const taxPercent = line.taxPercent ?? 0;
   const tax = getLineTaxableSubtotal(line) * taxPercent;
@@ -76,7 +76,7 @@ export function getLineTaxesAndFees(
 }
 
 export function getLineTotal(
-  line: Database["public"]["Views"]["salesOrderLines"]["Row"]
+  line: TableRow<"salesOrderLines">
 ) {
   const taxPercent = line.taxPercent ?? 0;
   const tax = getLineTaxableSubtotal(line) * taxPercent;
@@ -84,8 +84,8 @@ export function getLineTotal(
 }
 
 export function getTotal(
-  lines: Database["public"]["Views"]["salesOrderLines"]["Row"][],
-  salesOrder: Database["public"]["Views"]["salesOrders"]["Row"]
+  lines: TableRow<"salesOrderLines">[],
+  salesOrder: TableRow<"salesOrders">
 ) {
   let total = 0;
 

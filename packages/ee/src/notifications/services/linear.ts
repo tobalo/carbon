@@ -1,6 +1,5 @@
 import { getUser } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import type { TiptapDocument } from "../../linear/lib/index.server";
 import {
   getLinearClient,
@@ -22,7 +21,7 @@ export class LinearNotificationService implements NotificationService {
 
   async send(
     event: NotificationEvent,
-    context: { serviceRole: SupabaseClient<Database> }
+    context: { serviceClient: DatabaseQueryClient }
   ): Promise<void> {
     switch (event.type) {
       case "task.status.changed": {
@@ -33,7 +32,7 @@ export class LinearNotificationService implements NotificationService {
           return;
 
         const issue = await getLinearIssueFromExternalId(
-          context.serviceRole,
+          context.serviceClient,
           event.companyId,
           event.data.id
         );
@@ -59,7 +58,7 @@ export class LinearNotificationService implements NotificationService {
         if (event.data.table !== "nonConformanceActionTask") return;
 
         const issue = await getLinearIssueFromExternalId(
-          context.serviceRole,
+          context.serviceClient,
           event.companyId,
           event.data.id
         );
@@ -67,7 +66,7 @@ export class LinearNotificationService implements NotificationService {
         if (!issue) return; // No linked Linear issue
 
         const { data: user } = await getUser(
-          context.serviceRole,
+          context.serviceClient,
           event.data.assignee
         );
 
@@ -90,7 +89,7 @@ export class LinearNotificationService implements NotificationService {
         if (event.data.table !== "nonConformanceActionTask") return;
 
         const issue = await getLinearIssueFromExternalId(
-          context.serviceRole,
+          context.serviceClient,
           event.companyId,
           event.data.id
         );

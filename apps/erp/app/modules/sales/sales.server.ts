@@ -1,11 +1,25 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getDatabaseClient } from "~/services/database.server";
+import { eq, withAuth } from "@carbon/database/drizzle";
+import {
+  customerItemPriceOverrideBreakTable,
+  customerItemPriceOverrideTable,
+  type QueryDatabase
+} from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
+import { nanoid } from "nanoid";
 
 type BreakRow = { quantity: number; overridePrice: number; active: boolean };
+type SourceOverrideRow = {
+  id: string;
+  itemId: string;
+  notes: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  active: boolean;
+  applyRulesOnTop: boolean | null;
+};
 
 export async function duplicatePriceOverrides(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   userId: string,
   source: { customerId?: string; customerTypeId?: string },
@@ -23,7 +37,7 @@ export async function duplicatePriceOverrides(
   let query = client
     .from("customerItemPriceOverride")
     .select(
-      "id, itemId, notes, validFrom, validTo, active, applyRulesOnTop, breaks:customerItemPriceOverrideBreak(quantity, overridePrice, active)"
+      "id, itemId, notes, validFrom, validTo, active, applyRulesOnTop"
     )
     .eq("companyId", companyId);
 
@@ -48,6 +62,28 @@ export async function duplicatePriceOverrides(
     return { duplicated: 0, skipped: 0, overwritten: 0, error: null };
   }
 
+  const sourceIds = sourceOverrides.map((source) => source.id);
+  const { data: sourceBreakRows, error: breaksError } = await client
+    .from("customerItemPriceOverrideBreak")
+    .select("customerItemPriceOverrideId, quantity, overridePrice, active")
+    .in("customerItemPriceOverrideId", sourceIds);
+
+  if (breaksError) {
+    return { duplicated: 0, skipped: 0, overwritten: 0, error: breaksError };
+  }
+
+  const breaksByOverrideId = new Map<string, BreakRow[]>();
+  for (const row of sourceBreakRows ?? []) {
+    const key = row.customerItemPriceOverrideId;
+    const next = breaksByOverrideId.get(key) ?? [];
+    next.push({
+      quantity: row.quantity,
+      overridePrice: row.overridePrice,
+      active: row.active
+    });
+    breaksByOverrideId.set(key, next);
+  }
+
   const strategy = options?.conflictStrategy ?? "skip";
 
   let existingLookup = client
@@ -70,20 +106,15 @@ export async function duplicatePriceOverrides(
     (existingOverrides ?? []).map((e) => [e.itemId, e.id])
   );
 
-  const db = getDatabaseClient();
-
   try {
-    const result = await db.transaction().execute(async (trx) => {
+    const result = await withAuth({ kind: "user", userId }, async (db) => {
       let duplicated = 0;
       let skipped = 0;
       let overwritten = 0;
+      const timestamp = new Date().toISOString();
 
-      for (const src of sourceOverrides) {
-        const breaks = ((src.breaks as BreakRow[] | null) ?? []).map((b) => ({
-          quantity: b.quantity,
-          overridePrice: b.overridePrice,
-          active: b.active
-        }));
+      for (const src of sourceOverrides as SourceOverrideRow[]) {
+        const breaks = breaksByOverrideId.get(src.id) ?? [];
 
         if (breaks.length === 0) {
           skipped++;
@@ -100,8 +131,8 @@ export async function duplicatePriceOverrides(
         let parentId: string;
 
         if (existingId) {
-          await trx
-            .updateTable("customerItemPriceOverride")
+          await db
+            .update(customerItemPriceOverrideTable)
             .set({
               active: src.active,
               applyRulesOnTop: src.applyRulesOnTop ?? true,
@@ -112,55 +143,52 @@ export async function duplicatePriceOverrides(
               customerTypeId: target.customerTypeId ?? null,
               itemId: src.itemId,
               updatedBy: userId,
-              updatedAt: new Date().toISOString()
+              updatedAt: timestamp
             })
-            .where("id", "=", existingId)
-            .where("companyId", "=", companyId)
-            .execute();
+            .where(eq(customerItemPriceOverrideTable.id, existingId));
 
-          await trx
-            .deleteFrom("customerItemPriceOverrideBreak")
-            .where("customerItemPriceOverrideId", "=", existingId)
-            .where("companyId", "=", companyId)
-            .execute();
+          await db
+            .delete(customerItemPriceOverrideBreakTable)
+            .where(
+              eq(
+                customerItemPriceOverrideBreakTable.customerItemPriceOverrideId,
+                existingId
+              )
+            );
 
           parentId = existingId;
           overwritten++;
         } else {
-          const [row] = await trx
-            .insertInto("customerItemPriceOverride")
-            .values({
-              companyId,
-              createdBy: userId,
-              itemId: src.itemId,
-              customerId: target.customerId ?? null,
-              customerTypeId: target.customerTypeId ?? null,
-              active: src.active,
-              applyRulesOnTop: src.applyRulesOnTop ?? true,
-              notes: src.notes ?? null,
-              validFrom: src.validFrom ?? null,
-              validTo: src.validTo ?? null
-            })
-            .returning("id")
-            .execute();
-
-          parentId = row.id;
+          parentId = nanoid();
+          await db.insert(customerItemPriceOverrideTable).values({
+            id: parentId,
+            companyId,
+            createdBy: userId,
+            createdAt: timestamp,
+            itemId: src.itemId,
+            customerId: target.customerId ?? null,
+            customerTypeId: target.customerTypeId ?? null,
+            active: src.active,
+            applyRulesOnTop: src.applyRulesOnTop ?? true,
+            notes: src.notes ?? null,
+            validFrom: src.validFrom ?? null,
+            validTo: src.validTo ?? null
+          });
           duplicated++;
         }
 
-        await trx
-          .insertInto("customerItemPriceOverrideBreak")
-          .values(
-            breaks.map((b) => ({
-              customerItemPriceOverrideId: parentId,
-              companyId,
-              createdBy: userId,
-              quantity: b.quantity,
-              overridePrice: b.overridePrice,
-              active: b.active
-            }))
-          )
-          .execute();
+        await db.insert(customerItemPriceOverrideBreakTable).values(
+          breaks.map((b) => ({
+            id: nanoid(),
+            customerItemPriceOverrideId: parentId,
+            companyId,
+            createdBy: userId,
+            createdAt: timestamp,
+            quantity: b.quantity,
+            overridePrice: b.overridePrice,
+            active: b.active
+          }))
+        );
       }
 
       return { duplicated, skipped, overwritten };

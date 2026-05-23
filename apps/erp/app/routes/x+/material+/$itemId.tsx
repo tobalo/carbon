@@ -15,6 +15,7 @@ import {
 import { ResizablePanels } from "~/components/Layout";
 import type { ItemFile, MaterialSummary } from "~/modules/items";
 import {
+  assertSupplierItemScope,
   getItemFiles,
   getMakeMethods,
   getMaterial,
@@ -39,10 +40,11 @@ export const handle: Handle = {
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts",
     bypassRls: true
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
@@ -50,7 +52,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const [materialSummary, supplierParts, pickMethods, tags] = await Promise.all(
     [
       getMaterial(client, itemId, companyId),
-      getSupplierParts(client, itemId, companyId),
+      getSupplierParts(
+        client,
+        itemId,
+        companyId,
+        role === "supplier" ? supplierId : undefined
+      ),
       getPickMethods(client, itemId, companyId),
       getTagsList(client, companyId, "material")
     ]
@@ -65,6 +72,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       )
     );
   }
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   return {
     materialSummary: materialSummary.data,
@@ -136,7 +151,6 @@ export default function MaterialRoute() {
                         key: "methodMaterials",
                         name: "Method Materials",
                         module: "parts",
-                        // @ts-expect-error
                         children: methodMaterials
                       },
                       {

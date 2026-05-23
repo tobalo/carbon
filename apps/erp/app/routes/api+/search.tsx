@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { getUserClaims } from "@carbon/auth/users.server";
 import type { LoaderFunctionArgs } from "react-router";
 
@@ -37,7 +36,7 @@ export type SearchResponse = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { companyId, userId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
 
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim();
@@ -71,11 +70,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return Response.json({ results: [] } satisfies SearchResponse);
   }
 
-  // Use service role to call the search function
-  const serviceRole = getCarbonServiceRole();
-
   try {
-    const { data, error } = await serviceRole.rpc("search_company_index", {
+    const { data, error } = await client.rpc("search_company_index", {
       p_company_id: companyId,
       p_query: query,
       p_entity_types: allowedEntityTypes,

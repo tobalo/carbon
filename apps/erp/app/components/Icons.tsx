@@ -1,4 +1,8 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  procedureStepTypeEnum,
+  quoteLineStatusEnum
+} from "@carbon/database/schema";
 import type { LinearIssue } from "@carbon/ee/linear";
 import { mapLinearStatusToCarbonStatus } from "@carbon/ee/linear";
 import {
@@ -309,7 +313,7 @@ export const IssueTaskStatusIcon = ({
 export const QuoteLineStatusIcon = ({
   status
 }: {
-  status: Database["public"]["Enums"]["quoteLineStatus"];
+  status: EnumValue<typeof quoteLineStatusEnum>;
 }) => {
   const getIcon = () => {
     switch (status) {
@@ -345,7 +349,7 @@ export const ProcedureStepTypeIcon = ({
   type,
   className
 }: {
-  type: Database["public"]["Enums"]["procedureStepType"];
+  type: EnumValue<typeof procedureStepTypeEnum>;
   className?: string;
 }) => {
   switch (type) {

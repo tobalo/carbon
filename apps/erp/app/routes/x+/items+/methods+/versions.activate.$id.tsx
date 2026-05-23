@@ -1,6 +1,5 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { activateMethodVersion } from "~/modules/items/items.service";
@@ -8,7 +7,7 @@ import { requestReferrer } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     update: "parts"
   });
 
@@ -20,7 +19,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return { success: false, message: "Invalid operation tool id" };
   }
 
-  const update = await activateMethodVersion(getCarbonServiceRole(), {
+  const update = await activateMethodVersion(client, {
     id,
     companyId,
     userId

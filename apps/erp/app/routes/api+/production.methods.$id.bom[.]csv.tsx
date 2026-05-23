@@ -64,7 +64,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     });
   }
 
-  const methodTree = await getJobMethodTree(client, id);
+  const methodTree = await getJobMethodTree(client, id, companyId);
   if (methodTree.error) {
     return new Response(headers, {
       headers: {
@@ -158,9 +158,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const computedCosts = calculateMadePartCosts(
-    methods,
+    methods as any[],
     bomOperationsByKey,
-    (node) => node.data.jobMaterialMakeMethodId,
+    (node: any) => node.data.jobMaterialMakeMethodId,
     batchSizesByItemId
   );
 

@@ -160,7 +160,7 @@ const SupplierQuoteLinePricing = ({
           <Thead>
             <Tr>
               <Th className="w-[300px]" />
-              {quantities.map((quantity) => (
+              {quantities.map((quantity: any) => (
                 <Th key={quantity.toString()}>{quantity}</Th>
               ))}
             </Tr>
@@ -172,7 +172,7 @@ const SupplierQuoteLinePricing = ({
                   <span>Lead Time</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 const leadTime = editableFields.prices[quantity]?.leadTime ?? 0;
                 return (
                   <Td
@@ -219,7 +219,7 @@ const SupplierQuoteLinePricing = ({
                   />
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 const price =
                   editableFields.prices[quantity]?.supplierUnitPrice ?? 0;
                 return (
@@ -262,7 +262,7 @@ const SupplierQuoteLinePricing = ({
                   />
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const price = editableFields.prices[quantity]?.unitPrice ?? 0;
                 return (
                   <Td key={index} className="group-hover:bg-muted/50">
@@ -282,7 +282,7 @@ const SupplierQuoteLinePricing = ({
                   <span>Shipping Cost</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 const shippingCost =
                   editableFields.prices[quantity]?.supplierShippingCost ?? 0;
                 return (
@@ -322,7 +322,7 @@ const SupplierQuoteLinePricing = ({
                   <span>Tax Amount</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const taxAmount =
                   editableFields.prices[quantity]?.supplierTaxAmount ?? 0;
                 return (
@@ -357,7 +357,7 @@ const SupplierQuoteLinePricing = ({
                   <span>Supplier Total Price</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const subtotal =
                   (editableFields.prices[quantity]?.supplierUnitPrice ?? 0) *
                     quantity +
@@ -383,7 +383,7 @@ const SupplierQuoteLinePricing = ({
                       <span>Exchange Rate</span>
                     </HStack>
                   </Td>
-                  {quantities.map((quantity, index) => {
+                  {quantities.map((quantity: any, index: any) => {
                     const rate =
                       editableFields.prices[quantity]?.exchangeRate ??
                       exchangeRate ??
@@ -403,7 +403,7 @@ const SupplierQuoteLinePricing = ({
                       <span>Total Price</span>
                     </HStack>
                   </Td>
-                  {quantities.map((quantity, index) => {
+                  {quantities.map((quantity: any, index: any) => {
                     const subtotal =
                       ((editableFields.prices[quantity]?.supplierUnitPrice ??
                         0) *

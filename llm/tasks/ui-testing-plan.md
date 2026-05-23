@@ -158,15 +158,15 @@ These routes now pass `companyGroupId` to `getAccountsList`.
 
 ---
 
-## Test 11: Edge Functions (Backend Verification)
+## Test 11: Function Routes (Backend Verification)
 
 | # | Step | Expected Result |
 |---|------|-----------------|
 | 11.1 | Trigger a company seed (if applicable) | Seed function completes without errors |
-| 11.2 | Create a document that triggers the `create` edge function | Edge function handles `companyGroupId` correctly |
+| 11.2 | Create a document that triggers the `create` function route | Function route handles `companyGroupId` correctly |
 | 11.3 | Post a purchase invoice | Journal entries created with correct company context |
 
-**Files:** `packages/database/supabase/functions/seed-company/index.ts`, `packages/database/supabase/functions/create/index.ts`, `packages/database/supabase/functions/post-purchase-invoice/index.ts`, `packages/database/supabase/functions/lib/api/accounting.ts`
+**Files:** `apps/erp/app/routes/api+/functions.$name.ts`, `packages/database/src/seed-company.ts`, `packages/database/src/create.ts`, `packages/database/src/post-purchase-invoice.ts`, `packages/ee/src/accounting/core/service.ts`
 
 ---
 
@@ -176,4 +176,4 @@ These routes now pass `companyGroupId` to `getAccountsList`.
 3. **Test 4-6** (Chart of Accounts, Categories, Currencies) — bread-and-butter accounting
 4. **Test 7** (Dimensions) — new feature validation
 5. **Test 8-9** (Exchange Rates, Inventory/Items) — cross-module regression
-6. **Test 3, 10-11** (Onboarding, MES/Starter, Edge Functions) — lower frequency flows
+6. **Test 3, 10-11** (Onboarding, MES/Starter, Function Routes) — lower frequency flows

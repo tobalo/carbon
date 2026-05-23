@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { XeroProvider } from "../providers/xero";
 import type { ProviderID } from "./models";
 import {
@@ -8,32 +7,38 @@ import {
 } from "./models";
 import type { ProviderCredentials, ProviderIntegrationMetadata } from "./types";
 
-export const getAccountingIntegration = async <T extends ProviderID>(
-  client: SupabaseClient<Database>,
-  companyOrTenantId: string,
-  provider: T
-) => {
-  const integration = await client
-    .from("companyIntegration")
-    .select("*")
-    .eq("id", provider)
-    .or(
-      `companyId.eq.${companyOrTenantId},metadata->credentials->>tenantId.eq.${companyOrTenantId}`
-    )
+type AccountingIntegrationQueryResult<T> = {
+  error: unknown;
+  data: T | null;
+};
+
+async function requireActiveCompany(
+  client: DatabaseQueryClient,
+  companyId: string,
+  lookupDescription: string
+) {
+  const company = await client
+    .from("company")
+    .select("id")
+    .eq("id", companyId)
+    .eq("active", true)
     .single();
 
-  console.log(
-    "Fetched integration for",
-    provider,
-    "and ID",
-    companyOrTenantId,
-    integration
-  );
+  if (company.error || !company.data) {
+    throw new Error(`No active company found for ${lookupDescription}`);
+  }
+}
 
+function parseAccountingIntegration<
+  T extends ProviderID,
+  Row extends { metadata: unknown }
+>(
+  integration: AccountingIntegrationQueryResult<Row>,
+  provider: T,
+  lookupDescription: string
+) {
   if (integration.error || !integration.data) {
-    throw new Error(
-      `No ${provider} integration found for company or tenant ${companyOrTenantId}`
-    );
+    throw new Error(`No ${provider} integration found for ${lookupDescription}`);
   }
 
   const config = ProviderIntegrationMetadataSchema.safeParse(
@@ -50,10 +55,68 @@ export const getAccountingIntegration = async <T extends ProviderID>(
     id: provider as T,
     metadata: config.data
   } as const;
+}
+
+export const getAccountingIntegrationByCompany = async <T extends ProviderID>(
+  client: DatabaseQueryClient,
+  companyId: string,
+  provider: T
+) => {
+  await requireActiveCompany(client, companyId, `company ${companyId}`);
+
+  const integration = await client
+    .from("companyIntegration")
+    .select("*")
+    .eq("id", provider)
+    .eq("companyId", companyId)
+    .eq("active", true)
+    .single();
+
+  return parseAccountingIntegration(
+    integration,
+    provider,
+    `company ${companyId}`
+  );
 };
 
+export const getAccountingIntegrationByTenant = async <T extends ProviderID>(
+  client: DatabaseQueryClient,
+  tenantId: string,
+  provider: T
+) => {
+  const integration = await client
+    .from("companyIntegration")
+    .select("*")
+    .eq("id", provider)
+    .eq("metadata->credentials->>tenantId", tenantId)
+    .eq("active", true)
+    .single();
+
+  if (integration.error || !integration.data?.companyId) {
+    return parseAccountingIntegration(
+      integration,
+      provider,
+      `tenant ${tenantId}`
+    );
+  }
+
+  await requireActiveCompany(
+    client,
+    integration.data.companyId,
+    `tenant ${tenantId}`
+  );
+
+  return parseAccountingIntegration(
+    integration,
+    provider,
+    `tenant ${tenantId}`
+  );
+};
+
+export const getAccountingIntegration = getAccountingIntegrationByCompany;
+
 export const getProviderIntegration = (
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   provider: ProviderID,
   config?: ProviderIntegrationMetadata
@@ -78,7 +141,8 @@ export const getProviderIntegration = (
         .from("companyIntegration")
         .update({ metadata: { ...config, credentials: update } })
         .eq("companyId", companyId)
-        .eq("id", provider);
+        .eq("id", provider)
+        .eq("active", true);
     } catch (error) {
       console.error(
         `Failed to update ${provider} integration metadata:`,

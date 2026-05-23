@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { getLocalTimeZone, now } from "@internationalized/date";
 import type { ActionFunctionArgs } from "react-router";
@@ -14,7 +13,7 @@ import { path } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
 
   const formData = await request.formData();
   const action = formData.get("action") as "Start" | "End" | "Complete";
@@ -26,12 +25,11 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({}, await flash(request, error("Dispatch ID is required")));
   }
 
-  const serviceRole = await getCarbonServiceRole();
   const currentTime = now(getLocalTimeZone()).toAbsoluteString();
 
   if (action === "Start") {
     // Start a new maintenance event
-    const startEvent = await startMaintenanceEvent(serviceRole, {
+    const startEvent = await startMaintenanceEvent(client, {
       maintenanceDispatchId: dispatchId,
       employeeId: userId,
       workCenterId,
@@ -51,7 +49,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     // Update dispatch status to In Progress
-    await updateMaintenanceDispatchStatus(serviceRole, {
+    await updateMaintenanceDispatchStatus(client, {
       dispatchId,
       status: "In Progress",
       actualStartTime: currentTime,
@@ -72,7 +70,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const endEvent = await endMaintenanceEvent(serviceRole, {
+    const endEvent = await endMaintenanceEvent(client, {
       eventId,
       endTime: currentTime,
       updatedBy: userId
@@ -94,7 +92,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (action === "Complete") {
     // End any active event first
     if (eventId) {
-      await endMaintenanceEvent(serviceRole, {
+      await endMaintenanceEvent(client, {
         eventId,
         endTime: currentTime,
         updatedBy: userId
@@ -102,7 +100,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     // Update dispatch status to Completed
-    const updateStatus = await updateMaintenanceDispatchStatus(serviceRole, {
+    const updateStatus = await updateMaintenanceDispatchStatus(client, {
       dispatchId,
       status: "Completed",
       actualEndTime: currentTime,

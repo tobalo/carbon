@@ -523,7 +523,7 @@ function NodeText({ node }: { node: FlatTreeItem<Method> }) {
 function NodeData({ node }: { node: FlatTreeItem<Method> }) {
   const integrations = useIntegrations();
   const onShapeState = integrations.has("onshape")
-    ? // @ts-expect-error
+    ?
       // biome-ignore lint/complexity/useLiteralKeys: suppressed due to migration
       node.data.externalId?.["onshapeData"]?.["State"]
     : null;
@@ -550,7 +550,7 @@ function NodePreview({ node }: { node: FlatTreeItem<Method> }) {
   const { t } = useLingui();
   const integrations = useIntegrations();
   const onShapeState = integrations.has("onshape")
-    ? // @ts-expect-error
+    ?
       // biome-ignore lint/complexity/useLiteralKeys: suppressed due to migration
       node.data.externalId?.["onshapeData"]?.["State"]
     : null;

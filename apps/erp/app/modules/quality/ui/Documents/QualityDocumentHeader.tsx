@@ -20,7 +20,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense, useEffect, useState } from "react";
 import {
   LuCheckCheck,
@@ -51,7 +51,7 @@ const QualityDocumentHeader = () => {
 
   const routeData = useRouteData<{
     document: QualityDocument;
-    versions: PostgrestResponse<QualityDocument>;
+    versions: QueryResponse<QualityDocument>;
     approvalRequest: { id: string } | null;
     canApprove: boolean;
     canReopen: boolean;

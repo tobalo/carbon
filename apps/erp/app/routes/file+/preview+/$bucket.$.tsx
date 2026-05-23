@@ -1,6 +1,7 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { assertCompanyPath, downloadObject } from "@carbon/storage";
 import type { LoaderFunctionArgs } from "react-router";
+import { canReadDocumentPath } from "~/modules/documents";
 
 const supportedFileTypes: Record<string, string> = {
   pdf: "application/pdf",
@@ -33,14 +34,14 @@ const supportedFileTypes: Record<string, string> = {
 };
 
 export let loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { companyId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
   const { bucket } = params;
   let path = params["*"];
 
   if (!bucket) throw new Error("Bucket not found");
   if (!path) throw new Error("Path not found");
 
-  // Don't decode the path here - let Supabase handle the URL encoding
+  // Don't decode the path here - let the storage route handle the URL encoding
   // path = decodeURIComponent(path);
 
   const fileType = path.split(".").pop()?.toLowerCase();
@@ -50,23 +51,22 @@ export let loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
   const contentType = supportedFileTypes[fileType];
 
-  // Check if the decoded path includes companyId for security
-  const decodedPath = decodeURIComponent(path);
-  if (!decodedPath.includes(companyId)) {
+  let storageKey: string;
+  try {
+    storageKey = assertCompanyPath(companyId, decodeURIComponent(path));
+  } catch {
     return new Response(null, { status: 403 });
   }
 
-  const serviceRole = await getCarbonServiceRole();
+  if (bucket === "private") {
+    const documentAccess = await canReadDocumentPath(client, storageKey, userId);
+    if (documentAccess.error) {
+      return new Response(null, { status: 403 });
+    }
+  }
 
   async function downloadFile() {
-    if (!path) throw new Error("Path not found");
-    // Use the original encoded path for the storage API call
-    const result = await serviceRole.storage.from(bucket!).download(path);
-    if (result.error) {
-      console.error(result.error);
-      return null;
-    }
-    return result.data;
+    return downloadObject({ companyId, key: storageKey });
   }
 
   let fileData = await downloadFile();

@@ -14,6 +14,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useParams } from "react-router";
 import { OperationsList } from "~/components";
 import { getRecentJobOperationsByEmployee } from "~/services/operations.service";
+import type { Operation } from "~/services/types";
 import { makeDurations } from "~/utils/durations";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -27,7 +28,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   ]);
 
   return {
-    operations: operations?.data?.map(makeDurations) ?? []
+    operations: ((operations?.data ?? []) as Operation[]).map(makeDurations)
   };
 }
 

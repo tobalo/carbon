@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -17,7 +16,7 @@ import {
 } from "react-router";
 import { CadModel, DeferredFiles } from "~/components";
 import type { Tree } from "~/components/TreeView";
-import { usePermissions, useRealtime, useRouteData, useUser } from "~/hooks";
+import { usePermissions, usePollingRevalidation, useRouteData, useUser } from "~/hooks";
 import type {
   Quotation,
   QuotationOperation,
@@ -72,12 +71,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   if (!quoteId) throw new Error("Could not find quoteId");
   if (!lineId) throw new Error("Could not find lineId");
 
-  const serviceRole = await getCarbonServiceRole();
-
   const [line, operations, prices] = await Promise.all([
-    getQuoteLine(serviceRole, lineId),
-    getQuoteOperationsByLine(serviceRole, lineId),
-    getQuoteLinePrices(serviceRole, lineId)
+    getQuoteLine(client, lineId),
+    getQuoteOperationsByLine(client, lineId),
+    getQuoteLinePrices(client, lineId)
   ]);
 
   if (line.error) {
@@ -87,16 +84,20 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
   }
 
+  if (line.data.companyId !== companyId) {
+    throw redirect(path.to.quote(quoteId));
+  }
+
   const itemId = line.data.itemId!;
 
-  const rootMethod = await getRootQuoteMakeMethod(serviceRole, lineId);
+  const rootMethod = await getRootQuoteMakeMethod(client, lineId, companyId);
 
   const methodData = rootMethod.data
     ? await (async () => {
         const methodId = rootMethod.data.id;
         const [materials, methodOperations, tags] = await Promise.all([
-          getQuoteMaterialsByMethodId(serviceRole, methodId),
-          getQuoteOperationsByMethodId(serviceRole, methodId),
+          getQuoteMaterialsByMethodId(client, methodId, companyId),
+          getQuoteOperationsByMethodId(client, methodId),
           getTagsList(client, companyId, "operation")
         ]);
 
@@ -122,11 +123,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
               tags: o.tags ?? []
             })) ?? [],
           configurationParameters: getConfigurationParametersByQuoteLineId(
-            serviceRole,
+            client,
             lineId,
             companyId
           ),
-          model: getModelByQuoteLineId(serviceRole, lineId),
+          model: getModelByQuoteLineId(client, lineId),
           tags: tags.data ?? [],
           rootMethodId: methodId
         };
@@ -136,14 +137,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return {
     line: line.data,
     operations: operations?.data ?? [],
-    files: getOpportunityLineDocuments(serviceRole, companyId, lineId, itemId),
+    files: getOpportunityLineDocuments(client, companyId, lineId, itemId),
     pricesByQuantity: (prices?.data ?? []).reduce<
       Record<number, QuotationPrice>
     >((acc, price) => {
       acc[price.quantity] = price;
       return acc;
     }, {}),
-    relatedPrices: getRelatedPricesForQuoteLine(serviceRole, itemId, quoteId),
+    relatedPrices: getRelatedPricesForQuoteLine(
+      client,
+      itemId,
+      quoteId,
+      companyId
+    ),
     methodData
   };
 };
@@ -162,6 +168,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
     view: "sales"
   });
   const quote = await getQuote(viewClient, quoteId);
+  if (quote.error) {
+    throw redirect(
+      path.to.quote(quoteId),
+      await flash(request, error(quote.error, "Failed to load quote"))
+    );
+  }
+
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.quote(quoteId));
+  }
+
   await requireUnlocked({
     request,
     isLocked: isQuoteLocked(quote.data?.status),
@@ -209,8 +226,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     !!d.quantity?.length;
 
   if (needsSeed) {
-    const serviceRole = getCarbonServiceRole();
-    const existingPrices = await serviceRole
+    const existingPrices = await client
       .from("quoteLinePrice")
       .select("quantity")
       .eq("quoteLineId", lineId);
@@ -227,7 +243,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       const priceResult =
         methodType === "Make to Order"
           ? await calculatePricesForQuantities(
-              serviceRole,
+              client,
               quoteId,
               lineId,
               addedQuantities,
@@ -235,7 +251,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             )
           : methodType === "Pull from Inventory"
             ? await resolveQuoteLinePrices(
-                serviceRole,
+                client,
                 companyId,
                 quoteId,
                 lineId,
@@ -243,7 +259,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
                 userId
               )
             : await resolvePurchaseToOrderPrices(
-                serviceRole,
+                client,
                 companyId,
                 quoteId,
                 lineId,
@@ -287,9 +303,9 @@ export default function QuoteLine() {
   const { company } = useUser();
   const baseCurrency = company?.baseCurrencyCode ?? "USD";
 
-  // useRealtime("quoteLine", `id=eq.${lineId}`);
-  useRealtime("quoteMaterial", `quoteLineId=eq.${lineId}`);
-  useRealtime("quoteOperation", `quoteLineId=eq.${lineId}`);
+  // usePollingRevalidation("quoteLine", `id=eq.${lineId}`);
+  usePollingRevalidation("quoteMaterial", `quoteLineId=eq.${lineId}`);
+  usePollingRevalidation("quoteOperation", `quoteLineId=eq.${lineId}`);
 
   const quoteData = useRouteData<{
     methods: Tree<QuoteMethod>[];
@@ -348,13 +364,12 @@ export default function QuoteLine() {
             quoteMakeMethodId={methodData.rootMethodId}
             // @ts-ignore
             materials={methodData.methodMaterials}
-            // @ts-expect-error
             operations={methodData.methodOperations}
           />
           <QuoteBillOfProcess
             key={`bop:${methodData.rootMethodId}`}
             quoteMakeMethodId={methodData.rootMethodId}
-            // @ts-expect-error
+            materials={methodData.methodMaterials ?? []}
             operations={methodData.methodOperations}
             tags={methodData.tags ?? []}
           />

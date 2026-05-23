@@ -149,8 +149,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Pull shelf-life policy + current expiration dates so the adjustment modal
   // can pre-fill / surface the existing value when the user edits a batch.
   const trackedEntityIds = pluckUnique(
-    itemStorageUnitQuantities.data,
-    (row) => row.trackedEntityId
+    itemStorageUnitQuantities.data as any[],
+    (row: any) => row.trackedEntityId
   );
   const [itemShelfLife, trackedEntityExpirations] = await Promise.all([
     getItemShelfLife(client, itemId),
@@ -176,8 +176,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       if (!fullMethod.error && fullMethod.data) {
         const [methodMaterials, methodOperations, operationTags] =
           await Promise.all([
-            getMethodMaterialsByMakeMethod(client, fullMethod.data.id),
-            getMethodOperationsByMakeMethodId(client, fullMethod.data.id),
+            getMethodMaterialsByMakeMethod(
+              client,
+              fullMethod.data.id,
+              companyId
+            ),
+            getMethodOperationsByMakeMethodId(
+              client,
+              fullMethod.data.id,
+              companyId
+            ),
             getTagsList(client, companyId, "operation")
           ]);
 

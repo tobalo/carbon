@@ -1,6 +1,6 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { issueTrackedEntityValidator } from "~/services/models";
@@ -21,8 +21,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const { materialId, parentTrackedEntityId, children } = validation.data;
 
-  const serviceRole = await getCarbonServiceRole();
-  const issue = await serviceRole.functions.invoke("issue", {
+  const issue = await invokeFunction("issue", {
     body: {
       type: "unconsumeTrackedEntities",
       materialId,

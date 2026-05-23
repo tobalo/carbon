@@ -1,6 +1,8 @@
 import { assertIsPost, error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
@@ -10,35 +12,33 @@ import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { supplierApprovalDecisionValidator } from "~/modules/purchasing";
 import {
-  approveRequest,
   canApproveRequest,
   createApprovalRequest,
   getApprovalRuleByAmount,
   getApproverUserIdsForRule,
   getLatestApprovalRequestForDocument,
   hasPendingApproval,
-  rejectRequest
 } from "~/modules/shared";
-import { getDatabaseClient } from "~/services/database.server";
+import { approveRequest, rejectRequest } from "~/modules/shared/shared.server";
 import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "purchasing"
   });
+  const { client, companyId, userId } = auth;
 
   const { supplierId } = params;
   if (!supplierId) throw new Error("Could not find supplierId");
+  assertSupplierAccountScope(auth, supplierId);
 
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   if (intent === "request-approval") {
-    const serviceRole = getCarbonServiceRole();
-
     const pending = await hasPendingApproval(
-      serviceRole,
+      client,
       "supplier",
       supplierId
     );
@@ -53,7 +53,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    await createApprovalRequest(serviceRole, {
+    await createApprovalRequest(client, {
       documentType: "supplier",
       documentId: supplierId,
       companyId,
@@ -70,16 +70,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
         updatedBy: userId,
         updatedAt: today(getLocalTimeZone()).toString()
       })
-      .eq("id", supplierId);
+      .eq("id", supplierId)
+      .eq("companyId", companyId);
 
     const rule = await getApprovalRuleByAmount(
-      serviceRole,
+      client,
       "supplier",
       companyId,
       undefined
     );
     const approverIds = rule.data
-      ? await getApproverUserIdsForRule(serviceRole, rule.data)
+      ? await getApproverUserIdsForRule(client, rule.data)
       : [];
 
     if (approverIds.length > 0) {
@@ -104,10 +105,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (intent === "make-inactive") {
-    const serviceRole = getCarbonServiceRole();
-
     const canApprove = await canApproveRequest(
-      serviceRole,
+      client,
       {
         amount: null,
         documentType: "supplier",
@@ -133,7 +132,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         updatedBy: userId,
         updatedAt: today(getLocalTimeZone()).toString()
       })
-      .eq("id", supplierId);
+      .eq("id", supplierId)
+      .eq("companyId", companyId);
 
     throw redirect(
       path.to.supplier(supplierId),
@@ -152,10 +152,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const { approvalRequestId, decision, notes } = validation.data;
 
-  const serviceRole = getCarbonServiceRole();
-
   const approvalRequest = await getLatestApprovalRequestForDocument(
-    serviceRole,
+    client,
     "supplier",
     supplierId
   );
@@ -168,7 +166,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const canApprove = await canApproveRequest(
-    serviceRole,
+    client,
     {
       amount: approvalRequest.data.amount,
       documentType: approvalRequest.data.documentType,
@@ -187,11 +185,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const db = getDatabaseClient();
   const result =
     decision === "Approved"
-      ? await approveRequest(db, approvalRequestId, userId, notes || undefined)
-      : await rejectRequest(db, approvalRequestId, userId, notes || undefined);
+      ? await approveRequest(approvalRequestId, userId, notes || undefined)
+      : await rejectRequest(approvalRequestId, userId, notes || undefined);
 
   if (result.error) {
     throw redirect(

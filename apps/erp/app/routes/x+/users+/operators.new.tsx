@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { ValidatedForm, validationError, validator } from "@carbon/form";
 import {
@@ -56,8 +55,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const { firstName, lastName, locationId, pin } = validation.data;
 
   // Auto-assign Console Operator employee type
-  const serviceRole = getCarbonServiceRole();
-  const operatorType = await serviceRole
+  const operatorType = await client
     .from("employeeType")
     .select("id")
     .eq("companyId", companyId)
@@ -98,7 +96,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // Set PIN if provided (employee record is already created by createConsoleOperator)
   if (pin) {
-    const pinUpdate = await serviceRole
+    const pinUpdate = await client
       .from("employee")
       .update({ pin } as any)
       .eq("id", result.userId)

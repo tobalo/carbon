@@ -1,6 +1,6 @@
 # crbn — Carbon Dev CLI
 
-Per-worktree development environment manager. Each worktree gets its own compose stack (postgres, kong, supabase, inngest, inbucket), port allocation, redis db, and JWT credentials.
+Per-worktree development environment manager. Each worktree gets its own compose stack (postgres, minio, inngest, inbucket), port allocation, redis db, and auth secret.
 
 ## Setup
 
@@ -28,11 +28,11 @@ source ./setup.sh   # adds crbn to PATH + installs shell wrapper
 | Command | Description |
 |---|---|
 | `crbn up` | Boot compose stack + apps. |
-| `crbn up --no-portless` | Localhost mode: fixed ports (API `:54321`, ERP `:3000`, MES `:3001`). |
-| `crbn up --borrow` | Reuse another worktree's running containers (DB, API, etc). |
-| `crbn up --no-apps` | Services only (postgres, kong, supabase, inngest, mail). |
+| `crbn up --no-portless` | Localhost mode: prefers storage `:54321`, ERP `:3000`, MES `:3001`, and falls back to generated free ports if they are already bound. |
+| `crbn up --borrow` | Reuse another worktree's running containers (DB, storage, etc). |
+| `crbn up --no-apps` | Services only (postgres, minio, inngest, mail). |
 | `crbn up --no-migrate` | Skip database migrations. |
-| `crbn up --no-regen` | Skip type/swagger regeneration. |
+| `crbn up --no-regen` | Skip schema type validation. |
 | `crbn up --pull` | Force `docker compose pull` even if images exist locally. |
 | `crbn down` | Stop stack (volumes preserved). |
 | `crbn reset` | Wipe volumes + flush redis db, then `up`. |
@@ -48,15 +48,13 @@ source ./setup.sh   # adds crbn to PATH + installs shell wrapper
 
 ## Portless vs Localhost
 
-By default, `crbn up` uses [portless](https://github.com/nicholasgasior/portless) for `.dev` TLS URLs (e.g. `https://erp.dev.dev`). Pass `--no-portless` (or set `CARBON_PORTLESS=0`) for localhost mode with fixed ports:
+By default, `crbn up` uses [portless](https://github.com/nicholasgasior/portless) for `.dev` TLS URLs (e.g. `https://erp.dev.dev`). Pass `--no-portless` (or set `CARBON_PORTLESS=0`) for localhost mode. It prefers these ports and falls back to generated free ports if another local stack already owns them:
 
 | Service | Port |
 |---|---|
-| Supabase API (Kong) | `54321` |
+| S3 API (MinIO) | `54321` |
 | ERP | `3000` |
 | MES | `3001` |
-
-OAuth redirect URIs in localhost mode use `http://localhost:54321/auth/v1/callback`.
 
 `pnpm dev` defaults to `crbn up --no-portless`.
 

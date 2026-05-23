@@ -1,62 +1,40 @@
-// import type { User } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
+import { getPostgresConnectionPool } from "./postgres.ts";
 import { devPrices } from "./seed/index.ts";
-import type { Database } from "./types.ts";
+import { ensureCurrencyCodes } from "./seed-company.ts";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
 
-const supabaseAdmin = createClient<Database>(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
-
 async function seed() {
-  const upsertConfig = await supabaseAdmin.from("config").upsert([
-    {
-      id: true,
-      apiUrl: resolveApiUrl(),
-      anonKey: process.env.SUPABASE_ANON_KEY!
-    }
-  ]);
-  if (upsertConfig.error) throw upsertConfig.error;
+  const pool = getPostgresConnectionPool(1, { kind: "service" });
+  const client = await pool.connect();
 
-  const upsertPlans = await supabaseAdmin.from("plan").upsert(
-    Object.entries(devPrices).map(([id, { stripePriceId, name }]) => ({
-      id,
-      stripePriceId,
-      name
-    })),
-    { onConflict: "id" }
-  );
+  try {
+    await ensureCurrencyCodes(client);
 
-  if (upsertPlans.error) throw upsertPlans.error;
-}
-
-// Postgres triggers + edge functions call back to the API from inside the
-// docker network, so the public portless hostname (https://<branch>.api.dev)
-// won't resolve. Use host.docker.internal with the worktree's PORT_API
-// (written to .env.local by `crbn up`). Cloud runs (e.g. CI seeding a fresh
-// workspace) have no PORT_API and a `*.supabase.co` URL — return as-is.
-function resolveApiUrl(): string {
-  const supabaseUrl = process.env.SUPABASE_URL!;
-  const port = process.env.PORT_API;
-  const isCrbnDevHost =
-    /\.api\.dev(\/|$)/.test(supabaseUrl) || supabaseUrl.includes("localhost");
-  if (!isCrbnDevHost) return supabaseUrl;
-  if (!port) {
-    throw new Error(
-      "seed: SUPABASE_URL looks like a crbn dev host but PORT_API is unset — run via `crbn` so .env.local is loaded."
+    await client.query(
+      `INSERT INTO "config" (id, "apiUrl")
+       VALUES (true, $1)
+       ON CONFLICT (id) DO UPDATE SET
+         "apiUrl" = excluded."apiUrl"`,
+      [process.env.CARBON_API_URL ?? "http://localhost:3000"]
     );
+
+    for (const [id, { stripePriceId, name }] of Object.entries(devPrices)) {
+      await client.query(
+        `INSERT INTO "plan" (id, "stripePriceId", name)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (id) DO UPDATE SET
+           "stripePriceId" = excluded."stripePriceId",
+           name = excluded.name`,
+        [id, stripePriceId, name]
+      );
+    }
+  } finally {
+    client.release();
+    await pool.end();
   }
-  return `http://host.docker.internal:${port}`;
 }
 
 seed().catch((e) => {

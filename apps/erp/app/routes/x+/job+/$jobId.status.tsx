@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -38,13 +38,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (status === "Ready") {
-    const { data } = await client
+    const { data: job } = await client
       .from("job")
-      .select("item(itemReplenishment(manufacturingBlocked))")
+      .select("itemId")
       .eq("id", id)
+      .eq("companyId", companyId)
       .single();
+    const replenishment = job?.itemId
+      ? await client
+          .from("itemReplenishment")
+          .select("manufacturingBlocked")
+          .eq("itemId", job.itemId)
+          .eq("companyId", companyId)
+          .single()
+      : { data: null };
 
-    if (data?.item?.itemReplenishment?.manufacturingBlocked) {
+    if (replenishment.data?.manufacturingBlocked) {
       throw redirect(
         requestReferrer(request) ?? path.to.job(id),
         await flash(request, error(null, "Manufacturing is blocked"))
@@ -53,13 +62,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (["Planned", "Ready"].includes(status)) {
-    const serviceRole = getCarbonServiceRole();
-    await recalculateJobRequirements(serviceRole, {
+    await recalculateJobRequirements(client, {
       id,
       companyId,
       userId
     });
-    await runMRP(getCarbonServiceRole(), {
+    await runMRP(client, {
       type: "job",
       id,
       companyId,
@@ -73,25 +81,24 @@ export async function action({ request, params }: ActionFunctionArgs) {
         selectedPurchaseOrdersBySupplierId ?? "{}"
       );
 
-      const serviceRole = getCarbonServiceRole();
       const [scheduler] = await Promise.all([
-        serviceRole.functions.invoke("schedule", {
+        invokeFunction("schedule", {
           body: {
             jobId: id,
             companyId,
             userId,
             mode: "initial",
             direction: "backward"
-          }
+          },
         }),
-        serviceRole.functions.invoke("create", {
+        invokeFunction("create", {
           body: {
             type: "purchaseOrderFromJob",
             jobId: id,
             purchaseOrdersBySupplierId,
             companyId,
             userId
-          }
+          },
         })
       ]);
 
@@ -108,7 +115,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           .update({
             releasedDate: new Date().toISOString()
           })
-          .eq("id", id);
+          .eq("id", id)
+          .eq("companyId", companyId);
       }
     } catch (err) {
       console.error(err);
@@ -123,7 +131,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     id,
     status,
     assignee: ["Cancelled"].includes(status) ? null : undefined,
-    updatedBy: userId
+    updatedBy: userId,
+    companyId
   });
   if (update.error) {
     throw redirect(
@@ -133,8 +142,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (status === "Closed") {
-    const serviceRole = await getCarbonServiceRole();
-    await serviceRole.functions.invoke("close-job", {
+    await invokeFunction("close-job", {
       body: { jobId: id, userId, companyId }
     });
   }

@@ -1,4 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import { type Accounting, BaseEntitySyncer } from "../../../core/types";
 import { throwXeroApiError } from "../../../core/utils";
 import { parseDotnetDate, type Xero } from "../models";
@@ -62,39 +62,31 @@ export class InventoryAdjustmentSyncer extends BaseEntitySyncer<
   ): Promise<Map<string, Accounting.InventoryAdjustment>> {
     if (ids.length === 0) return new Map();
 
-    const rows = await this.database
-      .selectFrom("itemLedger")
-      .innerJoin("item", "item.id", "itemLedger.itemId")
-      .leftJoin("itemCost", "itemCost.itemId", "itemLedger.itemId")
-      .leftJoin(
-        "accountDefault",
-        "accountDefault.companyId",
-        "itemLedger.companyId"
-      )
-      .select([
-        "itemLedger.id",
-        "itemLedger.entryNumber",
-        "itemLedger.postingDate",
-        "itemLedger.entryType",
-        "itemLedger.itemId",
-        "itemLedger.locationId",
-        "itemLedger.quantity",
-        "itemLedger.companyId",
-        "itemLedger.createdAt",
-        "itemCost.unitCost",
-        "accountDefault.inventoryAccount",
-        "accountDefault.inventoryAdjustmentVarianceAccount as adjustmentVarianceAccount",
-        "item.readableId as itemReadableId"
-      ])
-      .where("itemLedger.id", "in", ids)
-      .where("itemLedger.companyId", "=", this.companyId)
-      .where("itemLedger.entryType", "in", [
-        "Positive Adjmt.",
-        "Negative Adjmt."
-      ])
-      .execute();
+    const { rows } = await this.database.execute<InventoryAdjustmentRow>(sql`
+      select
+        il.id,
+        il."entryNumber",
+        il."postingDate",
+        il."entryType",
+        il."itemId",
+        il."locationId",
+        il.quantity,
+        il."companyId",
+        il."createdAt",
+        ic."unitCost",
+        ad."inventoryAccount",
+        ad."inventoryAdjustmentVarianceAccount" as "adjustmentVarianceAccount",
+        i."readableId" as "itemReadableId"
+      from "itemLedger" il
+      inner join item i on i.id = il."itemId"
+      left join "itemCost" ic on ic."itemId" = il."itemId"
+      left join "accountDefault" ad on ad."companyId" = il."companyId"
+      where il.id = any(${ids}::text[])
+        and il."companyId" = ${this.companyId}
+        and il."entryType" in ('Positive Adjmt.', 'Negative Adjmt.')
+    `);
 
-    return this.transformRows(rows as unknown as InventoryAdjustmentRow[]);
+    return this.transformRows(rows);
   }
 
   private transformRows(
@@ -224,7 +216,7 @@ export class InventoryAdjustmentSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    _tx: KyselyTx,
+    _tx: DrizzleDb,
     _data: Partial<Accounting.InventoryAdjustment>,
     _remoteId: string
   ): Promise<string> {

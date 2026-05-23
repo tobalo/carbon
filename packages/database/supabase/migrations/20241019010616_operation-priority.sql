@@ -1,4 +1,0 @@
-ALTER TABLE "jobOperation"
-  ADD COLUMN "priority" DOUBLE PRECISION NOT NULL DEFAULT 1;
-
-

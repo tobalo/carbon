@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { Email as EmailConfig } from "@carbon/ee";
 import { NonRetriableError, serializeError } from "inngest";
 import { Resend } from "resend";
@@ -12,7 +12,7 @@ export const sendEmailFunction = inngest.createFunction(
   { event: "carbon/send-email" },
   async ({ event, step }) => {
     const payload = event.data;
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
 
     // Resend rejects the request if `to` or `cc` contain null/undefined
     // entries, so strip falsy values regardless of what callers pass.
@@ -38,23 +38,31 @@ export const sendEmailFunction = inngest.createFunction(
       );
     }
 
-    const { companyName, integrationMetadata, integrationActive } =
+    const {
+      companyActive,
+      companyName,
+      integrationMetadata,
+      integrationActive
+    } =
       await step.run("fetch-company-integration", async () => {
         const [companyResult, integrationResult] = await Promise.all([
-          serviceRole
+          serviceClient
             .from("company")
-            .select("name")
+            .select("name, active")
             .eq("id", payload.companyId)
+            .eq("active", true)
             .single(),
-          serviceRole
+          serviceClient
             .from("companyIntegration")
             .select("active, metadata")
             .eq("companyId", payload.companyId)
             .eq("id", "email")
+            .eq("active", true)
             .maybeSingle()
         ]);
 
         return {
+          companyActive: companyResult.data?.active === true,
           companyName: companyResult.data?.name ?? null,
           integrationActive: integrationResult.data?.active ?? false,
           integrationMetadata: integrationResult.data?.metadata ?? null
@@ -73,7 +81,7 @@ export const sendEmailFunction = inngest.createFunction(
 
     const parsedMetadata = EmailConfig.schema.safeParse(metadataWithProvider);
 
-    if (!parsedMetadata.success || !integrationActive) {
+    if (!companyActive || !parsedMetadata.success || !integrationActive) {
       return { success: false, message: "Invalid or inactive integration" };
     }
 

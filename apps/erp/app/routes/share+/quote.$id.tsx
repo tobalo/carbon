@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { Input, ValidatedForm } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import {
@@ -37,7 +37,7 @@ import {
 import { formatCityStatePostalCode, formatDate } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useLocale } from "@react-aria/i18n";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { motion } from "framer-motion";
 import MotionNumber from "motion-number";
 import type { Dispatch, SetStateAction } from "react";
@@ -75,7 +75,7 @@ import {
 } from "~/modules/sales";
 import QuoteStatus from "~/modules/sales/ui/Quotes/QuoteStatus";
 import { getCompany, getCompanySettings } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage, getExternalLink } from "~/modules/shared";
 import type { action } from "~/routes/api+/sales.digital-quote.$id";
 import { path } from "~/utils/path";
 
@@ -89,6 +89,10 @@ enum QuoteState {
   NotFound
 }
 
+function isExpired(date: string | null | undefined) {
+  return Boolean(date && new Date(date) < new Date());
+}
+
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const { id } = params;
   if (!id) {
@@ -98,8 +102,27 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     };
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const quote = await getQuoteByExternalId(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const externalLink = await getExternalLink(serviceClient, id);
+  const externalLinkExpired =
+    externalLink.data?.documentType === "Quote" &&
+    isExpired(externalLink.data.expiresAt);
+  if (
+    externalLink.error ||
+    externalLink.data?.documentType !== "Quote" ||
+    externalLinkExpired
+  ) {
+    return {
+      state: externalLinkExpired ? QuoteState.Expired : QuoteState.NotFound,
+      data: null
+    };
+  }
+
+  const quote = await getQuoteByExternalId(serviceClient, id, {
+    companyId: externalLink.data.companyId,
+    documentId: externalLink.data.documentId,
+    customerId: externalLink.data.customerId
+  });
 
   if (quote.error) {
     return {
@@ -132,26 +155,26 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     shippingMethods,
     opportunity
   ] = await Promise.all([
-    getCompany(serviceRole, quote.data.companyId),
-    getCompanySettings(serviceRole, quote.data.companyId),
-    getQuoteLines(serviceRole, quote.data.id),
-    getQuoteLinePricesByQuoteId(serviceRole, quote.data.id),
-    getQuoteCustomerDetails(serviceRole, quote.data.id),
-    getQuotePayment(serviceRole, quote.data.id),
-    getQuoteShipment(serviceRole, quote.data.id),
-    getPaymentTermsList(serviceRole, quote.data.companyId),
-    getSalesTerms(serviceRole, quote.data.companyId),
-    getShippingMethodsList(serviceRole, quote.data.companyId),
-    getOpportunity(serviceRole, quote.data.opportunityId)
+    getCompany(serviceClient, quote.data.companyId),
+    getCompanySettings(serviceClient, quote.data.companyId),
+    getQuoteLines(serviceClient, quote.data.id),
+    getQuoteLinePricesByQuoteId(serviceClient, quote.data.id),
+    getQuoteCustomerDetails(serviceClient, quote.data.id),
+    getQuotePayment(serviceClient, quote.data.id),
+    getQuoteShipment(serviceClient, quote.data.id),
+    getPaymentTermsList(serviceClient, quote.data.companyId),
+    getSalesTerms(serviceClient, quote.data.companyId),
+    getShippingMethodsList(serviceClient, quote.data.companyId),
+    getOpportunity(serviceClient, quote.data.companyId, quote.data.opportunityId)
   ]);
 
-  let salesOrderLines: PostgrestResponse<SalesOrderLine> | null = null;
+  let salesOrderLines: QueryResponse<SalesOrderLine> | null = null;
   if (
     opportunity.data?.salesOrders?.length &&
     opportunity.data.salesOrders[0]?.id
   ) {
     salesOrderLines = await getSalesOrderLines(
-      serviceRole,
+      serviceClient,
       opportunity.data.salesOrders[0].id
     );
   }
@@ -173,7 +196,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
             if (!path) {
               return null;
             }
-            return getBase64ImageFromSupabase(serviceRole, path).then(
+            return getBase64ImageFromStorage(serviceClient, path).then(
               (data) => ({
                 id,
                 data
@@ -516,8 +539,8 @@ const LinePricingOptions = ({
 
   const additionalChargesByQuantity =
     line.quantity?.reduce(
-      (acc, quantity) => {
-        const charges = Object.values(line.additionalCharges ?? {}).reduce(
+      (acc: any, quantity: any) => {
+        const charges = (Object.values(line.additionalCharges ?? {}) as any[]).reduce(
           (chargeAcc, charge) => {
             const amount = charge.amounts?.[quantity];
             return chargeAcc + amount;
@@ -530,10 +553,10 @@ const LinePricingOptions = ({
       { 0: 0 } as Record<number, number>
     ) ?? {};
 
-  const convertedAdditionalChargesByQuantity = Object.entries(
+  const convertedAdditionalChargesByQuantity = (Object.entries(
     additionalChargesByQuantity
-  ).reduce<Record<number, number>>(
-    (acc, [quantity, amount]) => {
+  ) as [string, number][]).reduce<Record<number, number>>(
+    (acc, [quantity, amount]: [string, number]) => {
       acc[Number(quantity)] = amount * quoteExchangeRate;
       return acc;
     },
@@ -542,8 +565,8 @@ const LinePricingOptions = ({
 
   const taxableAdditionalChargesByQuantity =
     line.quantity?.reduce(
-      (acc, quantity) => {
-        const charges = Object.values(line.additionalCharges ?? {}).reduce(
+      (acc: any, quantity: any) => {
+        const charges = (Object.values(line.additionalCharges ?? {}) as any[]).reduce(
           (chargeAcc, charge) => {
             if (charge.taxable === false) return chargeAcc;
             const amount = charge.amounts?.[quantity];
@@ -557,10 +580,10 @@ const LinePricingOptions = ({
       { 0: 0 } as Record<number, number>
     ) ?? {};
 
-  const convertedTaxableAdditionalChargesByQuantity = Object.entries(
+  const convertedTaxableAdditionalChargesByQuantity = (Object.entries(
     taxableAdditionalChargesByQuantity
-  ).reduce<Record<number, number>>(
-    (acc, [quantity, amount]) => {
+  ) as [string, number][]).reduce<Record<number, number>>(
+    (acc, [quantity, amount]: [string, number]) => {
       acc[Number(quantity)] = amount * quoteExchangeRate;
       return acc;
     },
@@ -574,7 +597,7 @@ const LinePricingOptions = ({
       amount: selectedLine.convertedShippingCost
     });
   }
-  Object.entries(line.additionalCharges ?? {}).forEach(([name, charge]) => {
+  (Object.entries(line.additionalCharges ?? {}) as [string, any][]).forEach(([name, charge]) => {
     additionalCharges.push({
       name: charge.description,
       amount: charge.amounts?.[selectedLine.quantity] * quoteExchangeRate
@@ -1030,8 +1053,8 @@ const Quote = ({ data }: { data: QuoteData }) => {
           const additionalChargesByQuantity =
             line.quantity?.reduce(
               (acc: Record<number, number>, quantity: number) => {
-                const charges = Object.values(
-                  line.additionalCharges ?? {}
+                const charges = (
+                  Object.values(line.additionalCharges ?? {}) as any[]
                 ).reduce((chargeAcc: number, charge: any) => {
                   const amount = charge.amounts?.[quantity] ?? 0;
                   return chargeAcc + amount;
@@ -1043,10 +1066,10 @@ const Quote = ({ data }: { data: QuoteData }) => {
             ) ?? {};
 
           const convertedAdditionalChargesByQuantity =
-            Object.entries(additionalChargesByQuantity).reduce<
+            (Object.entries(additionalChargesByQuantity) as [string, number][]).reduce<
               Record<number, number>
             >(
-              (acc, [quantity, amount]) => {
+              (acc, [quantity, amount]: [string, number]) => {
                 acc[Number(quantity)] =
                   (amount as number) * (quote.exchangeRate ?? 1);
                 return acc;
@@ -1057,8 +1080,8 @@ const Quote = ({ data }: { data: QuoteData }) => {
           const taxableAdditionalChargesByQuantity =
             line.quantity?.reduce(
               (acc: Record<number, number>, quantity: number) => {
-                const charges = Object.values(
-                  line.additionalCharges ?? {}
+                const charges = (
+                  Object.values(line.additionalCharges ?? {}) as any[]
                 ).reduce((chargeAcc: number, charge: any) => {
                   if (charge.taxable === false) return chargeAcc;
                   const amount = charge.amounts?.[quantity] ?? 0;
@@ -1071,10 +1094,10 @@ const Quote = ({ data }: { data: QuoteData }) => {
             ) ?? {};
 
           const convertedTaxableAdditionalChargesByQuantity =
-            Object.entries(taxableAdditionalChargesByQuantity).reduce<
+            (Object.entries(taxableAdditionalChargesByQuantity) as [string, number][]).reduce<
               Record<number, number>
             >(
-              (acc, [quantity, amount]) => {
+              (acc, [quantity, amount]: [string, number]) => {
                 acc[Number(quantity)] =
                   (amount as number) * (quote.exchangeRate ?? 1);
                 return acc;
@@ -1108,7 +1131,7 @@ const Quote = ({ data }: { data: QuoteData }) => {
     );
   });
 
-  const subtotal = Object.values(selectedLines).reduce((acc, line) => {
+  const subtotal = (Object.values(selectedLines) as SelectedLine[]).reduce((acc, line) => {
     return (
       acc +
       line.convertedNetUnitPrice * line.quantity +
@@ -1116,7 +1139,7 @@ const Quote = ({ data }: { data: QuoteData }) => {
       line.convertedShippingCost
     );
   }, 0);
-  const totalDiscount = Object.values(selectedLines).reduce((acc, line) => {
+  const totalDiscount = (Object.values(selectedLines) as SelectedLine[]).reduce((acc, line) => {
     return (
       acc +
       (line.convertedUnitPrice ?? 0) *
@@ -1124,7 +1147,7 @@ const Quote = ({ data }: { data: QuoteData }) => {
         (line.discountPercent ?? 0)
     );
   }, 0);
-  const tax = Object.values(selectedLines).reduce((acc, line) => {
+  const tax = (Object.values(selectedLines) as SelectedLine[]).reduce((acc, line) => {
     return (
       acc +
       (line.convertedNetUnitPrice * line.quantity +

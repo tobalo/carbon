@@ -643,7 +643,10 @@ export function IntegrationForm({
                       <Trans>Setup instructions</Trans>
                     </div>
                     {/* @ts-expect-error TS2339 */}
-                    <integration.setupInstructions companyId={companyId} />
+                    <integration.setupInstructions
+                      companyId={companyId}
+                      metadata={metadata}
+                    />
                   </div>
                 )}
 

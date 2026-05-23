@@ -1,13 +1,12 @@
-import { SUPABASE_URL } from "@carbon/auth";
+import { getPublicStorageUrl } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validator } from "@carbon/form";
 import { getSlackClient } from "@carbon/lib/slack.server";
 import type { ActionFunctionArgs } from "react-router";
 import { feedbackValidator } from "~/services/models";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { userId, companyId } = await requirePermissions(request, {});
+  const { client, userId, companyId } = await requirePermissions(request, {});
 
   const formData = await request.formData();
   const validation = await validator(feedbackValidator).validate(formData);
@@ -20,21 +19,20 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const { attachmentPath, feedback, location } = validation.data;
-  const serviceRole = await getCarbonServiceRole();
   const slackClient = getSlackClient();
 
   const [company, user, insertFeedback] = await Promise.all([
-    serviceRole
+    client
       .from("company")
       .select("slackChannel")
       .eq("id", companyId)
       .single(),
-    serviceRole
+    client
       .from("user")
       .select("firstName,lastName,email")
       .eq("id", userId)
       .single(),
-    serviceRole.from("feedback").insert([
+    client.from("feedback").insert([
       {
         feedback,
         location,
@@ -82,7 +80,7 @@ export async function action({ request }: ActionFunctionArgs) {
             type: "mrkdwn",
             text: `*Attachment:*\n${
               attachmentPath
-                ? `${SUPABASE_URL}/storage/v1/object/public/feedback/${attachmentPath}`
+                ? getPublicStorageUrl(attachmentPath, "feedback")
                 : "None"
             }`
           }

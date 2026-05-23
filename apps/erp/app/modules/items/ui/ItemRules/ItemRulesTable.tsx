@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { Badge, MenuIcon, MenuItem, Status } from "@carbon/react";
 import type { TransactionSurface } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";

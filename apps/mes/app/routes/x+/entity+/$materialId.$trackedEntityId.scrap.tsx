@@ -1,5 +1,5 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { getTrackedEntity } from "~/services/operations.service";
@@ -23,8 +23,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const serviceRole = await getCarbonServiceRole();
-  const issue = await serviceRole.functions.invoke("issue", {
+  const issue = await invokeFunction("issue", {
     body: {
       trackedEntityId,
       materialId,

@@ -6,6 +6,7 @@ import { VStack } from "@carbon/react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData } from "react-router";
 import {
+  assertSupplierItemScope,
   getItemCost,
   getItemCostHistory,
   itemCostValidator,
@@ -17,12 +18,22 @@ import { getCustomFields, setCustomFields } from "~/utils/form";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts"
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId,
+    allowCreatedBy: false
+  });
 
   const [itemCost, itemCostHistory] = await Promise.all([
     getItemCost(client, itemId, companyId),
@@ -47,12 +58,22 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "parts"
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId,
+    allowCreatedBy: false
+  });
 
   const formData = await request.formData();
   const validation = await validator(itemCostValidator).validate(formData);
@@ -90,7 +111,6 @@ export default function MaterialCostingRoute() {
     <VStack spacing={2} className="p-2">
       <ItemCostingForm
         key={itemCost.itemId}
-        // @ts-expect-error TS2322 - TODO: fix type
         initialValues={{
           ...itemCost,
           itemPostingGroupId: itemCost.itemPostingGroupId ?? undefined,

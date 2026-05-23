@@ -431,7 +431,6 @@ export const PurchasingPlanningOrderDrawer = memo(
                               .then(({ data }) => {
                                 if (data) {
                                   setSelectedItem(
-                                    // @ts-expect-error
                                     (prev: PurchasingPlanningItem) => {
                                       return {
                                         ...prev,

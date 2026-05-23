@@ -136,7 +136,7 @@ export function summaryLines(
   const url = branchPrefix
     ? (sub: string, _port?: number) => `https://${sub}.${branchPrefix}.${TLD}`
     : (sub: string, port: number) => `http://localhost:${port}`;
-  const dbUrl = `postgresql://postgres:postgres@localhost:${ports.PORT_DB}/postgres`;
+  const dbUrl = `postgresql://carbon:carbon@localhost:${ports.PORT_DB}/carbon`;
   const lines: string[] = [];
   if (apps.includes("erp"))
     lines.push(row(pc.cyan, "ERP", url("erp", ports.PORT_ERP)));
@@ -145,15 +145,15 @@ export function summaryLines(
   lines.push(
     row(
       pc.green,
-      "API",
-      url("api", ports.PORT_API),
-      branchPrefix ? ports.PORT_API : undefined
+      "Storage",
+      url("storage", ports.PORT_STORAGE),
+      branchPrefix ? ports.PORT_STORAGE : undefined
     ),
     row(
       pc.green,
-      "Studio",
-      url("studio", ports.PORT_STUDIO),
-      branchPrefix ? ports.PORT_STUDIO : undefined
+      "Console",
+      url("console", ports.PORT_CONSOLE),
+      branchPrefix ? ports.PORT_CONSOLE : undefined
     ),
     row(
       pc.yellow,

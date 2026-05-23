@@ -255,7 +255,7 @@ const ToolsTable = memo(({ data, tags, count }: ToolsTableProps) => {
         header: t`Tags`,
         cell: ({ row }) => (
           <HStack spacing={0} className="gap-1">
-            {row.original.tags?.map((tag) => (
+            {row.original.tags?.map((tag: any) => (
               <Badge key={tag} variant="secondary">
                 {tag}
               </Badge>
@@ -392,7 +392,7 @@ const ToolsTable = memo(({ data, tags, count }: ToolsTableProps) => {
       selectedRows.forEach((row) => {
         if (row.id) formData.append("items", row.id);
       });
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value);
       fetcher.submit(formData, {
         method: "post",

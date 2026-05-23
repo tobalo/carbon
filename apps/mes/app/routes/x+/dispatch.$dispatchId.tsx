@@ -1,5 +1,8 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  maintenanceDispatchStatusEnum
+} from "@carbon/database/schema";
 import { Hidden, ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -119,7 +122,7 @@ function getPriorityIcon(
 }
 
 type MaintenanceStatusProps = {
-  status?: Database["public"]["Enums"]["maintenanceDispatchStatus"];
+  status?: EnumValue<typeof maintenanceDispatchStatusEnum>;
   className?: string;
 };
 

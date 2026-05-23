@@ -1,7 +1,8 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
+import { uploadObject } from "@carbon/storage";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -29,8 +30,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const acknowledged = formData.get("acknowledged") === "true";
 
   // Item Rule evaluation across every line on this shipment before posting.
-  const serviceRole = getCarbonServiceRole();
-  const { data: lines } = await serviceRole
+  const { data: lines } = await client
     .from("shipmentLine")
     .select(
       "id, itemId, storageUnitId, shippedQuantity, locationId, shipmentId"
@@ -42,10 +42,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // an Outbound Transfer ALSO eval the `warehouseTransfer` surface — the post
   // auto-completes the parent transfer, so warehouse-scoped rules need to
   // fire here too.
-  const { data: shipmentForSurface } = await serviceRole
+  const { data: shipmentForSurface } = await client
     .from("shipment")
     .select("sourceDocument")
     .eq("id", shipmentId)
+    .eq("companyId", companyId)
     .single();
   const surfaces: ("shipment" | "warehouseTransfer")[] = ["shipment"];
   if (shipmentForSurface?.sourceDocument === "Outbound Transfer") {
@@ -64,7 +65,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const allRuleNames: Record<string, string> = {};
   for (const surface of surfaces) {
     const { violations, ruleNames } = await evaluateLinesForSurface({
-      client: serviceRole,
+      client,
       companyId,
       userId,
       surface,
@@ -84,11 +85,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
     };
   }
 
-  // Expired-batch policy check. Mirrors post-stock-transfer / issue edge
-  // functions: pulls inventoryShelfLife.expiredEntityPolicy from
+  // Expired-batch policy check. Mirrors post-stock-transfer / issue route
+  // logic: pulls inventoryShelfLife.expiredEntityPolicy from
   // companySettings and refuses to post when any tracked entity attached to
   // the shipment is past its expirationDate (unless policy is "Warn").
-  const { data: companySettings } = await serviceRole
+  const { data: companySettings } = await client
     .from("companySettings")
     .select("inventoryShelfLife")
     .eq("id", companyId)
@@ -99,7 +100,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const expiredPolicy: ExpiredEntityPolicy =
     shelfLifeBlob?.expiredEntityPolicy ?? "Block";
 
-  const { data: shipmentTrackedEntities } = await serviceRole
+  const { data: shipmentTrackedEntities } = await client
     .from("trackedEntity")
     .select("id, readableId, expirationDate")
     .eq("attributes ->> Shipment", shipmentId)
@@ -139,7 +140,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .update({
       status: "Pending"
     })
-    .eq("id", shipmentId);
+    .eq("id", shipmentId)
+    .eq("companyId", companyId);
 
   if (setPendingState.error) {
     throw redirect(
@@ -153,10 +155,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   try {
     // Get shipment details to check if it's related to a sales order
-    const { data: shipment } = await serviceRole
+    const { data: shipment } = await client
       .from("shipment")
       .select("sourceDocument, sourceDocumentId, shipmentId")
       .eq("id", shipmentId)
+      .eq("companyId", companyId)
       .single();
 
     // If the shipment is related to a sales order, save the packing slip PDF
@@ -166,10 +169,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
     ) {
       try {
         // Get the opportunity ID from the sales order
-        const { data: salesOrder } = await serviceRole
+        const { data: salesOrder } = await client
           .from("salesOrder")
           .select("opportunityId")
           .eq("id", shipment.sourceDocumentId)
+          .eq("companyId", companyId)
           .single();
 
         if (salesOrder?.opportunityId) {
@@ -193,18 +197,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
             const documentFilePath = `${companyId}/opportunity/${salesOrder.opportunityId}/${fileName}`;
 
-            // Upload the PDF to storage
-            const documentFileUpload = await serviceRole.storage
-              .from("private")
-              .upload(documentFilePath, file, {
-                cacheControl: `${12 * 60 * 60}`,
-                contentType: "application/pdf",
-                upsert: true
+            try {
+              await uploadObject({
+                companyId,
+                key: documentFilePath,
+                body: new Uint8Array(file),
+                contentType: "application/pdf"
               });
 
-            if (!documentFileUpload.error) {
               // Create document record
-              await upsertDocument(serviceRole, {
+              await upsertDocument(client, {
                 path: documentFilePath,
                 name: fileName,
                 size: Math.round(file.byteLength / 1024),
@@ -215,6 +217,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
                 createdBy: userId,
                 companyId
               });
+            } catch (uploadError) {
+              console.error("Failed to upload shipment PDF", uploadError);
             }
           }
         }
@@ -224,13 +228,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     }
 
-    const postShipment = await serviceRole.functions.invoke("post-shipment", {
+    const postShipment = await invokeFunction("post-shipment", {
       body: {
         type: "post",
         shipmentId: shipmentId,
         userId: userId,
         companyId: companyId
-      }
+      },
     });
 
     if (postShipment.error) {
@@ -239,7 +243,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         .update({
           status: "Draft"
         })
-        .eq("id", shipmentId);
+        .eq("id", shipmentId)
+        .eq("companyId", companyId);
 
       throw redirect(
         path.to.shipmentDetails(shipmentId),
@@ -256,7 +261,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .update({
         status: "Draft"
       })
-      .eq("id", shipmentId);
+      .eq("id", shipmentId)
+      .eq("companyId", companyId);
   }
 
   if (expiredWarning) {

@@ -45,7 +45,7 @@ export const getPartTool = tool({
           .limit(1),
         context.client
           .from("supplierPart")
-          .select("*, item(id, name, description, revision)")
+          .select("*")
           .eq("supplierPartId", readableId)
           .eq("companyId", context.companyId)
           .single()
@@ -61,11 +61,18 @@ export const getPartTool = tool({
       );
 
       if (supplierPart.data) {
+        const supplierPartItem = await context.client
+          .from("item")
+          .select("id, name, description, revision")
+          .eq("id", supplierPart.data.itemId)
+          .eq("companyId", context.companyId)
+          .single();
+
         console.log("[getPartTool] returning supplierPart match");
         return {
           id: supplierPart.data.itemId,
-          name: supplierPart.data.item?.name,
-          description: supplierPart.data.item?.description,
+          name: supplierPartItem.data?.name,
+          description: supplierPartItem.data?.description,
           supplierId: supplierPart.data.supplierId
         };
       }

@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import type { ActionFunctionArgs } from "react-router";
 import {
@@ -36,8 +35,6 @@ export async function action({ request }: ActionFunctionArgs) {
     message: "Cannot modify a locked job. Reopen it first."
   });
   if (lockedError) return lockedError;
-
-  const serviceRole = await getCarbonServiceRole();
 
   if (field === "delete") {
     return await client
@@ -114,7 +111,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
 
       for await (const id of ids) {
-        const upsertMethod = await upsertJobMethod(serviceRole, "itemToJob", {
+        const upsertMethod = await upsertJobMethod(client, "itemToJob", {
           sourceId: value,
           targetId: id as string,
           companyId,
@@ -226,7 +223,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
 
       for await (const id of ids) {
-        const recalculate = await recalculateJobRequirements(serviceRole, {
+        const recalculate = await recalculateJobRequirements(client, {
           id: id as string,
           companyId,
           userId

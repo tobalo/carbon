@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  itemTypeEnum
+} from "@carbon/database/schema";
 import { ValidatedForm } from "@carbon/form";
 import {
   Card,
@@ -45,10 +48,10 @@ import {
 
 type ItemFormProps = {
   initialValues: z.infer<typeof itemValidator>;
-  type: Database["public"]["Enums"]["itemType"];
+  type: EnumValue<typeof itemTypeEnum>;
 };
 
-function getLabel(type: Database["public"]["Enums"]["itemType"]) {
+function getLabel(type: EnumValue<typeof itemTypeEnum>) {
   return capitalize(type);
 }
 

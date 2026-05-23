@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { formatCityStatePostalCode, formatDate } from "@carbon/utils";
 import {
   Body,
@@ -25,9 +25,9 @@ import {
 } from "./components/Theme";
 
 interface PurchaseOrderEmailProps extends Email {
-  purchaseOrder: Database["public"]["Views"]["purchaseOrders"]["Row"];
-  purchaseOrderLines: Database["public"]["Views"]["purchaseOrderLines"]["Row"][];
-  purchaseOrderLocations: Database["public"]["Views"]["purchaseOrderLocations"]["Row"];
+  purchaseOrder: TableRow<"purchaseOrders">;
+  purchaseOrderLines: TableRow<"purchaseOrderLines">[];
+  purchaseOrderLocations: TableRow<"purchaseOrderLocations">;
   paymentTerms: { id: string; name: string }[];
 }
 

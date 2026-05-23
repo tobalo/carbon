@@ -1,6 +1,9 @@
 import { assertIsPost, error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -27,7 +30,7 @@ import {
   SupplierAvatar
 } from "~/components";
 import { usePanels } from "~/components/Layout";
-import { usePermissions, useRealtime, useRouteData } from "~/hooks";
+import { usePermissions, usePollingRevalidation, useRouteData } from "~/hooks";
 import type { Job, JobPurchaseOrderLine } from "~/modules/production";
 import {
   getJob,
@@ -61,10 +64,11 @@ import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "production",
     bypassRls: true
   });
+  const { client, companyId } = auth;
 
   const { jobId } = params;
   if (!jobId) throw new Error("Could not find jobId");
@@ -76,6 +80,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       await flash(request, error(job.error, "Failed to load job"))
     );
   }
+  assertCustomerAccountScope(auth, job.data?.customerId);
 
   const rootMethod = await getRootMakeMethod(client, jobId, companyId);
   if (rootMethod.error) {
@@ -98,7 +103,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const methodId = rootMethod.data.id;
 
   const [materials, operations, tags, makeMethod] = await Promise.all([
-    getJobMaterialsByMethodId(client, methodId),
+    getJobMaterialsByMethodId(client, methodId, companyId),
     getJobOperationsByMethodId(client, methodId),
     getTagsList(client, companyId, "operation"),
     getJobMakeMethodById(client, methodId, companyId)
@@ -184,7 +189,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const recalculate = await recalculateJobRequirements(getCarbonServiceRole(), {
+  const recalculate = await recalculateJobRequirements(client, {
     id,
     companyId,
     userId
@@ -232,7 +237,7 @@ export default function JobDetailsRoute() {
 
   if (!jobData) throw new Error("Could not find job data");
 
-  useRealtime("modelUpload", `modelPath=eq.(${jobData?.job.modelPath})`);
+  usePollingRevalidation("modelUpload", `modelPath=eq.(${jobData?.job.modelPath})`);
 
   const methodId = makeMethod?.id;
 

@@ -113,7 +113,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
         continue;
       }
 
-      // @ts-expect-error TS2339 - TODO: fix type
       const uom = line.unitOfMeasureCode ?? "EA";
 
       await upsertSupplierQuoteLine(client, {

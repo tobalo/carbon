@@ -496,7 +496,7 @@ function NewPurchaseOrderLineAssociation({ items }: { items?: string[] }) {
 
     let query = carbon
       .from("purchaseOrderLine")
-      .select("id, itemId, item(name)")
+      .select("id, itemId")
       .eq("purchaseOrderId", purchaseOrderId);
 
     if (items) {
@@ -509,9 +509,18 @@ function NewPurchaseOrderLineAssociation({ items }: { items?: string[] }) {
       toast.error(t`Failed to load purchase order lines`);
     }
 
+    const itemIds = [...new Set(data?.map((line) => line.itemId) ?? [])];
+    const { data: itemRows } =
+      itemIds.length > 0
+        ? await carbon.from("item").select("id, name").in("id", itemIds)
+        : { data: [] };
+    const itemsById = new Map(
+      itemRows?.map((item) => [item.id, item] as const) ?? []
+    );
+
     setPurchaseOrderLines(
       data?.map((line) => ({
-        label: line.item?.name ?? `Line ${line.id}`,
+        label: itemsById.get(line.itemId)?.name ?? `Line ${line.id}`,
         value: line.id
       })) ?? []
     );
@@ -599,7 +608,7 @@ function NewSalesOrderLineAssociation({ items }: { items?: string[] }) {
 
     let query = carbon
       .from("salesOrderLine")
-      .select("id, itemId, item(name)")
+      .select("id, itemId")
       .eq("salesOrderId", salesOrderId);
 
     if (items) {
@@ -612,9 +621,18 @@ function NewSalesOrderLineAssociation({ items }: { items?: string[] }) {
       toast.error(t`Failed to load sales order lines`);
     }
 
+    const itemIds = [...new Set(data?.map((line) => line.itemId) ?? [])];
+    const { data: itemRows } =
+      itemIds.length > 0
+        ? await carbon.from("item").select("id, name").in("id", itemIds)
+        : { data: [] };
+    const itemsById = new Map(
+      itemRows?.map((item) => [item.id, item] as const) ?? []
+    );
+
     setSalesOrderLines(
       data?.map((line) => ({
-        label: line.item?.name ?? `Line ${line.id}`,
+        label: itemsById.get(line.itemId)?.name ?? `Line ${line.id}`,
         value: line.id
       })) ?? []
     );

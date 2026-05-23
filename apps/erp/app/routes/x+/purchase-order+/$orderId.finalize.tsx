@@ -1,11 +1,12 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { PurchaseOrderEmail } from "@carbon/documents/email";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
+import { signDownload, uploadObject } from "@carbon/storage";
 import { renderAsync } from "@react-email/components";
 import { parseAcceptLanguage } from "intl-parse-accept-language";
 import type { ActionFunctionArgs } from "react-router";
@@ -51,9 +52,7 @@ export async function action(args: ActionFunctionArgs) {
   let fileName: string;
   let documentFilePath: string;
 
-  const serviceRole = getCarbonServiceRole();
-
-  const purchaseOrder = await getPurchaseOrder(serviceRole, orderId);
+  const purchaseOrder = await getPurchaseOrder(client, orderId);
   if (purchaseOrder.error) {
     throw redirect(
       path.to.purchaseOrder(orderId),
@@ -76,13 +75,13 @@ export async function action(args: ActionFunctionArgs) {
 
   // Check supplier approval status
   const supplierApprovalRequired = await isApprovalRequired(
-    serviceRole,
+    client,
     "supplier",
     companyId
   );
   if (supplierApprovalRequired && purchaseOrder.data.supplierId) {
     const supplier = await getSupplier(
-      serviceRole,
+      client,
       purchaseOrder.data.supplierId
     );
     if (supplier.data?.status !== "Active") {
@@ -98,7 +97,7 @@ export async function action(args: ActionFunctionArgs) {
 
   const orderAmount = purchaseOrder.data.orderTotal ?? 0;
   const approvalRequired = await isApprovalRequired(
-    serviceRole,
+    client,
     "purchaseOrder",
     companyId,
     orderAmount
@@ -119,13 +118,13 @@ export async function action(args: ActionFunctionArgs) {
   // PDF generation, email sending, and price updates happen after approval
   if (approvalRequired) {
     const hasPending = await hasPendingApproval(
-      serviceRole,
+      client,
       "purchaseOrder",
       orderId
     );
 
     if (!hasPending) {
-      await createApprovalRequest(serviceRole, {
+      await createApprovalRequest(client, {
         documentType: "purchaseOrder",
         documentId: orderId,
         companyId,
@@ -135,13 +134,13 @@ export async function action(args: ActionFunctionArgs) {
       });
 
       const rule = await getApprovalRuleByAmount(
-        serviceRole,
+        client,
         "purchaseOrder",
         companyId,
         orderAmount
       );
       const approverIds = rule.data
-        ? await getApproverUserIdsForRule(serviceRole, rule.data)
+        ? await getApproverUserIdsForRule(client, rule.data)
         : [];
 
       if (approverIds.length > 0) {
@@ -164,7 +163,8 @@ export async function action(args: ActionFunctionArgs) {
       id: orderId,
       status: "Needs Approval",
       assignee: undefined,
-      updatedBy: userId
+      updatedBy: userId,
+      companyId
     });
 
     throw redirect(
@@ -174,12 +174,12 @@ export async function action(args: ActionFunctionArgs) {
   }
 
   // Check if we should update prices on purchase order finalize
-  const companySettings = await getCompanySettings(serviceRole, companyId);
+  const companySettings = await getCompanySettings(client, companyId);
   if (
     companySettings.data?.purchasePriceUpdateTiming ===
     "Purchase Order Finalize"
   ) {
-    const priceUpdate = await serviceRole.functions.invoke(
+    const priceUpdate = await invokeFunction(
       "update-purchased-prices",
       {
         body: {
@@ -188,7 +188,7 @@ export async function action(args: ActionFunctionArgs) {
           source: "purchaseOrder",
           updatePrices: true,
           updateLeadTimes: false
-        }
+        },
       }
     );
 
@@ -217,25 +217,24 @@ export async function action(args: ActionFunctionArgs) {
 
     documentFilePath = `${companyId}/supplier-interaction/${purchaseOrder.data.supplierInteractionId}/${fileName}`;
 
-    const documentFileUpload = await serviceRole.storage
-      .from("private")
-      .upload(documentFilePath, file, {
-        cacheControl: `${12 * 60 * 60}`,
-        contentType: "application/pdf",
-        upsert: true
+    try {
+      await uploadObject({
+        companyId,
+        key: documentFilePath,
+        body: new Uint8Array(file),
+        contentType: "application/pdf"
       });
-
-    if (documentFileUpload.error) {
+    } catch (uploadError) {
       throw redirect(
         path.to.purchaseOrder(orderId),
         await flash(
           request,
-          error(documentFileUpload.error, "Failed to upload file")
+          error(uploadError, "Failed to upload file")
         )
       );
     }
 
-    const createDocument = await upsertDocument(serviceRole, {
+    const createDocument = await upsertDocument(client, {
       path: documentFilePath,
       name: fileName,
       size: Math.round(file.byteLength / 1024),
@@ -287,13 +286,13 @@ export async function action(args: ActionFunctionArgs) {
           paymentTerms,
           buyer
         ] = await Promise.all([
-          getCompany(serviceRole, companyId),
-          getSupplierContact(serviceRole, supplierContact),
-          getPurchaseOrder(serviceRole, orderId),
-          getPurchaseOrderLines(serviceRole, orderId),
-          getPurchaseOrderLocations(serviceRole, orderId),
-          getPaymentTermsList(serviceRole, companyId),
-          getUser(serviceRole, userId)
+          getCompany(client, companyId),
+          getSupplierContact(client, supplierContact),
+          getPurchaseOrder(client, orderId),
+          getPurchaseOrderLines(client, orderId),
+          getPurchaseOrderLocations(client, orderId),
+          getPaymentTermsList(client, companyId),
+          getUser(client, userId)
         ]);
 
         if (!supplier?.data?.contact)
@@ -308,7 +307,6 @@ export async function action(args: ActionFunctionArgs) {
 
         if (supplier.data.contact.email) {
           const emailTemplate = PurchaseOrderEmail({
-            // @ts-expect-error TS2739 - TODO: fix type
             company: company.data,
             locale: locales?.[0] ?? "en-US",
             purchaseOrder: purchaseOrder.data,
@@ -330,9 +328,11 @@ export async function action(args: ActionFunctionArgs) {
           const html = await renderAsync(emailTemplate);
           const text = await renderAsync(emailTemplate, { plainText: true });
 
-          const { data: signedUrlData } = await serviceRole.storage
-            .from("private")
-            .createSignedUrl(documentFilePath, 3600);
+          const signedUrl = await signDownload({
+            companyId,
+            key: documentFilePath,
+            expiresIn: 3600
+          });
 
           await Promise.all([
             trigger("send-email", {
@@ -342,10 +342,10 @@ export async function action(args: ActionFunctionArgs) {
               subject: `Purchase Order ${purchaseOrder.data.purchaseOrderId} from ${company.data.name}`,
               html,
               text,
-              attachments: signedUrlData?.signedUrl
+              attachments: signedUrl
                 ? [
                     {
-                      path: signedUrlData.signedUrl,
+                      path: signedUrl,
                       filename: fileName
                     }
                   ]

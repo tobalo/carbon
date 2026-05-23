@@ -9,9 +9,7 @@ import { getWorktreeRoot } from "../worktree.js";
 
 // Run database migrations against the worktree's local stack without booting
 // the full compose stack. Reads PORT_DB from `.env.local` (written by
-// `crbn up`). Bare `pnpm db:migrate` resolves dotenv relative to cwd and falls
-// through to the supabase CLI's linked-project path — `crbn migrate` removes
-// that footgun by always targeting the current worktree's DB.
+// `crbn up`). `crbn migrate` always targets the current worktree's DB.
 export async function migrate(opts: { regen?: boolean } = {}) {
   const shouldRegen = opts.regen ?? true;
   intro("Carbon · dev migrate");
@@ -61,12 +59,11 @@ export async function migrate(opts: { regen?: boolean } = {}) {
     ...(shouldRegen
       ? [
           {
-            title: "Regenerate types & swagger",
+            title: "Validate schema types",
             task: async () => {
               if (!applied) return "skipped (no new migrations)";
               await execa("pnpm", ["db:types"], { cwd: root });
-              await execa("pnpm", ["generate:swagger"], { cwd: root });
-              return "types + swagger refreshed";
+              return "schema types validated";
             }
           }
         ]

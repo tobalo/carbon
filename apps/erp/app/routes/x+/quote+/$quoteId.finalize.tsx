@@ -4,6 +4,7 @@ import { flash } from "@carbon/auth/session.server";
 import { QuoteEmail } from "@carbon/documents/email";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
+import { signDownload, uploadObject } from "@carbon/storage";
 import { getLocalTimeZone, now } from "@internationalized/date";
 import { renderAsync } from "@react-email/components";
 import type { ActionFunctionArgs } from "react-router";
@@ -79,20 +80,19 @@ export async function action(args: ActionFunctionArgs) {
 
     documentFilePath = `${companyId}/opportunity/${quote.data.opportunityId}/${fileName}`;
 
-    const documentFileUpload = await client.storage
-      .from("private")
-      .upload(documentFilePath, file, {
-        cacheControl: `${12 * 60 * 60}`,
-        contentType: "application/pdf",
-        upsert: true
+    try {
+      await uploadObject({
+        companyId,
+        key: documentFilePath,
+        body: new Uint8Array(file),
+        contentType: "application/pdf"
       });
-
-    if (documentFileUpload.error) {
+    } catch (uploadError) {
       throw redirect(
         path.to.quote(quoteId),
         await flash(
           request,
-          error(documentFileUpload.error, "Failed to upload file")
+          error(uploadError, "Failed to upload file")
         )
       );
     }
@@ -170,10 +170,9 @@ export async function action(args: ActionFunctionArgs) {
         if (!user.data) throw new Error("Failed to get user");
 
         const emailTemplate = QuoteEmail({
-          // @ts-expect-error TS2739 - TODO: fix type
           company: company.data,
           companySettings: companySettings.data,
-          // @ts-expect-error
+          locale: "en-US",
           quote: quote.data,
           recipient: {
             email: customerContact.data?.contact!.email!,
@@ -189,9 +188,11 @@ export async function action(args: ActionFunctionArgs) {
 
         const html = await renderAsync(emailTemplate);
         const text = await renderAsync(emailTemplate, { plainText: true });
-        const { data: signedUrlData } = await client.storage
-          .from("private")
-          .createSignedUrl(documentFilePath, 3600);
+        const signedUrl = await signDownload({
+          companyId,
+          key: documentFilePath,
+          expiresIn: 3600
+        });
 
         await trigger("send-email", {
           to: [user.data.email, customerContact.data.contact!.email!],
@@ -200,10 +201,10 @@ export async function action(args: ActionFunctionArgs) {
           subject: `Quote ${quote.data.quoteId}`,
           html,
           text,
-          attachments: signedUrlData?.signedUrl
+          attachments: signedUrl
             ? [
                 {
-                  path: signedUrlData.signedUrl,
+                  path: signedUrl,
                   filename: fileName
                 }
               ]

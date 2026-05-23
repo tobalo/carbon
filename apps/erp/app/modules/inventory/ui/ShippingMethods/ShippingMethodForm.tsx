@@ -12,7 +12,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -46,7 +46,7 @@ const ShippingMethodForm = ({
 }: ShippingMethodFormProps) => {
   const permissions = usePermissions();
   const { t } = useLingui();
-  const fetcher = useFetcher<PostgrestResponse<{ id: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string }>>();
 
   useEffect(() => {
     if (type !== "modal") return;

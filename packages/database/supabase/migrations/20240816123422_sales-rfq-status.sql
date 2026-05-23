@@ -1,1 +1,0 @@
-ALTER TYPE "salesRfqStatus" ADD VALUE 'Quoted';

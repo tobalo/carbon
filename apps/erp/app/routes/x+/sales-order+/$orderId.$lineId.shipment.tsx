@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -15,12 +15,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
     throw new Error("Invalid orderId or lineId");
   }
 
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "inventory"
   });
 
-  const serviceRole = getCarbonServiceRole();
-  const salesOrderLine = await getSalesOrderLine(serviceRole, lineId);
+  const salesOrderLine = await getSalesOrderLine(client, lineId);
 
   if (salesOrderLine.error) {
     throw redirect(
@@ -42,7 +41,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const salesOrderShipment = await serviceRole.functions.invoke<{
+  const salesOrderShipment = await invokeFunction<{
     id: string;
   }>("create", {
     body: {
@@ -51,7 +50,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       salesOrderLineId: lineId,
       companyId,
       userId
-    }
+    },
   });
 
   if (!salesOrderShipment.data || salesOrderShipment.error) {

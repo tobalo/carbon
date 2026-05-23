@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-18T03:08:48.451Z",
+  "generated": "2026-05-21T10:19:42.185Z",
   "totalTools": 1075,
   "modules": 15,
   "tools": [
@@ -1197,7 +1197,8 @@
       "paramCount": 1,
       "serviceParams": [
         "client",
-        "id"
+        "id",
+        "userId"
       ],
       "injectAuth": [
         "companyId"
@@ -1227,7 +1228,8 @@
       "serviceParams": [
         "client",
         "id",
-        "label"
+        "label",
+        "userId"
       ],
       "injectAuth": [
         "companyId"
@@ -1241,7 +1243,9 @@
       "paramCount": 1,
       "serviceParams": [
         "client",
-        "documentId"
+        "documentId",
+        "userId",
+        "mode"
       ],
       "injectAuth": [
         "companyId"
@@ -1256,7 +1260,8 @@
       "serviceParams": [
         "client",
         "companyId",
-        "args"
+        "args",
+        "userId"
       ],
       "injectAuth": [
         "companyId"
@@ -7859,7 +7864,7 @@
       "description": "get supplier approval context",
       "paramCount": 2,
       "serviceParams": [
-        "serviceRole",
+        "serviceClient",
         "supplierId",
         "status",
         "companyId",
@@ -14919,7 +14924,6 @@
       "description": "approve request",
       "paramCount": 3,
       "serviceParams": [
-        "db",
         "id",
         "userId",
         "notes"
@@ -15184,10 +15188,10 @@
       ]
     },
     {
-      "name": "shared_getBase64ImageFromSupabase",
+      "name": "shared_getBase64ImageFromStorage",
       "module": "shared",
       "classification": "READ",
-      "description": "get base64 image from supabase",
+      "description": "get base64 image from storage",
       "paramCount": 1,
       "serviceParams": [
         "client",
@@ -15517,7 +15521,6 @@
       "description": "reject request",
       "paramCount": 3,
       "serviceParams": [
-        "db",
         "id",
         "userId",
         "notes"

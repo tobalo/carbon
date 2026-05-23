@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validator } from "@carbon/form";
 import { batchTrigger } from "@carbon/jobs";
@@ -24,12 +23,10 @@ import { path } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "production",
     bypassRls: true
   });
-
-  const serviceRole = await getCarbonServiceRole();
 
   const formData = await request.formData();
   const validation = await validator(bulkJobValidator).validate(formData);
@@ -63,7 +60,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const manufacturing = await getItemReplenishment(
-    serviceRole,
+    client,
     jobData.itemId,
     companyId
   );
@@ -103,14 +100,14 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const storageUnitId = await getDefaultStorageUnitForJob(
-    serviceRole,
+    client,
     jobData.itemId,
     jobData.locationId,
     companyId
   );
 
   for await (const [i] of Array.from({ length: jobs }, (_, i) => [i])) {
-    const nextSequence = await getNextSequence(serviceRole, "job", companyId);
+    const nextSequence = await getNextSequence(client, "job", companyId);
     if (nextSequence.error) {
       throw redirect(
         path.to.newJob,
@@ -125,7 +122,7 @@ export async function action({ request }: ActionFunctionArgs) {
       "T"
     )[0];
 
-    const createJob = await upsertJob(serviceRole, {
+    const createJob = await upsertJob(client, {
       jobId,
       ...jobData,
       quantity: i === jobs - 1 ? quantityOfLastJob : quantityPerJob,
@@ -163,7 +160,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const upsertMethod = await upsertJobMethod(serviceRole, "itemToJob", {
+    const upsertMethod = await upsertJobMethod(client, "itemToJob", {
       sourceId: jobData.itemId,
       targetId: id,
       companyId,

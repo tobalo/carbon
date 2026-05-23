@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
 import { data, redirect } from "react-router";
@@ -13,7 +12,7 @@ import {
 import { path, requestReferrer } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     update: "production"
   });
 
@@ -24,14 +23,44 @@ export async function action({ request }: ActionFunctionArgs) {
     ? JSON.parse(configurationStr)
     : undefined;
 
-  const serviceRole = getCarbonServiceRole();
-
   const validation = await validator(getJobMethodValidator).validate(formData);
   if (validation.error) {
     return validationError(validation.error);
   }
 
   if (["item", "quoteLine"].includes(type)) {
+    const targetJob = await client
+      .from("job")
+      .select("id")
+      .eq("id", validation.data.targetId)
+      .eq("companyId", companyId)
+      .single();
+    if (targetJob.error) {
+      return data({ error: "Target job not found" }, { status: 404 });
+    }
+
+    if (type === "item") {
+      const sourceItem = await client
+        .from("item")
+        .select("id")
+        .eq("id", validation.data.sourceId)
+        .eq("companyId", companyId)
+        .single();
+      if (sourceItem.error) {
+        return data({ error: "Source item not found" }, { status: 404 });
+      }
+    } else {
+      const sourceQuoteLine = await client
+        .from("quoteLine")
+        .select("id")
+        .eq("id", validation.data.sourceId)
+        .eq("companyId", companyId)
+        .single();
+      if (sourceQuoteLine.error) {
+        return data({ error: "Source quote line not found" }, { status: 404 });
+      }
+    }
+
     const jobMethodPayload: any = {
       ...validation.data,
       companyId,
@@ -52,18 +81,18 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const jobMethod = await upsertJobMethod(
-      serviceRole,
+      client,
       type === "item" ? "itemToJob" : "quoteLineToJob",
       jobMethodPayload
     );
 
     const [calculateQuantities, calculateDependencies] = await Promise.all([
-      recalculateJobRequirements(serviceRole, {
+      recalculateJobRequirements(client, {
         id: validation.data.targetId,
         companyId: companyId,
         userId: userId
       }),
-      recalculateJobOperationDependencies(serviceRole, {
+      recalculateJobOperationDependencies(client, {
         jobId: validation.data.targetId,
         companyId: companyId,
         userId: userId
@@ -88,6 +117,26 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (type === "method") {
+    const targetMethod = await client
+      .from("jobMakeMethod")
+      .select("id")
+      .eq("id", validation.data.targetId)
+      .eq("companyId", companyId)
+      .single();
+    if (targetMethod.error) {
+      return data({ error: "Target job method not found" }, { status: 404 });
+    }
+
+    const sourceItem = await client
+      .from("item")
+      .select("id")
+      .eq("id", validation.data.sourceId)
+      .eq("companyId", companyId)
+      .single();
+    if (sourceItem.error) {
+      return data({ error: "Source item not found" }, { status: 404 });
+    }
+
     const makeMethodPayload: any = {
       ...validation.data,
       companyId,
@@ -108,7 +157,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const makeMethod = await upsertJobMaterialMakeMethod(
-      serviceRole,
+      client,
       makeMethodPayload
     );
 

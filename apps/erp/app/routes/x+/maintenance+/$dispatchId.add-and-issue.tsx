@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { z } from "zod";
@@ -29,7 +29,9 @@ const addAndIssueValidator = z.object({
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { userId, companyId } = await requirePermissions(request, {});
+  const { client, userId, companyId } = await requirePermissions(request, {
+    update: "resources"
+  });
   const { dispatchId } = params;
 
   if (!dispatchId) {
@@ -39,10 +41,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const { client: viewClient } = await requirePermissions(request, {
-    view: "resources"
-  });
-  const dispatch = await getMaintenanceDispatch(viewClient, dispatchId);
+  const dispatch = await getMaintenanceDispatch(client, dispatchId);
+  if (dispatch.error || dispatch.data?.companyId !== companyId) {
+    return data(
+      { success: false, message: "Dispatch not found" },
+      { status: 404 }
+    );
+  }
+
   await requireUnlocked({
     request,
     isLocked: isMaintenanceDispatchLocked(dispatch.data?.status),
@@ -74,11 +80,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
   if (children && children.length > 0) {
     // Tracked entities (serial/batch)
-    const issue = await serviceRole.functions.invoke("issue", {
+    const issue = await invokeFunction("issue", {
       body: {
         type: "maintenanceDispatchTrackedEntities",
         maintenanceDispatchId: dispatchId,
@@ -87,7 +91,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         children,
         companyId,
         userId
-      }
+      },
     });
 
     if (issue.error) {
@@ -99,7 +103,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   } else {
     // Inventory item
-    const issue = await serviceRole.functions.invoke("issue", {
+    const issue = await invokeFunction("issue", {
       body: {
         type: "maintenanceDispatchInventory",
         maintenanceDispatchId: dispatchId,
@@ -108,7 +112,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         quantity: totalQuantity,
         companyId,
         userId
-      }
+      },
     });
 
     if (issue.error) {

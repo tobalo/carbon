@@ -1,5 +1,5 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { LoaderFunctionArgs } from "react-router";
 import type { FlatTreeItem } from "~/components/TreeView";
 import { flattenTree } from "~/components/TreeView";
@@ -25,7 +25,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return { data: [], error: null };
   }
 
-  const methodTree = await getJobMethodTree(client, id);
+  const methodTree = await getJobMethodTree(client, id, companyId);
   if (methodTree.error) {
     return { data: [], error: methodTree.error };
   }
@@ -63,7 +63,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let operationsByMakeMethodId: Record<
     string,
     Array<
-      Database["public"]["Tables"]["jobOperation"]["Row"] & {
+      TableRow<"jobOperation"> & {
         processName: string;
         workCenterName: string | null;
       }

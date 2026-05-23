@@ -1,8 +1,9 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { syncIssueFromJiraSchema, trigger } from "@carbon/jobs";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { getIntegration } from "../../modules/settings";
+import { verifyIntegrationWebhookSignature } from "../../modules/settings/settings.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { companyId } = params;
@@ -21,9 +22,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return data({ success: false }, { status: 400 });
   }
 
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
 
-  const integration = await getIntegration(serviceRole, "jira", companyId);
+  const integration = await getIntegration(serviceClient, "jira", companyId);
 
   if (integration.error) {
     return data(
@@ -46,7 +47,26 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const body = await request.json();
+  const bodyText = await request.text();
+  if (
+    !verifyIntegrationWebhookSignature(
+      request,
+      integration.data.metadata,
+      bodyText
+    )
+  ) {
+    return data(
+      { success: false, error: "Invalid webhook signature" },
+      { status: 401 }
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(bodyText);
+  } catch {
+    return data({ success: false, error: "Invalid JSON" }, { status: 400 });
+  }
 
   const parsed = syncIssueFromJiraSchema.safeParse({
     companyId,

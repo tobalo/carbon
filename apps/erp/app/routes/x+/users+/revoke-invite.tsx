@@ -1,6 +1,5 @@
 import { CarbonEdition, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { deactivateUser } from "@carbon/auth/users.server";
 import { validationError, validator } from "@carbon/form";
@@ -12,7 +11,7 @@ import { data } from "react-router";
 import { revokeInviteValidator } from "~/modules/users";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     create: "users"
   });
 
@@ -26,9 +25,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const { users } = validation.data;
 
-  const serviceRole = getCarbonServiceRole();
-
-  const usersToRevoke = await serviceRole
+  const usersToRevoke = await client
     .from("user")
     .select("id, email")
     .in("id", users);
@@ -45,7 +42,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (usersToRevoke.data.length == 1) {
     const deactivate = await deactivateUser(
-      serviceRole,
+      client,
       usersToRevoke.data[0].id,
       companyId
     );
@@ -72,7 +69,7 @@ export async function action({ request }: ActionFunctionArgs) {
     await batchTrigger("user-admin", batchPayload);
   }
 
-  const revokeInvites = await serviceRole
+  const revokeInvites = await client
     .from("invite")
     .update({ revokedAt: new Date().toISOString() })
     .in(
@@ -80,6 +77,7 @@ export async function action({ request }: ActionFunctionArgs) {
       usersToRevoke.data.map((user) => user.email)
     )
     .eq("companyId", companyId)
+    .is("acceptedAt", null)
     .is("revokedAt", null);
 
   if (revokeInvites.error) {

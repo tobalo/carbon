@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  approvalDocumentTypeEnum,
+  EnumValue
+} from "@carbon/database/schema";
 import { z } from "zod";
 import { zfd } from "zod-form-data";
 
@@ -16,8 +19,7 @@ export const approvalDocumentType = [
   "supplier"
 ] as const;
 
-export type ApprovalDocumentType =
-  Database["public"]["Enums"]["approvalDocumentType"];
+export type ApprovalDocumentType = EnumValue<typeof approvalDocumentTypeEnum>;
 
 export const approvalDocumentTypeLabel: Record<ApprovalDocumentType, string> = {
   purchaseOrder: "Purchase Order",

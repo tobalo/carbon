@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Card,
   CardAction,
@@ -22,7 +21,7 @@ import {
 } from "@carbon/react";
 import { convertKbToString } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "@carbon/storage";
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 import { LuEllipsisVertical, LuUpload } from "react-icons/lu";
@@ -34,6 +33,7 @@ import type { ItemFile } from "~/modules/items";
 import type { OptimisticFileObject } from "~/modules/shared";
 import { getDocumentType } from "~/modules/shared";
 import { path } from "~/utils/path";
+import { removeStorageObjects, uploadStorageObject } from "~/utils/storage";
 import { stripSpecialCharacters } from "~/utils/string";
 
 type SupportedDocument =
@@ -54,7 +54,6 @@ const useSupplierInteractionLineDocuments = ({
   const { t } = useLingui();
   const permissions = usePermissions();
   const revalidator = useRevalidator();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const submit = useSubmit();
 
@@ -74,19 +73,20 @@ const useSupplierInteractionLineDocuments = ({
 
   const deleteFile = useCallback(
     async (file: ItemFile) => {
-      const fileDelete = await carbon?.storage
-        .from("private")
-        .remove([getPath(file)]);
+      const fileDelete = await removeStorageObjects({
+        bucket: "private",
+        paths: [getPath(file)]
+      });
 
-      if (!fileDelete || fileDelete.error) {
-        toast.error(fileDelete?.error?.message || "Error deleting file");
+      if (fileDelete.error) {
+        toast.error(fileDelete.error.message || "Error deleting file");
         return;
       }
 
       toast.success(`${file.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [getPath, carbon?.storage, revalidator]
+    [getPath, revalidator]
   );
 
   const download = useCallback(
@@ -140,20 +140,14 @@ const useSupplierInteractionLineDocuments = ({
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getPath(file);
 
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadStorageObject({
+          bucket: "private",
+          path: fileName,
+          file
+        });
 
         if (fileUpload.error) {
           toast.error(`Failed to upload file: ${file.name}`);
@@ -167,7 +161,7 @@ const useSupplierInteractionLineDocuments = ({
       }
       revalidator.revalidate();
     },
-    [getPath, createDocumentRecord, carbon, revalidator, t]
+    [getPath, createDocumentRecord, revalidator, t]
   );
 
   return {

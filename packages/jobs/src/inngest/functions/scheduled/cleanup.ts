@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { NOVU_API_URL, NOVU_SECRET_KEY } from "@carbon/env";
 import type { TriggerPayload } from "@carbon/notifications";
 import {
@@ -9,12 +9,13 @@ import {
 } from "@carbon/notifications";
 import { Novu } from "@novu/node";
 import { inngest } from "../../client";
+import type { JobQueryClient } from "../../../lib/query-client";
 
 export const cleanupFunction = inngest.createFunction(
   { id: "cleanup", retries: 2 },
   { cron: "0 7,12,17 * * *" },
   async ({ step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
     const novu = new Novu(NOVU_SECRET_KEY!, {
       backendUrl: NOVU_API_URL
     });
@@ -25,13 +26,13 @@ export const cleanupFunction = inngest.createFunction(
       // Clean up expired quotes
       console.log("Checking for expired quotes...");
       const [expiredQuotes, expiredSupplierQuotes] = await Promise.all([
-        serviceRole
+        serviceClient
           .from("quote")
           .select("*")
           .eq("status", "Sent")
           .not("expirationDate", "is", null)
           .lt("expirationDate", new Date().toISOString()),
-        serviceRole
+        serviceClient
           .from("supplierQuote")
           .select("*")
           .eq("status", "Active")
@@ -55,17 +56,26 @@ export const cleanupFunction = inngest.createFunction(
         return;
       }
 
-      if (expiredSupplierQuotes.data.length > 0) {
+      const activeExpiredSupplierQuotes = await filterRowsToActiveCompanies(
+        serviceClient,
+        expiredSupplierQuotes.data
+      );
+
+      if (activeExpiredSupplierQuotes.length > 0) {
         console.log(
-          `Found ${expiredSupplierQuotes.data.length} expired supplier quotes`
+          `Found ${activeExpiredSupplierQuotes.length} expired supplier quotes`
         );
-        const expireSupplierQuotes = await serviceRole
+        const companyIds = [
+          ...new Set(activeExpiredSupplierQuotes.map((quote) => quote.companyId))
+        ];
+        const expireSupplierQuotes = await serviceClient
           .from("supplierQuote")
           .update({ status: "Expired" })
           .in(
             "id",
-            expiredSupplierQuotes.data.map((quote) => quote.id)
-          );
+            activeExpiredSupplierQuotes.map((quote) => quote.id)
+          )
+          .in("companyId", companyIds);
 
         if (expireSupplierQuotes.error) {
           console.error(
@@ -81,7 +91,7 @@ export const cleanupFunction = inngest.createFunction(
 
       // Auto-expire purchasing RFQs past due date
       console.log("Checking for expired purchasing RFQs...");
-      const expiredRfqs = await serviceRole
+      const expiredRfqs = await serviceClient
         .from("purchasingRfq")
         .select("*")
         .in("status", ["Draft", "Requested"])
@@ -92,36 +102,56 @@ export const cleanupFunction = inngest.createFunction(
         console.error(
           `Error fetching expired RFQs: ${JSON.stringify(expiredRfqs.error)}`
         );
-      } else if (expiredRfqs.data.length > 0) {
-        console.log(`Found ${expiredRfqs.data.length} expired RFQs`);
-        const closeRfqs = await serviceRole
-          .from("purchasingRfq")
-          .update({ status: "Closed" })
-          .in(
-            "id",
-            expiredRfqs.data.map((rfq) => rfq.id)
-          );
-
-        if (closeRfqs.error) {
-          console.error(
-            `Error closing expired RFQs: ${JSON.stringify(closeRfqs.error)}`
-          );
-        }
       } else {
-        console.log("No expired RFQs found");
+        const activeExpiredRfqs = await filterRowsToActiveCompanies(
+          serviceClient,
+          expiredRfqs.data
+        );
+
+        if (activeExpiredRfqs.length > 0) {
+          console.log(`Found ${activeExpiredRfqs.length} expired RFQs`);
+          const companyIds = [
+            ...new Set(activeExpiredRfqs.map((rfq) => rfq.companyId))
+          ];
+          const closeRfqs = await serviceClient
+            .from("purchasingRfq")
+            .update({ status: "Closed" })
+            .in(
+              "id",
+              activeExpiredRfqs.map((rfq) => rfq.id)
+            )
+            .in("companyId", companyIds);
+
+          if (closeRfqs.error) {
+            console.error(
+              `Error closing expired RFQs: ${JSON.stringify(closeRfqs.error)}`
+            );
+          }
+        } else {
+          console.log("No expired RFQs found");
+        }
       }
 
-      if (!expiredQuotes?.data?.length) {
+      const activeExpiredQuotes = await filterRowsToActiveCompanies(
+        serviceClient,
+        expiredQuotes.data
+      );
+
+      if (!activeExpiredQuotes.length) {
         console.log("No expired quotes found requiring notification");
       } else {
-        console.log(`Found ${expiredQuotes.data.length} expired quotes`);
-        const expireQuotes = await serviceRole
+        console.log(`Found ${activeExpiredQuotes.length} expired quotes`);
+        const companyIds = [
+          ...new Set(activeExpiredQuotes.map((quote) => quote.companyId))
+        ];
+        const expireQuotes = await serviceClient
           .from("quote")
           .update({ status: "Expired" })
           .in(
             "id",
-            expiredQuotes.data.map((quote) => quote.id)
-          );
+            activeExpiredQuotes.map((quote) => quote.id)
+          )
+          .in("companyId", companyIds);
 
         if (expireQuotes.error) {
           console.error(
@@ -132,7 +162,7 @@ export const cleanupFunction = inngest.createFunction(
           return;
         }
 
-        const notificationPayloads: TriggerPayload[] = expiredQuotes.data
+        const notificationPayloads: TriggerPayload[] = activeExpiredQuotes
           .filter((quote) => Boolean(quote.salesPersonId))
           .map((quote) => {
             return {
@@ -171,7 +201,7 @@ export const cleanupFunction = inngest.createFunction(
     await step.run("check-gauge-calibration", async () => {
       // Check for gauges going out of calibration
       console.log("Checking for gauges going out of calibration...");
-      const outOfCalibrationGauges = await serviceRole
+      const outOfCalibrationGauges = await serviceClient
         .from("gauges")
         .select("*")
         .eq("gaugeCalibrationStatusWithDueDate", "Out-of-Calibration")
@@ -184,21 +214,31 @@ export const cleanupFunction = inngest.createFunction(
           )}`
         );
       } else if (outOfCalibrationGauges.data.length > 0) {
+        const activeOutOfCalibrationGauges = await filterRowsToActiveCompanies(
+          serviceClient,
+          outOfCalibrationGauges.data
+        );
+
         console.log(
-          `Found ${outOfCalibrationGauges.data.length} gauges going out of calibration`
+          `Found ${activeOutOfCalibrationGauges.length} gauges going out of calibration`
         );
 
         // Get unique company IDs
         const companyIds = [
           ...new Set(
-            outOfCalibrationGauges.data
+            activeOutOfCalibrationGauges
               .map((g) => g.companyId)
               .filter((id): id is string => id !== null)
           )
         ];
 
+        if (companyIds.length === 0) {
+          console.log("No active-company gauges going out of calibration found");
+          return;
+        }
+
         // Fetch all company settings at once
-        const companySettingsResult = await serviceRole
+        const companySettingsResult = await serviceClient
           .from("companySettings")
           .select("id, gaugeCalibrationExpiredNotificationGroup")
           .in("id", companyIds);
@@ -221,7 +261,7 @@ export const cleanupFunction = inngest.createFunction(
           const gaugeNotificationPayloads: TriggerPayload[] = [];
 
           // Create notification payloads for each gauge
-          for (const gauge of outOfCalibrationGauges.data) {
+          for (const gauge of activeOutOfCalibrationGauges) {
             if (!gauge.companyId || !gauge.id) continue;
 
             const notificationGroup =
@@ -269,11 +309,20 @@ export const cleanupFunction = inngest.createFunction(
                   )
                 )
               ];
+              const gaugeCompanyIdsToUpdate = [
+                ...new Set(
+                  activeOutOfCalibrationGauges
+                    .filter((gauge) => gaugeIdsToUpdate.includes(gauge.id))
+                    .map((gauge) => gauge.companyId)
+                    .filter((id): id is string => Boolean(id))
+                )
+              ];
 
-              const updateGauges = await serviceRole
+              const updateGauges = await serviceClient
                 .from("gauge")
                 .update({ lastCalibrationStatus: "Out-of-Calibration" })
-                .in("id", gaugeIdsToUpdate);
+                .in("id", gaugeIdsToUpdate)
+                .in("companyId", gaugeCompanyIdsToUpdate);
 
               if (updateGauges.error) {
                 console.error(
@@ -302,3 +351,40 @@ export const cleanupFunction = inngest.createFunction(
     });
   }
 );
+
+async function filterRowsToActiveCompanies<
+  T extends { companyId?: string | null }
+>(client: JobQueryClient, rows: T[]) {
+  const companyIds = [
+    ...new Set(
+      rows.map((row) => row.companyId).filter((id): id is string => Boolean(id))
+    )
+  ];
+
+  if (companyIds.length === 0) {
+    return [];
+  }
+
+  const activeCompanies = await client
+    .from("company")
+    .select("id")
+    .eq("active", true)
+    .in("id", companyIds);
+
+  if (activeCompanies.error) {
+    throw new Error(
+      `Failed to filter cleanup rows by active companies: ${JSON.stringify(
+        activeCompanies.error
+      )}`
+    );
+  }
+
+  const activeCompanyIds = new Set(
+    (activeCompanies.data ?? []).map((company: { id: string }) => company.id)
+  );
+
+  return rows.filter(
+    (row) =>
+      typeof row.companyId === "string" && activeCompanyIds.has(row.companyId)
+  );
+}

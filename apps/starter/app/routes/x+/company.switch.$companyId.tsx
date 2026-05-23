@@ -24,7 +24,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const companyId = params.companyId;
   const matchedCompany = companies.data?.find(
-    (company) => company.id === companyId
+    (company: { id: string }) => company.id === companyId
   );
   if (!matchedCompany) {
     throw redirect(

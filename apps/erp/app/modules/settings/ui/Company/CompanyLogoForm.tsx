@@ -1,4 +1,4 @@
-import { SUPABASE_URL, useCarbon } from "@carbon/auth";
+import { IMAGE_RESIZER_URL, S3_PUBLIC_BASE_URL } from "@carbon/auth";
 import {
   Avatar,
   Button,
@@ -14,12 +14,15 @@ import type { ChangeEvent } from "react";
 import { useSubmit } from "react-router";
 import type { Company } from "~/modules/settings";
 import { path } from "~/utils/path";
+import { removeStorageObjects, uploadStorageObject } from "~/utils/storage";
 
-const STORAGE_URL_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/public/`;
+const STORAGE_URL_PREFIX = S3_PUBLIC_BASE_URL
+  ? `${S3_PUBLIC_BASE_URL.replace(/\/+$/, "")}/`
+  : "";
 
 const toStoragePath = (urlOrPath: string | null): string | null => {
   if (!urlOrPath) return null;
-  return urlOrPath.startsWith(STORAGE_URL_PREFIX)
+  return STORAGE_URL_PREFIX && urlOrPath.startsWith(STORAGE_URL_PREFIX)
     ? urlOrPath.slice(STORAGE_URL_PREFIX.length)
     : urlOrPath;
 };
@@ -48,7 +51,6 @@ export const maxSizeMB = 10;
 
 const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const submit = useSubmit();
 
   const isIcon = target === "logoLightIcon" || target === "logoDarkIcon";
@@ -64,7 +66,7 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
   const currentLogoPath = company[target] ?? null;
 
   const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       let logo = e.target.files[0];
 
       const supportedTypes = [
@@ -97,13 +99,14 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
         formData.append("contained", "true");
 
         try {
-          const response = await fetch(
-            `${SUPABASE_URL}/functions/v1/image-resizer`,
-            {
-              method: "POST",
-              body: formData
-            }
-          );
+          if (!IMAGE_RESIZER_URL) {
+            throw new Error("IMAGE_RESIZER_URL is not set");
+          }
+
+          const response = await fetch(IMAGE_RESIZER_URL, {
+            method: "POST",
+            body: formData
+          });
 
           if (!response.ok) {
             const errorText = await response
@@ -134,12 +137,11 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
       const previousStoragePath = toStoragePath(currentLogoPath);
       const logoPath = getLogoPath(logo);
 
-      const imageUpload = await carbon.storage
-        .from("public")
-        .upload(logoPath, logo, {
-          cacheControl: "0",
-          upsert: true
-        });
+      const imageUpload = await uploadStorageObject({
+        bucket: "public",
+        path: logoPath,
+        file: logo
+      });
 
       if (imageUpload.error) {
         const errorMessage = imageUpload.error.message || "Unknown error";
@@ -153,10 +155,10 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
           previousStoragePath &&
           previousStoragePath !== imageUpload.data.path
         ) {
-          await carbon.storage
-            .from("public")
-            .remove([previousStoragePath])
-            .catch((cleanupError) => {
+          await removeStorageObjects({
+            bucket: "public",
+            paths: [previousStoragePath]
+          }).catch((cleanupError) => {
               console.warn("Old logo cleanup failed:", cleanupError);
             });
         }
@@ -167,12 +169,13 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
   };
 
   const deleteImage = async () => {
-    if (carbon && currentLogoPath) {
+    if (currentLogoPath) {
       const storagePath = toStoragePath(currentLogoPath);
       if (!storagePath) return;
-      const imageDelete = await carbon.storage
-        .from("public")
-        .remove([storagePath]);
+      const imageDelete = await removeStorageObjects({
+        bucket: "public",
+        paths: [storagePath]
+      });
 
       if (imageDelete.error) {
         const errorMessage = imageDelete.error.message || "Unknown error";

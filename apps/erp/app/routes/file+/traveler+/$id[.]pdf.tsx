@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { JobTravelerPDF } from "@carbon/documents/pdf";
 import type { JSONContent } from "@carbon/react";
 import { getPreferenceHeaders } from "@carbon/react";
@@ -14,28 +13,26 @@ import {
   getTrackedEntityByJobId
 } from "~/modules/production/production.service";
 import { getCompany, getCompanySettings } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {});
+  const { client, companyId } = await requirePermissions(request, {});
 
   const { id } = params;
   if (!id) throw new Error("Could not find job make method id");
 
-  const serviceRole = await getCarbonServiceRole();
-
   // we add the companyId to make sure we belong to the company
   // while allowing guys on the shop floor with no permissions to download the traveler
-  const jobMakeMethod = await getJobMakeMethodById(serviceRole, id, companyId);
+  const jobMakeMethod = await getJobMakeMethodById(client, id, companyId);
   if (jobMakeMethod.error) {
     console.error(jobMakeMethod.error);
     throw new Error("Failed to load job make method");
   }
 
   const [company, job, companySettings] = await Promise.all([
-    getCompany(serviceRole, jobMakeMethod.data?.companyId ?? ""),
-    getJob(serviceRole, jobMakeMethod.data?.jobId ?? ""),
-    getCompanySettings(serviceRole, jobMakeMethod.data?.companyId ?? "")
+    getCompany(client, jobMakeMethod.data?.companyId ?? ""),
+    getJob(client, jobMakeMethod.data?.jobId ?? "", companyId),
+    getCompanySettings(client, jobMakeMethod.data?.companyId ?? "")
   ]);
 
   if (company.error) {
@@ -47,6 +44,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     console.error(job.error);
     throw new Error("Failed to load job");
   }
+  if (job.data.companyId !== companyId) {
+    throw new Error("Job does not belong to this company");
+  }
 
   if (companySettings.error) {
     console.error(companySettings.error);
@@ -54,16 +54,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const [jobOperations, customer, item] = await Promise.all([
-    getJobOperationsByMethodId(serviceRole, id),
-    serviceRole
+    getJobOperationsByMethodId(client, id, companyId),
+    client
       .from("customer")
       .select("*")
       .eq("id", job.data.customerId ?? "")
+      .eq("companyId", companyId)
       .maybeSingle(),
-    serviceRole
+    client
       .from("item")
-      .select("*, modelUpload(thumbnailPath)")
+      .select("*")
       .eq("id", jobMakeMethod.data.itemId ?? "")
+      .eq("companyId", companyId)
       .single()
   ]);
 
@@ -77,11 +79,26 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Error("Failed to load item");
   }
 
+  const modelUpload = item.data.modelUploadId
+    ? await client
+        .from("modelUpload")
+        .select("thumbnailPath")
+        .eq("id", item.data.modelUploadId)
+        .eq("companyId", companyId)
+        .single()
+    : { data: null };
+
+  const itemWithModelUpload = {
+    ...item.data,
+    modelUpload: modelUpload.data
+  };
+
   let batchNumber: string | undefined;
   if (["Batch", "Serial"].includes(item.data.itemTrackingType)) {
     const trackedEntity = await getTrackedEntityByJobId(
-      serviceRole,
-      job.data.id!
+      client,
+      job.data.id!,
+      companyId
     );
     if (trackedEntity.error) {
       console.error(trackedEntity.error);
@@ -95,7 +112,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Compute BOM ID for this make method
   let bomId: string | undefined;
-  const methodTree = await getJobMethodTree(serviceRole, job.data.id!);
+  const methodTree = await getJobMethodTree(client, job.data.id!, companyId);
   if (!methodTree.error && methodTree.data?.length > 0) {
     const flatMethods = flattenTree(methodTree.data[0]);
     const bomIds = generateBomIds(flatMethods);
@@ -110,10 +127,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Get thumbnail if it exists
   let thumbnail: string | null = null;
-  if (item.data.thumbnailPath || item.data.modelUpload?.thumbnailPath) {
-    thumbnail = await getBase64ImageFromSupabase(
-      serviceRole,
-      item.data.thumbnailPath ?? item.data.modelUpload?.thumbnailPath ?? ""
+  if (
+    itemWithModelUpload.thumbnailPath ||
+    itemWithModelUpload.modelUpload?.thumbnailPath
+  ) {
+    thumbnail = await getBase64ImageFromStorage(
+      client,
+      itemWithModelUpload.thumbnailPath ??
+        itemWithModelUpload.modelUpload?.thumbnailPath ??
+        ""
     );
   }
 
@@ -126,7 +148,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       jobMakeMethod={jobMakeMethod.data}
       jobOperations={jobOperations.data}
       customer={customer.data}
-      item={item.data}
+      item={itemWithModelUpload}
       batchNumber={batchNumber}
       bomId={bomId}
       locale={locale}

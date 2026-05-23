@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import {
   Button,
@@ -56,7 +55,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     update: "users"
   });
 
@@ -70,8 +69,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return { success: false, message: "PIN must be 4 digits" };
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const update = await serviceRole
+  const update = await client
     .from("employee")
     .update({ pin: newPin } as any)
     .eq("id", operatorId)

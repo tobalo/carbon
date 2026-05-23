@@ -17,19 +17,13 @@ import {
   allImagesPresentLocally,
   bootSharedRedis,
   bootStack,
-  type Container,
   devComposeImageRefs,
   listComposeServices,
-  listContainers,
-  pullStack,
-  restartServices,
-  tailServiceLogs
+  pullStack
 } from "../services/compose.js";
 import {
-  applyBootstrapSql,
   applyMigrations,
   waitForPostgres,
-  waitForStorageReady,
   waitForTcp
 } from "../services/migrations.js";
 import {
@@ -49,7 +43,8 @@ import {
   ensureSlugAvailable,
   getSlot,
   getWorktreeRoot,
-  type JwtCreds,
+  isPortAvailable,
+  type AuthSecret,
   type PortMap,
   persistSlug,
   projectName,
@@ -77,17 +72,17 @@ type Ctx = {
   slug: string;
   ports: PortMap;
   redisDb: number;
-  jwt: JwtCreds;
+  auth: AuthSecret;
   branchPrefix: string;
 };
 
 export async function up(opts: UpOpts = {}) {
   const shouldMigrate = opts.migrate ?? true;
-  // Type/swagger regen depends on a freshly-migrated schema. If migrations
-  // were skipped, schema is unchanged — skip regen too.
+  // Schema validation depends on a freshly-migrated schema. If migrations were
+  // skipped, schema is unchanged, so skip this too.
   const shouldRegen = shouldMigrate && (opts.regen ?? true);
   const shouldBorrow = opts.borrow === true;
-  // Services-only mode: boot compose stack + portless aliases (api/studio/
+  // Services-only mode: boot compose stack + portless aliases (storage/console/
   // mail/inngest URLs still useful), skip spawnApps + auto-`down` on Ctrl+C.
   // Triggered by --no-apps OR by deselecting everything in the picker.
   const appsRequested = opts.apps ?? true;
@@ -121,7 +116,7 @@ export async function up(opts: UpOpts = {}) {
   // Resolve borrowed slot before ensureSlugAvailable (borrowing doesn't start
   // own containers so the slug conflict check is irrelevant).
   let borrowedEntry:
-    | { ports: PortMap; redisDb: number; jwt: JwtCreds }
+    | { ports: PortMap; redisDb: number; auth: AuthSecret }
     | undefined;
   if (shouldBorrow) {
     const borrowSlug = await pickBorrowSlug(slug);
@@ -207,7 +202,7 @@ async function provisionSlot(
   root: string,
   slug: string,
   portless: boolean,
-  borrowedEntry?: { ports: PortMap; redisDb: number; jwt: JwtCreds }
+  borrowedEntry?: { ports: PortMap; redisDb: number; auth: AuthSecret }
 ): Promise<Ctx> {
   let ctx!: Ctx;
   await tasks([
@@ -217,16 +212,25 @@ async function provisionSlot(
         // Always resolve own slot so PORT_ERP/PORT_MES are claimed for this
         // worktree and won't collide with the borrowed stack's running dev servers.
         const ownSlot = await resolveSlot(slug, root);
-        // Pin well-known ports in localhost mode so URLs are predictable and
-        // OAuth redirect URIs can be registered once in Google/Azure console.
+        // Prefer well-known ports in localhost mode, but keep the generated
+        // free port when another local stack already owns the preferred one.
+        const localhostPortFallbacks: string[] = [];
         if (!portless && !borrowedEntry) {
-          ownSlot.ports.PORT_API = 54321;
-          ownSlot.ports.PORT_ERP = 3000;
-          ownSlot.ports.PORT_MES = 3001;
+          for (const [name, preferredPort] of [
+            ["PORT_STORAGE", 54321],
+            ["PORT_ERP", 3000],
+            ["PORT_MES", 3001]
+          ] as const) {
+            if (await isPortAvailable(preferredPort)) {
+              ownSlot.ports[name] = preferredPort;
+            } else if (ownSlot.ports[name] !== preferredPort) {
+              localhostPortFallbacks.push(`${name}:${ownSlot.ports[name]}`);
+            }
+          }
         }
         const slot = borrowedEntry
           ? {
-              // Backend ports (DB, API, Studio, Inbucket, Inngest) come from the
+              // Backend ports (DB, storage, console, mail, Inngest) come from the
               // borrowed stack — apps talk to those running containers.
               // App ports (ERP, MES) come from our own slot — dev servers bind here,
               // so they don't conflict with the borrowed stack's dev servers.
@@ -236,7 +240,7 @@ async function provisionSlot(
                 PORT_MES: ownSlot.ports.PORT_MES
               } as PortMap,
               redisDb: borrowedEntry.redisDb,
-              jwt: borrowedEntry.jwt
+              auth: borrowedEntry.auth
             }
           : ownSlot;
         const branch = await currentBranch(root);
@@ -254,7 +258,9 @@ async function provisionSlot(
           ? `borrowed backend ports, own app ports (ERP :${slot.ports.PORT_ERP} MES :${slot.ports.PORT_MES}), redis db ${slot.redisDb}`
           : portless
             ? `prefix "${branchPrefix}", redis db ${slot.redisDb}`
-            : `localhost mode, redis db ${slot.redisDb}`;
+            : localhostPortFallbacks.length > 0
+              ? `localhost mode, redis db ${slot.redisDb}, fallbacks ${localhostPortFallbacks.join(", ")}`
+              : `localhost mode, redis db ${slot.redisDb}`;
       }
     },
     {
@@ -308,7 +314,7 @@ async function bootDockerStack(ctx: Ctx) {
     {
       title: "Boot docker compose stack",
       task: async (msg) => {
-        msg("starting 12 services");
+        msg("starting dev services");
         await bootStack(ctx.root, ctx.slug);
         return "containers up";
       }
@@ -317,16 +323,15 @@ async function bootDockerStack(ctx: Ctx) {
 }
 
 // Wait for services via clack progress bar:
-//   3× TCP ports → +1 postgres ready → +1 storage.buckets = 5 ticks.
-// `waitForStorageReady` owns the storage heal path internally.
+//   3× TCP ports → +1 postgres ready = 4 ticks.
 async function waitForServices(ctx: Ctx) {
-  const bar = progress({ style: "heavy", max: 5 });
+  const bar = progress({ style: "heavy", max: 4 });
   bar.start("Waiting for services");
   try {
     await waitForTcp(
       [
         `tcp:${ctx.ports.PORT_DB}`,
-        `tcp:${ctx.ports.PORT_API}`,
+        `tcp:${ctx.ports.PORT_STORAGE}`,
         `tcp:${ctx.ports.PORT_INNGEST}`
       ],
       { onProgress: (line) => bar.advance(1, line.slice(0, 80)) }
@@ -336,21 +341,6 @@ async function waitForServices(ctx: Ctx) {
     await waitForPostgres(ctx.ports.PORT_DB);
     bar.advance(1, "postgres ready");
 
-    await waitForStorageReady(ctx.ports.PORT_DB, {
-      onProgress: (line) => bar.message(line.slice(0, 80)),
-      onHeal: async () => {
-        bar.message("storage stuck — re-applying init.sql");
-        await applyBootstrapSql(ctx.root, ctx.ports.PORT_DB);
-        bar.message("restarting storage / gotrue / postgrest");
-        await restartServices(ctx.root, ctx.slug, [
-          "storage",
-          "gotrue",
-          "postgrest"
-        ]);
-      },
-      onTimeout: () => dumpStorageDiagnostics(ctx)
-    });
-    bar.advance(1, "storage.buckets ready");
     bar.stop("all services responding");
   } catch (err) {
     bar.stop("services not ready");
@@ -382,12 +372,11 @@ async function runDatabaseMigrations(
     ...(cfg.shouldRegen
       ? [
           {
-            title: "Regenerate types & swagger",
+            title: "Validate schema types",
             task: async () => {
               if (!migrationsApplied) return "skipped (no new migrations)";
               await execa("pnpm", ["db:types"], { cwd: ctx.root });
-              await execa("pnpm", ["generate:swagger"], { cwd: ctx.root });
-              return "types + swagger refreshed";
+              return "schema types validated";
             }
           }
         ]
@@ -470,28 +459,4 @@ async function runAppsThenTeardown(
   } finally {
     detach();
   }
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostics
-// ---------------------------------------------------------------------------
-
-async function dumpStorageDiagnostics(ctx: Ctx) {
-  const containers = await listContainers(ctx.root, ctx.slug);
-  const out: string[] = ["", "--- container state ---"];
-  for (const name of ["postgres", "storage"]) {
-    out.push(formatContainerLine(name, containers));
-  }
-  out.push("", "--- storage logs (last 50) ---");
-  out.push(await tailServiceLogs(ctx.root, ctx.slug, "storage", 50));
-  out.push("", "--- postgres logs (last 20) ---");
-  out.push(await tailServiceLogs(ctx.root, ctx.slug, "postgres", 20));
-  out.push("");
-  process.stderr.write(out.join("\n") + "\n");
-}
-
-function formatContainerLine(name: string, containers: Container[]): string {
-  const c = containers.find((x) => x.Service === name);
-  if (!c) return `${name.padEnd(10)} (not found)`;
-  return `${name.padEnd(10)} state=${c.State} health=${c.Health ?? "n/a"}  ${c.Status}`;
 }

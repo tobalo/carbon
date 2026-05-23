@@ -1,5 +1,5 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type { TableInsert } from "@carbon/database/schema";
 import {
   getCarbonOrderStatus,
   getCustomerIdAndContactId,
@@ -11,9 +11,9 @@ import {
   insertQuoteLines,
   OrderSchema
 } from "@carbon/ee/paperless-parts";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { inngest } from "../../client";
+import type { JobQueryClient } from "../../../lib/query-client";
 
 const payloadSchema = z.discriminatedUnion("type", [
   z.object({
@@ -121,16 +121,22 @@ export const paperlessPartsFunction = inngest.createFunction(
     console.info(`Paperless Parts webhook received: ${payload.payload.type}`);
     console.info(`Payload:`, payload);
 
-    const carbon = getCarbonServiceRole();
+    const carbon = getCarbonServiceClient();
     const paperless = await getPaperlessParts(payload.apiKey);
 
     const [company, integration] = await Promise.all([
-      carbon.from("company").select("*").eq("id", payload.companyId).single(),
+      carbon
+        .from("company")
+        .select("id, active")
+        .eq("id", payload.companyId)
+        .eq("active", true)
+        .single(),
       carbon
         .from("companyIntegration")
         .select("*")
         .eq("companyId", payload.companyId)
         .eq("id", "paperless-parts")
+        .eq("active", true)
         .single()
     ]);
 
@@ -271,7 +277,7 @@ export const paperlessPartsFunction = inngest.createFunction(
         }
 
         // Create a quote object from the Paperless Parts data
-        const quote: Database["public"]["Tables"]["quote"]["Insert"] = {
+        const quote = {
           companyId: payload.companyId,
           customerId: quoteCustomerId,
           customerContactId: quoteCustomerContactId,
@@ -283,12 +289,12 @@ export const paperlessPartsFunction = inngest.createFunction(
           exchangeRateUpdatedAt: undefined as string | undefined,
           expirationDate: undefined as string | undefined,
           revisionId: ppQuoteRevisionNumber ?? 0
-        };
+        } satisfies TableInsert<"quote">;
 
         const [quoteCustomerPayment, quoteCustomerShipping, quoteOpportunity] =
           await Promise.all([
-            getCustomerPayment(carbon, quote.customerId),
-            getCustomerShipping(carbon, quote.customerId),
+            getCustomerPayment(carbon, quote.customerId, payload.companyId),
+            getCustomerShipping(carbon, quote.customerId, payload.companyId),
             carbon
               .from("opportunity")
               .insert([
@@ -385,25 +391,26 @@ export const paperlessPartsFunction = inngest.createFunction(
               expiresAt: quote.expirationDate ?? undefined,
               companyId: quote.companyId
             })
-          ]);
+        ]);
 
         if (quoteShipment.error) {
-          await deleteQuote(carbon, quoteId);
+          await deleteQuote(carbon, quoteId, payload.companyId);
           return quoteShipment;
         }
         if (quotePayment.error) {
-          await deleteQuote(carbon, quoteId);
+          await deleteQuote(carbon, quoteId, payload.companyId);
           return quotePayment;
         }
         if (quoteOpportunity.error) {
-          await deleteQuote(carbon, quoteId);
+          await deleteQuote(carbon, quoteId, payload.companyId);
           return quoteOpportunity;
         }
         if (quoteExternalLink.data) {
           await carbon
             .from("quote")
             .update({ externalLinkId: quoteExternalLink.data.id })
-            .eq("id", quoteId);
+            .eq("id", quoteId)
+            .eq("companyId", payload.companyId);
         }
 
         // Insert quote lines from Paperless Parts quote items
@@ -422,7 +429,7 @@ export const paperlessPartsFunction = inngest.createFunction(
           console.log("Quote lines successfully created");
         } catch (error) {
           console.error("Failed to insert quote lines:", error);
-          await deleteQuote(carbon, quoteId);
+          await deleteQuote(carbon, quoteId, payload.companyId);
           result = {
             success: false,
             message: "Failed to insert quote lines"
@@ -477,7 +484,8 @@ export const paperlessPartsFunction = inngest.createFunction(
           const update = await carbon
             .from("salesOrder")
             .update({ status })
-            .eq("id", existingOrderMapping.data.entityId);
+            .eq("id", existingOrderMapping.data.entityId)
+            .eq("companyId", payload.companyId);
 
           if (update.error) {
             console.log("Failed to update sales order", update.error);
@@ -537,8 +545,8 @@ export const paperlessPartsFunction = inngest.createFunction(
 
         const [orderCustomerPayment, orderCustomerShipping, orderOpportunity] =
           await Promise.all([
-            getCustomerPayment(carbon, orderCustomerId),
-            getCustomerShipping(carbon, orderCustomerId),
+            getCustomerPayment(carbon, orderCustomerId, payload.companyId),
+            getCustomerShipping(carbon, orderCustomerId, payload.companyId),
             carbon
               .from("opportunity")
               .insert([
@@ -682,7 +690,7 @@ export const paperlessPartsFunction = inngest.createFunction(
 
         if (orderShipment.error) {
           console.log("Failed to create shipment", orderShipment.error);
-          await deleteSalesOrder(carbon, salesOrderId);
+          await deleteSalesOrder(carbon, salesOrderId, payload.companyId);
           result = {
             success: false,
             message: "Failed to create shipment"
@@ -691,7 +699,7 @@ export const paperlessPartsFunction = inngest.createFunction(
         }
         if (orderPayment.error) {
           console.log("Failed to create payment", orderPayment.error);
-          await deleteSalesOrder(carbon, salesOrderId);
+          await deleteSalesOrder(carbon, salesOrderId, payload.companyId);
           result = {
             success: false,
             message: "Failed to create payment"
@@ -715,7 +723,7 @@ export const paperlessPartsFunction = inngest.createFunction(
           console.log("Order lines successfully created");
         } catch (error) {
           console.error("Failed to insert order lines:", error);
-          await deleteSalesOrder(carbon, salesOrderId);
+          await deleteSalesOrder(carbon, salesOrderId, payload.companyId);
           result = {
             success: false,
             message: "Failed to insert order lines"
@@ -773,7 +781,7 @@ export const paperlessPartsFunction = inngest.createFunction(
 );
 
 async function getNextSequence(
-  client: SupabaseClient<Database>,
+  client: JobQueryClient,
   table: string,
   companyId: string
 ) {
@@ -784,29 +792,33 @@ async function getNextSequence(
 }
 
 async function getCustomerPayment(
-  client: SupabaseClient<Database>,
-  customerId: string
+  client: JobQueryClient,
+  customerId: string,
+  companyId: string
 ) {
   return client
     .from("customerPayment")
     .select("*")
     .eq("customerId", customerId)
+    .eq("companyId", companyId)
     .single();
 }
 
 async function getCustomerShipping(
-  client: SupabaseClient<Database>,
-  customerId: string
+  client: JobQueryClient,
+  customerId: string,
+  companyId: string
 ) {
   return client
     .from("customerShipping")
     .select("*")
     .eq("customerId", customerId)
+    .eq("companyId", companyId)
     .single();
 }
 
 async function getCurrencyByCode(
-  client: SupabaseClient<Database>,
+  client: JobQueryClient,
   companyGroupId: string,
   currencyCode: string
 ) {
@@ -818,19 +830,32 @@ async function getCurrencyByCode(
     .single();
 }
 
-async function deleteQuote(client: SupabaseClient<Database>, quoteId: string) {
-  return client.from("quote").delete().eq("id", quoteId);
+async function deleteQuote(
+  client: JobQueryClient,
+  quoteId: string,
+  companyId: string
+) {
+  return client
+    .from("quote")
+    .delete()
+    .eq("id", quoteId)
+    .eq("companyId", companyId);
 }
 
 async function deleteSalesOrder(
-  client: SupabaseClient<Database>,
-  salesOrderId: string
+  client: JobQueryClient,
+  salesOrderId: string,
+  companyId: string
 ) {
-  return client.from("salesOrder").delete().eq("id", salesOrderId);
+  return client
+    .from("salesOrder")
+    .delete()
+    .eq("id", salesOrderId)
+    .eq("companyId", companyId);
 }
 
 async function upsertExternalLink(
-  client: SupabaseClient<Database>,
+  client: JobQueryClient,
   externalLink: {
     documentType: "Quote" | "SupplierQuote" | "Customer";
     documentId: string;

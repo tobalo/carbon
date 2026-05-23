@@ -24,22 +24,43 @@ export async function action({ request }: ActionFunctionArgs) {
       case "jobOperationNote":
         const { operationId } = payload.data;
 
-        const [job, previousMessages] = await Promise.all([
+        const [jobOperation, previousMessages] = await Promise.all([
           client
             .from("jobOperation")
-            .select("*, job(id, assignee), jobMakeMethod(id, parentMaterialId)")
+            .select("id, jobId, jobMakeMethodId")
             .eq("id", operationId)
+            .eq("companyId", companyId)
             .single(),
           client
             .from("jobOperationNote")
             .select("*")
             .eq("jobOperationId", operationId)
+            .eq("companyId", companyId)
         ]);
 
-        const assignee = job.data?.job?.assignee;
-        const jobId = job.data?.job?.id;
-        const makeMethodId = job.data?.jobMakeMethod?.id;
-        const materialId = job.data?.jobMakeMethod?.parentMaterialId;
+        const [job, jobMakeMethod] = await Promise.all([
+          jobOperation.data?.jobId
+            ? client
+                .from("job")
+                .select("id, assignee")
+                .eq("id", jobOperation.data.jobId)
+                .eq("companyId", companyId)
+                .single()
+            : { data: null },
+          jobOperation.data?.jobMakeMethodId
+            ? client
+                .from("jobMakeMethod")
+                .select("id, parentMaterialId")
+                .eq("id", jobOperation.data.jobMakeMethodId)
+                .eq("companyId", companyId)
+                .single()
+            : { data: null }
+        ]);
+
+        const assignee = job.data?.assignee;
+        const jobId = job.data?.id;
+        const makeMethodId = jobMakeMethod.data?.id;
+        const materialId = jobMakeMethod.data?.parentMaterialId;
 
         const usersToNotify = [
           ...new Set([

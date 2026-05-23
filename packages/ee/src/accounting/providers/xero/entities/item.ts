@@ -1,4 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import { type Accounting, BaseEntitySyncer } from "../../../core/types";
 import { throwXeroApiError } from "../../../core/utils";
 import { parseDotnetDate, type Xero } from "../models";
@@ -58,30 +58,29 @@ export class ItemSyncer extends BaseEntitySyncer<
   ): Promise<Map<string, Accounting.Item>> {
     if (ids.length === 0) return new Map();
 
-    const rows = await this.database
-      .selectFrom("item")
-      .leftJoin("itemCost", "itemCost.itemId", "item.id")
-      .leftJoin("itemUnitSalePrice", "itemUnitSalePrice.itemId", "item.id")
-      .select([
-        "item.id",
-        "item.readableId",
-        "item.readableIdWithRevision",
-        "item.name",
-        "item.description",
-        "item.companyId",
-        "item.type",
-        "item.unitOfMeasureCode",
-        "item.replenishmentSystem",
-        "item.itemTrackingType",
-        "item.updatedAt",
-        "itemCost.unitCost",
-        "itemUnitSalePrice.unitSalePrice"
-      ])
-      .where("item.id", "in", ids)
-      .where("item.companyId", "=", this.companyId)
-      .execute();
+    const { rows } = await this.database.execute<ItemRow>(sql`
+      select
+        i.id,
+        i."readableId",
+        i."readableIdWithRevision",
+        i.name,
+        i.description,
+        i."companyId",
+        i.type,
+        i."unitOfMeasureCode",
+        i."replenishmentSystem",
+        i."itemTrackingType",
+        i."updatedAt",
+        ic."unitCost",
+        iusp."unitSalePrice"
+      from item i
+      left join "itemCost" ic on ic."itemId" = i.id
+      left join "itemUnitSalePrice" iusp on iusp."itemId" = i.id
+      where i.id = any(${ids}::text[])
+        and i."companyId" = ${this.companyId}
+    `);
 
-    return this.transformRows(rows as ItemRow[]);
+    return this.transformRows(rows);
   }
 
   private transformRows(rows: ItemRow[]): Map<string, Accounting.Item> {
@@ -201,7 +200,7 @@ export class ItemSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.Item>,
     remoteId: string
   ): Promise<string> {
@@ -223,32 +222,31 @@ export class ItemSyncer extends BaseEntitySyncer<
     }
 
     // Update item table (mapping is handled by linkEntities in base class)
-    await tx
-      .updateTable("item")
-      .set({
-        name: data.name,
-        description: data.description,
-        updatedAt: new Date().toISOString()
-      })
-      .where("id", "=", existingLocalId)
-      .execute();
+    await tx.execute(sql`
+      update item
+      set
+        name = ${data.name},
+        description = ${data.description},
+        "updatedAt" = ${new Date().toISOString()}
+      where id = ${existingLocalId}
+    `);
 
     // Update itemCost if unitCost changed
     if (data.unitCost !== undefined) {
-      await tx
-        .updateTable("itemCost")
-        .set({ unitCost: data.unitCost })
-        .where("itemId", "=", existingLocalId)
-        .execute();
+      await tx.execute(sql`
+        update "itemCost"
+        set "unitCost" = ${data.unitCost}
+        where "itemId" = ${existingLocalId}
+      `);
     }
 
     // Update itemUnitSalePrice if unitSalePrice changed
     if (data.unitSalePrice !== undefined) {
-      await tx
-        .updateTable("itemUnitSalePrice")
-        .set({ unitSalePrice: data.unitSalePrice })
-        .where("itemId", "=", existingLocalId)
-        .execute();
+      await tx.execute(sql`
+        update "itemUnitSalePrice"
+        set "unitSalePrice" = ${data.unitSalePrice}
+        where "itemId" = ${existingLocalId}
+      `);
     }
 
     return existingLocalId;
@@ -259,21 +257,18 @@ export class ItemSyncer extends BaseEntitySyncer<
    * Used for smart matching during backfill when no ID mapping exists yet.
    */
   private async findLocalItemByCode(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     code: string
   ): Promise<string | null> {
     // Try readableIdWithRevision first (exact match for the Code sent to Xero)
-    const match = await tx
-      .selectFrom("item")
-      .select("id")
-      .where("companyId", "=", this.companyId)
-      .where((eb) =>
-        eb.or([
-          eb("readableIdWithRevision" as any, "=", code),
-          eb("readableId", "=", code)
-        ])
-      )
-      .executeTakeFirst();
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      select id
+      from item
+      where "companyId" = ${this.companyId}
+        and ("readableIdWithRevision" = ${code} or "readableId" = ${code})
+      limit 1
+    `);
+    const match = rows[0];
 
     return match?.id ?? null;
   }

@@ -1,8 +1,8 @@
 import { notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import { Loading } from "@carbon/react";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { Suspense } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { Await, useLoaderData } from "react-router";
@@ -16,7 +16,7 @@ async function handleKanbanStart({
   companyId,
   id
 }: {
-  client: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   companyId: string;
   id: string;
 }): Promise<{ data: string; error: null } | { data: null; error: string }> {

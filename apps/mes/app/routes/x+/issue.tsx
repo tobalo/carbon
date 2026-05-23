@@ -1,7 +1,7 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -25,8 +25,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const { jobOperationId, materialId, itemId, quantity, adjustmentType } =
     validation.data;
 
-  const serviceRole = await getCarbonServiceRole();
-  const issue = await serviceRole.functions.invoke("issue", {
+  const issue = await invokeFunction("issue", {
     body: {
       id: jobOperationId,
       type: "partToOperation",

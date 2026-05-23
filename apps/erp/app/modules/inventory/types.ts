@@ -1,4 +1,9 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  receiptSourceDocumentEnum,
+  shipmentSourceDocumentEnum,
+  shippingCarrierEnum
+} from "@carbon/database/schema";
 import type {
   getBatchProperties,
   getInventoryItems,
@@ -52,7 +57,7 @@ export type ReceiptLineItem = Omit<
 >;
 
 export type ReceiptSourceDocument =
-  Database["public"]["Enums"]["receiptSourceDocument"];
+  EnumValue<typeof receiptSourceDocumentEnum>;
 
 export type Shipment = NonNullable<
   Awaited<ReturnType<typeof getShipments>>["data"]
@@ -66,14 +71,14 @@ export type ShipmentLineTracking = NonNullable<
   Awaited<ReturnType<typeof getShipmentTracking>>["data"]
 >[number];
 
-export type ShippingCarrier = Database["public"]["Enums"]["shippingCarrier"];
+export type ShippingCarrier = EnumValue<typeof shippingCarrierEnum>;
 
 export type ShippingMethod = NonNullable<
   Awaited<ReturnType<typeof getShippingMethods>>["data"]
 >[number];
 
 export type ShipmentSourceDocument =
-  Database["public"]["Enums"]["shipmentSourceDocument"];
+  EnumValue<typeof shipmentSourceDocumentEnum>;
 
 export type StockTransfer = NonNullable<
   Awaited<ReturnType<typeof getStockTransfers>>["data"]

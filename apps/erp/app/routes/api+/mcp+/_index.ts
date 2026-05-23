@@ -21,8 +21,15 @@ export async function action({ request }: ActionFunctionArgs) {
     console.log("[MCP] Added carbon-key header from Bearer token");
   }
 
-  const { client, companyId, companyGroupId, userId } =
-    await requirePermissions(request, {});
+  const auth = await requirePermissions(request, {});
+
+  if (auth.role === "customer" || auth.role === "supplier") {
+    return new Response("MCP access is not available for external accounts", {
+      status: 403
+    });
+  }
+
+  const { client, companyId, companyGroupId, userId } = auth;
   console.log("[MCP] Auth successful:", { companyId, userId });
 
   const server = createMcpServer({ client, companyId, companyGroupId, userId });

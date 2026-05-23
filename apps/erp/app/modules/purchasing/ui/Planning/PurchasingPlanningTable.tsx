@@ -275,7 +275,7 @@ const PlanningTable = memo(
               </VStack>
             ),
             cell: ({ row }) => {
-              const value = row.getValue<number>(weekKey);
+              const value = row.getValue<number>(String(weekKey));
               if (value === undefined) return "-";
               return (
                 <span

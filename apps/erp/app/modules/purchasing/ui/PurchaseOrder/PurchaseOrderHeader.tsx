@@ -495,7 +495,6 @@ const PurchaseOrderHeader = () => {
                             <HStack spacing={8}>
                               <span>{invoice.invoiceId}</span>
                               <PurchaseInvoicingStatus
-                                // @ts-expect-error - Return type is not defined
                                 status={invoice.status}
                               />
                             </HStack>

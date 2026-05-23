@@ -110,7 +110,7 @@ const ProceduresTable = memo(({ data, tags, count }: ProceduresTableProps) => {
         header: t`Tags`,
         cell: ({ row }) => (
           <HStack spacing={0} className="gap-1">
-            {row.original.tags?.map((tag) => (
+            {row.original.tags?.map((tag: any) => (
               <Badge key={tag} variant="secondary">
                 {tag}
               </Badge>

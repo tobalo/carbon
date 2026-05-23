@@ -28,7 +28,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: upload.error.message, data: null }, { status: 500 });
   }
 
-  return upload;
+  return data({ data: upload.data, error: null });
 }
 
 export default function Route() {

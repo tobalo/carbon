@@ -1,6 +1,5 @@
 import { useCarbon } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import {
   Button,
   ClientOnly,
@@ -17,7 +16,6 @@ import {
   useInterval,
   useLocalStorage,
   useMount,
-  useRealtimeChannel,
   VStack
 } from "@carbon/react";
 import {
@@ -50,8 +48,7 @@ import { usePeople } from "~/stores";
 import { makeDurations } from "~/utils/durations";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {});
-  const serviceRole = getCarbonServiceRole();
+  const { client, companyId } = await requirePermissions(request, {});
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
@@ -137,11 +134,11 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const locationId = context.get(userContext)?.locationId;
 
   const [workCenters, processes, operations] = await Promise.all([
-    getWorkCentersByLocation(serviceRole, locationId),
-    getProcessesList(serviceRole, companyId),
+    getWorkCentersByLocation(client, locationId, companyId),
+    getProcessesList(client, companyId),
     getActiveJobOperationsByLocation(
-      serviceRole,
-      locationId,
+      client,
+      { locationId, companyId },
       selectedWorkCenterIds
     )
   ]);
@@ -150,18 +147,17 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
     console.error(operations.error);
   }
 
+  const operationsData = (operations.data ?? []) as any[];
   const activeWorkCenters = new Set();
-  operations.data?.forEach((op) => {
+  operationsData.forEach((op) => {
     if (op.operationStatus === "In Progress") {
       activeWorkCenters.add(op.workCenterId);
     }
   });
 
   let filteredOperations = selectedWorkCenterIds.length
-    ? (operations.data?.filter((op) =>
-        selectedWorkCenterIds.includes(op.workCenterId)
-      ) ?? [])
-    : (operations.data ?? []);
+    ? operationsData.filter((op) => selectedWorkCenterIds.includes(op.workCenterId))
+    : operationsData;
 
   if (selectedSalesOrderIds.length) {
     filteredOperations = filteredOperations.filter((op) =>
@@ -171,7 +167,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
 
   if (selectedTags.length) {
     filteredOperations = filteredOperations.filter((op) =>
-      op.tags?.some((tag) => selectedTags.includes(tag))
+      op.tags?.some((tag: string) => selectedTags.includes(tag))
     );
   }
 
@@ -214,7 +210,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
     }) ?? [];
 
   const customerIds = filteredOperations.map((op) => op.jobCustomerId);
-  const customers = await getCustomers(serviceRole, companyId, customerIds);
+  const customers = await getCustomers(client, companyId, customerIds);
 
   // Get unique tags and assignees for filters
   const availableTags = Array.from(
@@ -332,10 +328,6 @@ function KanbanSchedule() {
     [displaySettings]
   );
 
-  const sortItems = useCallback((items: Item[]) => {
-    return items.sort((a, b) => a.priority - b.priority);
-  }, []);
-
   const visibleColumns = useMemo(() => {
     if (mergedDisplaySettings.emptyWorkCenters) {
       return columns;
@@ -349,11 +341,7 @@ function KanbanSchedule() {
     );
   }, [columns, items, mergedDisplaySettings.emptyWorkCenters]);
 
-  const { progressByOperation } = useProgressByOperation(
-    items,
-    setItems,
-    sortItems
-  );
+  const { progressByOperation } = useProgressByOperation(items);
 
   const [people] = usePeople();
   const [params] = useUrlParams();
@@ -561,16 +549,11 @@ interface Progress {
   employees?: Set<string>;
 }
 
-function useProgressByOperation(
-  items: Item[],
-  setItems: React.Dispatch<React.SetStateAction<Item[]>>,
-  sortItems: (items: Item[]) => Item[]
-) {
+function useProgressByOperation(items: Item[]) {
   const {
     company: { id: companyId }
   } = useUser();
-  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const { carbon, accessToken } = useCarbon();
+  const { carbon } = useCarbon();
 
   const [productionEventsByOperation, setProductionEventsByOperation] =
     useState<Record<string, Event[]>>({});
@@ -578,6 +561,7 @@ function useProgressByOperation(
   const [progressByOperation, setProgressByOperation] = useState<
     Record<string, Progress>
   >({});
+  const operationIds = items.map((item) => item.id);
 
   const getProductionEvents = useCallback(
     async (operationIds: string[]) => {
@@ -611,8 +595,12 @@ function useProgressByOperation(
   );
 
   useMount(() => {
-    getProductionEvents(items.map((item) => item.id));
+    void getProductionEvents(operationIds);
   });
+
+  useInterval(() => {
+    void getProductionEvents(operationIds);
+  }, carbon && operationIds.length > 0 ? 15_000 : null);
 
   const getProgress = useCallback(() => {
     const timeNow = now(getLocalTimeZone());
@@ -676,87 +664,6 @@ function useProgressByOperation(
       setProgressByOperation(progress);
     }
   }, [productionEventsByOperation]);
-
-  useRealtimeChannel({
-    topic: `kanban-schedule:${companyId}`,
-    dependencies: [items.length],
-    setup(channel) {
-      return channel
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "jobOperation",
-            filter: `id=in.(${items.map((item) => item.id).join(",")})`
-          },
-          (payload) => {
-            switch (payload.eventType) {
-              case "UPDATE": {
-                const { new: updated } = payload;
-                setItems((prevItems: Item[]) =>
-                  sortItems(
-                    prevItems.map((item: Item) => {
-                      if (item.id === updated.id) {
-                        return {
-                          ...item,
-                          columnId: updated.workCenterId,
-                          priority: updated.priority
-                        };
-                      }
-                      return item;
-                    })
-                  )
-                );
-                break;
-              }
-              case "DELETE": {
-                const { old: deleted } = payload;
-                setItems((prevItems: Item[]) =>
-                  sortItems(
-                    prevItems.filter((item: Item) => item.id !== deleted.id)
-                  )
-                );
-                break;
-              }
-            }
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "productionEvent",
-            filter: `companyId=eq.${companyId}`
-          },
-          (payload) => {
-            if (payload.new) {
-              const event = payload.new as Event;
-              if (items.some((item) => item.id === event.jobOperationId)) {
-                setProductionEventsByOperation((prev) => ({
-                  ...prev,
-                  [event.jobOperationId]: [
-                    ...(prev[event.jobOperationId] ?? []),
-                    event
-                  ]
-                }));
-              }
-            } else if (payload.old) {
-              const event = payload.old as Event;
-              if (items.some((item) => item.id === event.jobOperationId)) {
-                setProductionEventsByOperation((prev) => ({
-                  ...prev,
-                  [event.jobOperationId]: (
-                    prev[event.jobOperationId] ?? []
-                  ).filter((e) => e.id !== event.id)
-                }));
-              }
-            }
-          }
-        );
-    }
-  });
 
   return { progressByOperation };
 }

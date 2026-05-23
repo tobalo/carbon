@@ -1,14 +1,18 @@
-import type { Database, Json } from "@carbon/database";
+import { invokeFunction } from "@carbon/auth/functions.server";
+import type {
+  Json,
+  QueryDatabase
+} from "@carbon/database/schema";
 import { fetchAllFromTable } from "@carbon/database";
 import type { JSONContent } from "@carbon/react";
 import { parseDate } from "@internationalized/date";
-import type { FileObject, StorageError } from "@supabase/storage-js";
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import { listObjects, toStorageFileObject } from "@carbon/storage";
+import type { QueryError, CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { z } from "zod";
 import type { StorageItem } from "~/types";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import { getDefaultStorageUnitForJob } from "../inventory";
 import type {
   operationParameterValidator,
@@ -40,7 +44,7 @@ import type {
 import type { Job } from "./types";
 
 export async function convertSalesOrderLinesToJobs(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   {
     orderId,
     companyId,
@@ -80,14 +84,33 @@ export async function convertSalesOrderLinesToJobs(
     return { data: null, error: "No lines found" };
   }
 
-  const opportunity = await client
-    .from("opportunity")
-    .select("*, quotes(*), salesOrders(*)")
-    .eq("id", salesOrder.data?.opportunityId ?? "")
-    .single();
+  const opportunityId = salesOrder.data?.opportunityId;
+  const [quote, opportunitySalesOrder] = await Promise.all([
+    opportunityId
+      ? client
+          .from("quote")
+          .select("id")
+          .eq("opportunityId", opportunityId)
+          .eq("companyId", companyId)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    opportunityId
+      ? client
+          .from("salesOrder")
+          .select("id")
+          .eq("opportunityId", opportunityId)
+          .eq("companyId", companyId)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null })
+  ]);
 
-  const quoteId = opportunity.data?.quotes[0]?.id;
-  const salesOrderId = opportunity.data?.salesOrders[0]?.id;
+  if (quote.error) return quote;
+  if (opportunitySalesOrder.error) return opportunitySalesOrder;
+
+  const quoteId = quote.data?.id;
+  const salesOrderId = opportunitySalesOrder.data?.id;
 
   const errors: string[] = [];
   let jobsCreated = 0;
@@ -207,7 +230,7 @@ export async function convertSalesOrderLinesToJobs(
         }
 
         if (quoteId) {
-          const upsertMethod = await client.functions.invoke("get-method", {
+          const upsertMethod = await invokeFunction("get-method", {
             body: {
               type: "quoteLineToJob",
               sourceId: `${quoteId}:${line.id}`,
@@ -224,7 +247,7 @@ export async function convertSalesOrderLinesToJobs(
             continue;
           }
         } else {
-          const upsertMethod = await client.functions.invoke("get-method", {
+          const upsertMethod = await invokeFunction("get-method", {
             body: {
               type: "itemToJob",
               sourceId: data.itemId,
@@ -242,7 +265,7 @@ export async function convertSalesOrderLinesToJobs(
           }
         }
 
-        await client.functions.invoke("recalculate", {
+        await invokeFunction("recalculate", {
           body: {
             type: "jobRequirements",
             id: createJob.data.id,
@@ -266,7 +289,7 @@ export async function convertSalesOrderLinesToJobs(
         )}`,
         details: errors.join("; "),
         code: "JOB_CREATION_ERROR"
-      } as PostgrestError
+      } as QueryError
     };
   }
 
@@ -282,7 +305,7 @@ export async function convertSalesOrderLinesToJobs(
         message: "No jobs were created",
         details: `No Make items found on sales order lines${skippedLinesStr}`,
         code: "NO_JOBS_CREATED"
-      } as PostgrestError
+      } as QueryError
     };
   }
 
@@ -293,12 +316,12 @@ export async function convertSalesOrderLinesToJobs(
  * Calculate the priority for a job based on its dueDate and deadlineType.
  * Priority ordering: ASAP > Hard Deadline > Soft Deadline > No Deadline
  *
- * @param client - Supabase client
+ * @param client - Carbon database client
  * @param params - Job details
  * @returns The calculated priority number
  */
 export async function calculateJobPriority(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     jobId?: string; // Optional - if updating an existing job
     dueDate: string | null;
@@ -382,7 +405,7 @@ export async function calculateJobPriority(
 }
 
 export async function deleteDemandForecasts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     itemId: string;
     locationId: string;
@@ -407,7 +430,7 @@ export async function deleteDemandForecasts(
 }
 
 export async function deleteDemandProjections(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     itemId: string;
     locationId: string;
@@ -432,56 +455,56 @@ export async function deleteDemandProjections(
 }
 
 export async function deleteJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string
 ) {
   return client.from("job").delete().eq("id", jobId);
 }
 
 export async function deleteJobMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobMaterialId: string
 ) {
   return client.from("jobMaterial").delete().eq("id", jobMaterialId);
 }
 
 export async function deleteJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationId: string
 ) {
   return client.from("jobOperation").delete().eq("id", jobOperationId);
 }
 
 export async function deleteJobOperationStep(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("jobOperationStep").delete().eq("id", id);
 }
 
 export async function deleteJobOperationParameter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("jobOperationParameter").delete().eq("id", id);
 }
 
 export async function deleteJobOperationTool(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("jobOperationTool").delete().eq("id", id);
 }
 
 export async function deleteProcedure(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureId: string
 ) {
   return client.from("procedure").delete().eq("id", procedureId);
 }
 
 export async function deleteProcedureStep(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureStepId: string,
   companyId: string
 ) {
@@ -493,7 +516,7 @@ export async function deleteProcedureStep(
 }
 
 export async function deleteProcedureParameter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureParameterId: string,
   companyId: string
 ) {
@@ -505,14 +528,14 @@ export async function deleteProcedureParameter(
 }
 
 export async function deleteProductionEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   productionEventId: string
 ) {
   return client.from("productionEvent").delete().eq("id", productionEventId);
 }
 
 export async function deleteProductionQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   productionQuantityId: string
 ) {
   return client
@@ -522,7 +545,7 @@ export async function deleteProductionQuantity(
 }
 
 export async function getActiveJobOperationByJobId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
   companyId: string
 ): Promise<{
@@ -560,40 +583,46 @@ export async function getActiveJobOperationByJobId(
 }
 
 export async function getActiveJobOperationsByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string,
+  companyId: string,
   workCenterIds: string[] = []
 ) {
   return client.rpc("get_active_job_operations_by_location", {
     location_id: locationId,
+    company_id: companyId,
     work_center_ids: workCenterIds
   });
 }
 
 export async function getJobsByDateRange(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string,
+  companyId: string,
   startDate: string,
   endDate: string
 ) {
   return client.rpc("get_jobs_by_date_range", {
     location_id: locationId,
+    company_id: companyId,
     start_date: startDate,
     end_date: endDate
   });
 }
 
 export async function getUnscheduledJobs(
-  client: SupabaseClient<Database>,
-  locationId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  locationId: string,
+  companyId: string
 ) {
   return client.rpc("get_unscheduled_jobs", {
-    location_id: locationId
+    location_id: locationId,
+    company_id: companyId
   });
 }
 
 export async function getActiveProductionEvents(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -606,49 +635,49 @@ export async function getActiveProductionEvents(
 }
 
 export async function deleteScrapReason(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scrapReasonId: string
 ) {
   return client.from("scrapReason").delete().eq("id", scrapReasonId);
 }
 
 export async function deleteFailureMode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   failureModeId: string
 ) {
   return client.from("maintenanceFailureMode").delete().eq("id", failureModeId);
 }
 
 export async function deleteMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client.from("maintenanceDispatch").delete().eq("id", dispatchId);
 }
 
 export async function deleteMaintenanceDispatchComment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   commentId: string
 ) {
   return client.from("maintenanceDispatchComment").delete().eq("id", commentId);
 }
 
 export async function deleteMaintenanceDispatchEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   eventId: string
 ) {
   return client.from("maintenanceDispatchEvent").delete().eq("id", eventId);
 }
 
 export async function deleteMaintenanceDispatchItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   itemId: string
 ) {
   return client.from("maintenanceDispatchItem").delete().eq("id", itemId);
 }
 
 export async function deleteMaintenanceDispatchWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   workCenterId: string
 ) {
   return client
@@ -658,21 +687,21 @@ export async function deleteMaintenanceDispatchWorkCenter(
 }
 
 export async function deleteMaintenanceSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scheduleId: string
 ) {
   return client.from("maintenanceSchedule").delete().eq("id", scheduleId);
 }
 
 export async function deleteMaintenanceScheduleItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   itemId: string
 ) {
   return client.from("maintenanceScheduleItem").delete().eq("id", itemId);
 }
 
 export async function getDemandForecasts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     itemId: string;
     locationId: string;
@@ -690,7 +719,7 @@ export async function getDemandForecasts(
 }
 
 export async function getDemandProjections(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     itemId: string;
     locationId: string;
@@ -707,8 +736,25 @@ export async function getDemandProjections(
     .in("periodId", params.periodIds);
 }
 
+async function listStorageItems(
+  companyId: string,
+  prefix: string,
+  bucket: string,
+  extra: Partial<StorageItem> = {}
+): Promise<StorageItem[]> {
+  const objects = await listObjects({ companyId, prefix });
+  return objects.map(
+    (object) =>
+      ({
+        ...toStorageFileObject(object, "private"),
+        bucket,
+        ...extra
+      }) as StorageItem
+  );
+}
+
 export async function getJobDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   job: {
     id: string | null;
@@ -717,72 +763,53 @@ export async function getJobDocuments(
     itemId?: string | null;
   }
 ): Promise<StorageItem[]> {
-  const promises: Promise<
-    | {
-        data: FileObject[];
-        error: null;
-      }
-    | {
-        data: null;
-        error: StorageError;
-      }
-  >[] = [client.storage.from("private").list(`${companyId}/job/${job.id}`)];
+  const promises: Promise<StorageItem[]>[] = [
+    listStorageItems(companyId, `${companyId}/job/${job.id}`, "job")
+  ];
 
   // Add opportunity line files if available
   if (job.salesOrderLineId || job.quoteLineId) {
     const opportunityLine = job.salesOrderLineId || job.quoteLineId;
     promises.push(
-      client.storage
-        .from("private")
-        .list(`${companyId}/opportunity-line/${opportunityLine}`)
+      listStorageItems(
+        companyId,
+        `${companyId}/opportunity-line/${opportunityLine}`,
+        "opportunity-line"
+      )
     );
   }
 
   // Add parts files if itemId is available
   if (job.itemId) {
     promises.push(
-      client.storage.from("private").list(`${companyId}/parts/${job.itemId}`)
+      listStorageItems(companyId, `${companyId}/parts/${job.itemId}`, "parts")
     );
   }
 
   const results = await Promise.all(promises);
-  const [jobFiles, opportunityLineFiles, partsFiles] = results;
-
-  // Combine and return all sets of files with their respective buckets
-  return [
-    ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
-    ...(opportunityLineFiles?.data?.map((f) => ({
-      ...f,
-      bucket: "opportunity-line"
-    })) || []),
-    ...(partsFiles?.data?.map((f) => ({ ...f, bucket: "parts" })) || [])
-  ];
+  return results.flat();
 }
 
 export const getPartDocuments = async (
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   ...items: Array<{ itemId: string }>
 ) => {
   const getFile = async (id: string) => {
-    const res = await client.storage
-      .from("private")
-      .list(`${companyId}/parts/${id}`);
-
-    if (res.error || !res.data) return null;
-
-    return res.data.map((f) => ({ ...f, bucket: "parts", itemId: id }));
+    return listStorageItems(companyId, `${companyId}/parts/${id}`, "parts", {
+      itemId: id
+    });
   };
 
   const elems = items.map((el) => getFile(el.itemId));
 
   const results = await Promise.all(elems);
 
-  return results.filter((f) => f !== null).flat();
+  return results.flat();
 };
 
 export async function getJobDocumentsWithItemId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   job: Job,
   itemId: string
@@ -793,50 +820,69 @@ export async function getJobDocumentsWithItemId(
     const opportunityLine = job.salesOrderLineId || job.quoteLineId;
 
     const [opportunityLineFiles, jobFiles] = await Promise.all([
-      client.storage
-        .from("private")
-        .list(`${companyId}/opportunity-line/${opportunityLine}`),
-      client.storage.from("private").list(`${companyId}/job/${job.id}`)
+      listStorageItems(
+        companyId,
+        `${companyId}/opportunity-line/${opportunityLine}`,
+        "opportunity-line"
+      ),
+      listStorageItems(companyId, `${companyId}/job/${job.id}`, "job")
     ]);
 
-    // Combine and return both sets of files
-    return [
-      ...(opportunityLineFiles.data?.map((f) => ({
-        ...f,
-        bucket: "opportunity-line"
-      })) || []),
-      ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
-      ...itemFiles
-    ];
+    return [...opportunityLineFiles, ...jobFiles, ...itemFiles];
   } else {
-    const [jobFiles] = await Promise.all([
-      client.storage.from("private").list(`${companyId}/job/${job.id}`)
-    ]);
+    const jobFiles = await listStorageItems(
+      companyId,
+      `${companyId}/job/${job.id}`,
+      "job"
+    );
 
-    return [
-      ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
-      ...itemFiles
-    ];
+    return [...jobFiles, ...itemFiles];
   }
 }
 
-export async function getJob(client: SupabaseClient<Database>, id: string) {
-  return client.from("jobs").select("*").eq("id", id).single();
+export async function getJob(
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId?: string
+) {
+  let query = client.from("jobs").select("*").eq("id", id);
+  if (companyId) query = query.eq("companyId", companyId);
+  return query.single();
 }
 
 export async function getJobByOperationId(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  operationId: string,
+  scope?: {
+    companyId?: string;
+  }
 ) {
-  return client
+  let operationQuery = client
     .from("jobOperation")
-    .select("...job(id, companyId, customerId)")
-    .eq("id", operationId)
-    .single();
+    .select("jobId")
+    .eq("id", operationId);
+
+  if (scope?.companyId) {
+    operationQuery = operationQuery.eq("companyId", scope.companyId);
+  }
+
+  const operation = await operationQuery.single();
+  if (operation.error || !operation.data) return operation;
+
+  let jobQuery = client
+    .from("job")
+    .select("id, companyId, customerId")
+    .eq("id", operation.data.jobId);
+
+  if (scope?.companyId) {
+    jobQuery = jobQuery.eq("companyId", scope.companyId);
+  }
+
+  return jobQuery.single();
 }
 
 export async function getJobPurchaseOrderLines(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string
 ) {
   return client
@@ -848,7 +894,7 @@ export async function getJobPurchaseOrderLines(
 }
 
 export async function getJobs(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -873,7 +919,7 @@ export async function getJobs(
 }
 
 export async function getJobsBySalesOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   salesOrderLineId: string
 ) {
   return client
@@ -884,7 +930,7 @@ export async function getJobsBySalesOrderLine(
 }
 
 export async function getJobsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -896,34 +942,78 @@ export async function getJobsList(
 }
 
 export async function getJobMakeMethodById(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobMakeMethodId: string,
   companyId: string
 ) {
-  return client
+  const makeMethod = await client
     .from("jobMakeMethod")
-    .select("*, ...item(itemType:type, methodRevision:revision)")
+    .select("*")
     .eq("id", jobMakeMethodId)
     .eq("companyId", companyId)
     .single();
+
+  if (makeMethod.error || !makeMethod.data) return makeMethod;
+
+  const item = await client
+    .from("item")
+    .select("type, revision")
+    .eq("id", makeMethod.data.itemId)
+    .eq("companyId", companyId)
+    .single();
+
+  if (item.error || !item.data) {
+    return { ...makeMethod, data: null, error: item.error };
+  }
+
+  return {
+    ...makeMethod,
+    data: {
+      ...makeMethod.data,
+      itemType: item.data.type,
+      methodRevision: item.data.revision
+    }
+  };
 }
 
 export async function getRootMakeMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
   companyId: string
 ) {
-  return client
+  const makeMethod = await client
     .from("jobMakeMethod")
-    .select("*, ...item(itemType:type, methodRevision:revision)")
+    .select("*")
     .eq("jobId", jobId)
     .is("parentMaterialId", null)
     .eq("companyId", companyId)
     .single();
+
+  if (makeMethod.error || !makeMethod.data) return makeMethod;
+
+  const item = await client
+    .from("item")
+    .select("type, revision")
+    .eq("id", makeMethod.data.itemId)
+    .eq("companyId", companyId)
+    .single();
+
+  if (item.error || !item.data) {
+    return { ...makeMethod, data: null, error: item.error };
+  }
+
+  return {
+    ...makeMethod,
+    data: {
+      ...makeMethod.data,
+      itemType: item.data.type,
+      methodRevision: item.data.revision
+    }
+  };
 }
 
 export async function getJobMaterialsWithQuantityOnHand(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
   companyId: string,
   locationId: string,
@@ -943,10 +1033,11 @@ export async function getJobMaterialsWithQuantityOnHand(
 }
 
 export async function getJobMethodTree(
-  client: SupabaseClient<Database>,
-  jobId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobId: string,
+  companyId: string
 ) {
-  const items = await getJobMethodTreeArray(client, jobId);
+  const items = await getJobMethodTreeArray(client, jobId, companyId);
   if (items.error) return items;
 
   const tree = getJobMethodTreeArrayToTree(items.data);
@@ -958,11 +1049,13 @@ export async function getJobMethodTree(
 }
 
 export async function getJobMethodTreeArray(
-  client: SupabaseClient<Database>,
-  jobId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobId: string,
+  companyId: string
 ) {
   return client.rpc("get_job_method", {
-    jid: jobId
+    jid: jobId,
+    company_id: companyId
   });
 }
 
@@ -1017,7 +1110,7 @@ export type JobMethodTreeItem = {
 };
 
 export async function getJobMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   materialId: string
 ) {
   return client
@@ -1028,18 +1121,48 @@ export async function getJobMaterial(
 }
 
 export async function getJobMaterialsByMethodId(
-  client: SupabaseClient<Database>,
-  jobMakeMethodId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobMakeMethodId: string,
+  companyId: string
 ) {
-  return client
+  const materials = await client
     .from("jobMaterial")
-    .select("*, item(replenishmentSystem)")
+    .select("*")
     .eq("jobMakeMethodId", jobMakeMethodId)
+    .eq("companyId", companyId)
     .order("order", { ascending: true });
+
+  if (materials.error || !materials.data) return materials;
+
+  const itemIds = Array.from(
+    new Set(materials.data.map((material) => material.itemId).filter(Boolean))
+  );
+  const items =
+    itemIds.length > 0
+      ? await client
+          .from("item")
+          .select("id, replenishmentSystem")
+          .in("id", itemIds)
+          .eq("companyId", companyId)
+      : { data: [], error: null };
+
+  if (items.error) {
+    return { ...materials, data: [], error: items.error };
+  }
+
+  const itemsById = new Map((items.data ?? []).map((item) => [item.id, item]));
+
+  return {
+    ...materials,
+    data: materials.data.map((material) => ({
+      ...material,
+      item: itemsById.get(material.itemId) ?? null
+    }))
+  };
 }
 
 export async function getJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationId: string
 ) {
   return client
@@ -1050,7 +1173,7 @@ export async function getJobOperation(
 }
 
 export async function getJobOperations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -1080,7 +1203,7 @@ export async function getJobOperations(
 }
 
 export async function getJobOperationDependencies(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string
 ) {
   return client
@@ -1090,7 +1213,7 @@ export async function getJobOperationDependencies(
 }
 
 export async function getJobOperationsAssignedToEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeId: string,
   companyId: string
 ) {
@@ -1104,25 +1227,49 @@ export async function getJobOperationsAssignedToEmployee(
 }
 
 export async function getJobOperationAttachments(
-  client: SupabaseClient<Database>,
-  jobOperationIds: string[]
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobOperationIds: string[],
+  companyId?: string
 ): Promise<Record<string, string[]>> {
   if (jobOperationIds.length === 0) return {};
 
-  const { data: operationAttributes } = await client
+  let stepsQuery = client
     .from("jobOperationStep")
-    .select("*, jobOperationStepRecord(*)")
+    .select("*")
     .in("operationId", jobOperationIds);
+
+  if (companyId) {
+    stepsQuery = stepsQuery.eq("companyId", companyId);
+  }
+
+  const { data: operationAttributes } = await stepsQuery;
 
   if (!operationAttributes) return {};
 
+  const stepIds = operationAttributes.map((attribute) => attribute.id);
+  let recordsQuery = client
+    .from("jobOperationStepRecord")
+    .select("*")
+    .in("jobOperationStepId", stepIds);
+
+  if (companyId) {
+    recordsQuery = recordsQuery.eq("companyId", companyId);
+  }
+
+  const { data: stepRecords } =
+    stepIds.length > 0 ? await recordsQuery : { data: [] };
+  const recordsByStepId = new Map<string, any[]>();
+  (stepRecords ?? []).forEach((record) => {
+    const records = recordsByStepId.get(record.jobOperationStepId) ?? [];
+    records.push(record);
+    recordsByStepId.set(record.jobOperationStepId, records);
+  });
+
   const attachmentsByOperation: Record<string, string[]> = {};
   operationAttributes.forEach((attr) => {
-    if (
-      attr.jobOperationStepRecord &&
-      Array.isArray(attr.jobOperationStepRecord)
-    ) {
-      attr.jobOperationStepRecord.forEach((record) => {
+    const records = recordsByStepId.get(attr.id) ?? [];
+    if (records.length > 0) {
+      records.forEach((record: any) => {
         if (attr.type === "File" && record.value) {
           if (!attachmentsByOperation[attr.operationId]) {
             attachmentsByOperation[attr.operationId] = [];
@@ -1137,7 +1284,7 @@ export async function getJobOperationAttachments(
 }
 
 export async function getJobOperationsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string
 ) {
   return client
@@ -1148,27 +1295,33 @@ export async function getJobOperationsList(
 }
 
 export async function getJobOperationsByMethodId(
-  client: SupabaseClient<Database>,
-  jobMakeMethodId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobMakeMethodId: string,
+  companyId?: string
 ) {
-  return client
+  let query = client
     .from("jobOperation")
     .select(
       "*, jobOperationTool(*), jobOperationParameter(*), jobOperationStep(*, jobOperationStepRecord(*))"
     )
-    .eq("jobMakeMethodId", jobMakeMethodId)
-    .order("order", { ascending: true });
+    .eq("jobMakeMethodId", jobMakeMethodId);
+
+  if (companyId) query = query.eq("companyId", companyId);
+
+  return query.order("order", { ascending: true });
 }
 
 export async function getJobOperationStepRecords(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
+  companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
   }
 ) {
   let query = client.rpc("get_job_operation_step_records", {
-    p_job_id: jobId
+    p_job_id: jobId,
+    p_company_id: companyId
   });
 
   if (args.search) {
@@ -1185,7 +1338,7 @@ export async function getJobOperationStepRecords(
 }
 
 export async function getOutsideOperationsByJobId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
   companyId: string
 ) {
@@ -1198,18 +1351,47 @@ export async function getOutsideOperationsByJobId(
 }
 
 export async function getProcedure(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId: string
 ) {
-  return client
-    .from("procedure")
-    .select("*, procedureStep(*), procedureParameter(*)")
-    .eq("id", id)
-    .single();
+  const [procedure, steps, parameters] = await Promise.all([
+    client
+      .from("procedure")
+      .select("*")
+      .eq("id", id)
+      .eq("companyId", companyId)
+      .single(),
+    client
+      .from("procedureStep")
+      .select("*")
+      .eq("procedureId", id)
+      .eq("companyId", companyId),
+    client
+      .from("procedureParameter")
+      .select("*")
+      .eq("procedureId", id)
+      .eq("companyId", companyId)
+  ]);
+
+  if (procedure.error || !procedure.data) return procedure;
+  if (steps.error) return { ...procedure, data: null, error: steps.error };
+  if (parameters.error) {
+    return { ...procedure, data: null, error: parameters.error };
+  }
+
+  return {
+    ...procedure,
+    data: {
+      ...procedure.data,
+      procedureStep: steps.data ?? [],
+      procedureParameter: parameters.data ?? []
+    }
+  };
 }
 
 export async function getProcedureSteps(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureId: string
 ) {
   return client
@@ -1219,7 +1401,7 @@ export async function getProcedureSteps(
 }
 
 export async function getProcedureParameters(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureId: string
 ) {
   return client
@@ -1229,7 +1411,7 @@ export async function getProcedureParameters(
 }
 
 export async function getProcedureVersions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedure: { name: string; version: number },
   companyId: string
 ) {
@@ -1243,7 +1425,7 @@ export async function getProcedureVersions(
 }
 
 export async function getProcedures(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -1268,7 +1450,7 @@ export async function getProcedures(
 }
 
 export async function getProceduresList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -1286,18 +1468,41 @@ export async function getProceduresList(
 }
 
 export async function getProductionEvent(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId: string
 ) {
-  return client
+  const productionEvent = await client
     .from("productionEvent")
-    .select("*, jobOperation(description)")
+    .select("*")
     .eq("id", id)
+    .eq("companyId", companyId)
     .single();
+
+  if (productionEvent.error || !productionEvent.data) return productionEvent;
+
+  const jobOperation = await client
+    .from("jobOperation")
+    .select("description")
+    .eq("id", productionEvent.data.jobOperationId)
+    .eq("companyId", companyId)
+    .single();
+
+  if (jobOperation.error || !jobOperation.data) {
+    return { ...productionEvent, data: null, error: jobOperation.error };
+  }
+
+  return {
+    ...productionEvent,
+    data: {
+      ...productionEvent.data,
+      jobOperation: jobOperation.data
+    }
+  };
 }
 
 export async function getProductionEvents(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationIds: string[],
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -1326,7 +1531,7 @@ export async function getProductionEvents(
 }
 
 export async function getProductionEventsPage(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationId: string,
   companyId: string,
   sortDescending: boolean = false,
@@ -1354,12 +1559,12 @@ export async function getProductionEventsPage(
     count,
     page,
     pageSize,
-    hasMore: count !== null && offset + pageSize < count
+    hasMore: typeof count === "number" && offset + pageSize < count
   };
 }
 
 export async function getProductionEventsByOperations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationIds: string[]
 ) {
   return client
@@ -1372,7 +1577,7 @@ export async function getProductionEventsByOperations(
 }
 
 export async function getProductionPlanning(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string,
   companyId: string,
   periods: string[],
@@ -1406,7 +1611,7 @@ export async function getProductionPlanning(
 }
 
 export async function getProductionProjections(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string,
   periods: string[],
   companyId: string,
@@ -1440,18 +1645,43 @@ export async function getProductionProjections(
 }
 
 export async function getProductionQuantity(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId: string
 ) {
-  return client
+  const productionQuantity = await client
     .from("productionQuantity")
-    .select("*, jobOperation(description)")
+    .select("*")
     .eq("id", id)
+    .eq("companyId", companyId)
     .single();
+
+  if (productionQuantity.error || !productionQuantity.data) {
+    return productionQuantity;
+  }
+
+  const jobOperation = await client
+    .from("jobOperation")
+    .select("description")
+    .eq("id", productionQuantity.data.jobOperationId)
+    .eq("companyId", companyId)
+    .single();
+
+  if (jobOperation.error || !jobOperation.data) {
+    return { ...productionQuantity, data: null, error: jobOperation.error };
+  }
+
+  return {
+    ...productionQuantity,
+    data: {
+      ...productionQuantity.data,
+      jobOperation: jobOperation.data
+    }
+  };
 }
 
 export async function getProductionQuantities(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationIds: string[],
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -1479,7 +1709,7 @@ export async function getProductionQuantities(
 }
 
 export async function getProductionDataByOperations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationIds: string[]
 ) {
   const [quantities, events, notes] = await Promise.all([
@@ -1509,7 +1739,7 @@ export async function getProductionDataByOperations(
 }
 
 export async function getScrapReasonsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -1520,7 +1750,7 @@ export async function getScrapReasonsList(
 }
 
 export async function getScrapReason(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scrapReasonId: string
 ) {
   return client
@@ -1531,7 +1761,7 @@ export async function getScrapReason(
 }
 
 export async function getScrapReasons(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -1554,7 +1784,7 @@ export async function getScrapReasons(
 }
 
 export async function getFailureMode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   failureModeId: string
 ) {
   return client
@@ -1565,7 +1795,7 @@ export async function getFailureMode(
 }
 
 export async function getFailureModes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -1588,7 +1818,7 @@ export async function getFailureModes(
 }
 
 export async function getFailureModesList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -1599,7 +1829,7 @@ export async function getFailureModesList(
 }
 
 export async function getMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -1616,7 +1846,7 @@ export async function getMaintenanceDispatch(
 }
 
 export async function getMaintenanceDispatches(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null; status?: string }
 ) {
@@ -1639,7 +1869,7 @@ export async function getMaintenanceDispatches(
 }
 
 export async function getMaintenanceDispatchComments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -1653,7 +1883,7 @@ export async function getMaintenanceDispatchComments(
 }
 
 export async function getMaintenanceDispatchEvents(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -1668,7 +1898,7 @@ export async function getMaintenanceDispatchEvents(
 }
 
 export async function getMaintenanceDispatchItems(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -1681,7 +1911,7 @@ export async function getMaintenanceDispatchItems(
 }
 
 export async function getMaintenanceDispatchWorkCenters(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatchId: string
 ) {
   return client
@@ -1694,7 +1924,7 @@ export async function getMaintenanceDispatchWorkCenters(
 }
 
 export async function getMaintenanceSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scheduleId: string
 ) {
   return client
@@ -1708,7 +1938,7 @@ export async function getMaintenanceSchedule(
 }
 
 export async function getMaintenanceSchedules(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null; active?: boolean }
 ) {
@@ -1735,7 +1965,7 @@ export async function getMaintenanceSchedules(
 }
 
 export async function getMaintenanceScheduleItems(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scheduleId: string
 ) {
   return client
@@ -1748,15 +1978,21 @@ export async function getMaintenanceScheduleItems(
 }
 
 export async function getTrackedEntityByJobId(
-  client: SupabaseClient<Database>,
-  jobId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobId: string,
+  companyId?: string
 ) {
-  const jobMakeMethod = await client
+  let jobMakeMethodQuery = client
     .from("jobMakeMethod")
     .select("*")
     .eq("jobId", jobId)
-    .is("parentMaterialId", null)
-    .single();
+    .is("parentMaterialId", null);
+
+  if (companyId) {
+    jobMakeMethodQuery = jobMakeMethodQuery.eq("companyId", companyId);
+  }
+
+  const jobMakeMethod = await jobMakeMethodQuery.single();
   if (jobMakeMethod.error) {
     return {
       data: null,
@@ -1779,7 +2015,7 @@ export async function getTrackedEntityByJobId(
 }
 
 export async function getTrackedEntitiesByJobId(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string
 ) {
   const jobMakeMethod = await client
@@ -1808,57 +2044,57 @@ export async function getTrackedEntitiesByJobId(
  * This recalculates dates, work centers, and priorities for all operations.
  */
 export async function recalculateJobOperationDependencies(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     jobId: string;
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke("schedule", {
+  return invokeFunction("schedule", {
     body: {
       jobId: params.jobId,
       companyId: params.companyId,
       userId: params.userId,
       mode: "reschedule",
       direction: "backward"
-    }
+    },
   });
 }
 export async function recalculateJobRequirements(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     id: string; // job id
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke("recalculate", {
+  return invokeFunction("recalculate", {
     body: {
       type: "jobRequirements",
       ...params
-    }
+    },
   });
 }
 
 export async function recalculateJobMakeMethodRequirements(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     id: string; // job make method id
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke("recalculate", {
+  return invokeFunction("recalculate", {
     body: {
       type: "jobMakeMethodRequirements",
       ...params
-    }
+    },
   });
 }
 
 export async function runMRP(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     type:
       | "company"
@@ -1872,39 +2108,46 @@ export async function runMRP(
     userId: string;
   }
 ) {
-  return client.functions.invoke("mrp", {
+  return invokeFunction("mrp", {
     body: {
       ...params
-    }
+    },
   });
 }
 
 export async function updateJobBatchNumber(
-  client: SupabaseClient<Database>,
-  trackedEntityId: string,
-  value: string | null
+  client: CarbonDatabaseClient<QueryDatabase>,
+  params: {
+    trackedEntityId: string;
+    value: string | null;
+    companyId: string;
+  }
 ) {
+  const { trackedEntityId, value, companyId } = params;
+
   return client
     .from("trackedEntity")
     .update({
       readableId: value
     })
     .eq("id", trackedEntityId)
+    .eq("companyId", companyId)
     .select("id, readableId");
 }
 
 export async function updateJobStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     id: string;
     status: (typeof jobStatus)[number];
     assignee?: string | null;
     updatedBy: string;
+    companyId?: string;
   }
 ) {
-  const { id, status, assignee, updatedBy } = params;
+  const { id, status, assignee, updatedBy, companyId } = params;
 
-  return client
+  let query = client
     .from("job")
     .update({
       status,
@@ -1913,10 +2156,16 @@ export async function updateJobStatus(
       updatedAt: new Date().toISOString()
     })
     .eq("id", id);
+
+  if (companyId) {
+    query = query.eq("companyId", companyId);
+  }
+
+  return query;
 }
 
 export async function updateJobMaterialOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     order: number;
@@ -1930,7 +2179,7 @@ export async function updateJobMaterialOrder(
 }
 
 export async function updateJobOperationOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     order: number;
@@ -1944,7 +2193,7 @@ export async function updateJobOperationOrder(
 }
 
 export async function updateJobOperationStepOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -1961,7 +2210,7 @@ export async function updateJobOperationStepOrder(
 }
 
 export async function updateKanbanJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   params: {
     id: string;
     jobId: string | null;
@@ -1978,7 +2227,7 @@ export async function updateKanbanJob(
 }
 
 export async function updateQuoteOperationStepOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -1995,7 +2244,7 @@ export async function updateQuoteOperationStepOrder(
 }
 
 export async function updateMethodOperationStepOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -2012,7 +2261,7 @@ export async function updateMethodOperationStepOrder(
 }
 
 export async function updateJobOperationStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   status: (typeof jobOperationStatus)[number],
   updatedBy: string
@@ -2030,7 +2279,7 @@ export async function updateJobOperationStatus(
 }
 
 export async function updateJobOperationDueDate(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   dueDate: string | null,
   updatedBy: string
@@ -2048,7 +2297,7 @@ export async function updateJobOperationDueDate(
 }
 
 export async function updateProcedureStepOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -2062,7 +2311,7 @@ export async function updateProcedureStepOrder(
 }
 
 export async function upsertProductionEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   productionEvent:
     | (Omit<z.infer<typeof productionEventValidator>, "id"> & {
         createdBy: string;
@@ -2098,7 +2347,7 @@ export async function upsertProductionEvent(
 }
 
 export async function updateProductionQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   productionQuantity: z.infer<typeof productionQuantityValidator> & {
     id: string;
     updatedBy: string;
@@ -2121,7 +2370,7 @@ export async function updateProductionQuantity(
 }
 
 export async function upsertProductionQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   productionQuantity:
     | (Omit<z.infer<typeof productionQuantityValidator>, "id"> & {
         companyId: string;
@@ -2150,7 +2399,6 @@ export async function upsertProductionQuantity(
     return (
       client
         .from("productionQuantity")
-        // @ts-expect-error TS2769 - TODO: fix type
         .insert([productionQuantity])
         .select("id")
         .single()
@@ -2159,7 +2407,7 @@ export async function upsertProductionQuantity(
 }
 
 export async function upsertJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   job:
     | (Omit<z.infer<typeof jobValidator>, "id" | "jobId"> & {
         jobId: string;
@@ -2202,7 +2450,7 @@ export async function upsertJob(
 }
 
 export async function upsertJobMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobMaterial:
     | (z.infer<typeof jobMaterialValidator> & {
         jobId: string;
@@ -2234,7 +2482,7 @@ export async function upsertJobMaterial(
 }
 
 export async function upsertJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperation:
     | (z.infer<typeof jobOperationValidator> & {
         jobId: string;
@@ -2270,19 +2518,19 @@ export async function upsertJobOperation(
   if (!operationId) return operationInsert;
 
   if (jobOperation.procedureId) {
-    const { error } = await client.functions.invoke("get-method", {
+    const { error } = await invokeFunction("get-method", {
       body: {
         type: "procedureToOperation",
         sourceId: jobOperation.procedureId,
         targetId: operationId,
         companyId: jobOperation.companyId,
         userId: jobOperation.createdBy
-      }
+      },
     });
     if (error) {
       return {
         data: null,
-        error: { message: "Failed to get procedure" } as PostgrestError
+        error: { message: "Failed to get procedure" } as QueryError
       };
     }
   }
@@ -2290,7 +2538,7 @@ export async function upsertJobOperation(
 }
 
 export async function upsertJobOperationStep(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationStep:
     | (Omit<z.infer<typeof operationStepValidator>, "id"> & {
         companyId: string;
@@ -2324,7 +2572,7 @@ export async function upsertJobOperationStep(
 }
 
 export async function upsertJobOperationParameter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationParameter:
     | (Omit<z.infer<typeof operationParameterValidator>, "id"> & {
         companyId: string;
@@ -2353,7 +2601,7 @@ export async function upsertJobOperationParameter(
 }
 
 export async function upsertJobOperationTool(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobOperationTool:
     | (Omit<z.infer<typeof operationToolValidator>, "id"> & {
         companyId: string;
@@ -2382,7 +2630,7 @@ export async function upsertJobOperationTool(
 }
 
 export async function upsertJobMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   type: "itemToJob" | "quoteLineToJob",
   jobMethod: {
     sourceId: string;
@@ -2433,8 +2681,8 @@ export async function upsertJobMethod(
     body.parts = jobMethod.parts;
   }
 
-  const getMethodResult = await client.functions.invoke("get-method", {
-    body
+  const getMethodResult = await invokeFunction("get-method", {
+    body,
   });
   if (getMethodResult.error) {
     return getMethodResult;
@@ -2447,7 +2695,7 @@ export async function upsertJobMethod(
 }
 
 export async function upsertJobMaterialMakeMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobMaterial: {
     sourceId: string;
     targetId: string;
@@ -2497,14 +2745,14 @@ export async function upsertJobMaterialMakeMethod(
     body.parts = jobMaterial.parts;
   }
 
-  const { error } = await client.functions.invoke("get-method", {
-    body
+  const { error } = await invokeFunction("get-method", {
+    body,
   });
 
   if (error) {
     return {
       data: null,
-      error: { message: "Failed to pull method" } as PostgrestError
+      error: { message: "Failed to pull method" } as QueryError
     };
   }
 
@@ -2512,7 +2760,7 @@ export async function upsertJobMaterialMakeMethod(
 }
 
 export async function upsertMakeMethodFromJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobMethod: {
     sourceId: string;
     targetId: string;
@@ -2528,7 +2776,7 @@ export async function upsertMakeMethodFromJob(
     };
   }
 ) {
-  return client.functions.invoke("get-method", {
+  return invokeFunction("get-method", {
     body: {
       type: "jobToItem",
       sourceId: jobMethod.sourceId,
@@ -2536,12 +2784,12 @@ export async function upsertMakeMethodFromJob(
       companyId: jobMethod.companyId,
       userId: jobMethod.userId,
       parts: jobMethod.parts
-    }
+    },
   });
 }
 
 export async function upsertMakeMethodFromJobMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobMethod: {
     sourceId: string;
     targetId: string;
@@ -2557,7 +2805,7 @@ export async function upsertMakeMethodFromJobMethod(
     };
   }
 ) {
-  const { error } = await client.functions.invoke("get-method", {
+  const { error } = await invokeFunction("get-method", {
     body: {
       type: "jobMakeMethodToItem",
       sourceId: jobMethod.sourceId,
@@ -2565,13 +2813,13 @@ export async function upsertMakeMethodFromJobMethod(
       companyId: jobMethod.companyId,
       userId: jobMethod.userId,
       parts: jobMethod.parts
-    }
+    },
   });
 
   if (error) {
     return {
       data: null,
-      error: { message: "Failed to save method" } as PostgrestError
+      error: { message: "Failed to save method" } as QueryError
     };
   }
 
@@ -2579,7 +2827,7 @@ export async function upsertMakeMethodFromJobMethod(
 }
 
 export async function upsertProcedure(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedure:
     | (Omit<z.infer<typeof procedureValidator>, "id"> & {
         companyId: string;
@@ -2609,18 +2857,37 @@ export async function upsertProcedure(
     return insert;
   }
   if (copyFromId) {
-    const procedure = await client
-      .from("procedure")
-      .select("*, procedureStep(*), procedureParameter(*)")
-      .eq("id", copyFromId)
-      .single();
+    const [procedure, attributes, parameters] = await Promise.all([
+      client
+        .from("procedure")
+        .select("*")
+        .eq("id", copyFromId)
+        .eq("companyId", rest.companyId)
+        .single(),
+      client
+        .from("procedureStep")
+        .select("*")
+        .eq("procedureId", copyFromId)
+        .eq("companyId", rest.companyId),
+      client
+        .from("procedureParameter")
+        .select("*")
+        .eq("procedureId", copyFromId)
+        .eq("companyId", rest.companyId)
+    ]);
 
     if (procedure.error) {
       return procedure;
     }
+    if (attributes.error) {
+      return attributes;
+    }
+    if (parameters.error) {
+      return parameters;
+    }
 
-    const attributes = procedure.data.procedureStep ?? [];
-    const parameters = procedure.data.procedureParameter ?? [];
+    const procedureAttributes = attributes.data ?? [];
+    const procedureParameters = parameters.data ?? [];
     const workInstruction = (procedure.data.content ?? {}) as JSONContent;
 
     const [updateWorkInstructions, insertAttributes, insertParameters] =
@@ -2631,9 +2898,9 @@ export async function upsertProcedure(
             content: workInstruction
           })
           .eq("id", insert.data.id),
-        attributes.length > 0
+        procedureAttributes.length > 0
           ? client.from("procedureStep").insert(
-              attributes.map((attribute) => {
+              procedureAttributes.map((attribute: any) => {
                 // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
                 const { id, procedureId, ...rest } = attribute;
                 return {
@@ -2644,9 +2911,9 @@ export async function upsertProcedure(
               })
             )
           : Promise.resolve({ data: null, error: null }),
-        parameters.length > 0
+        procedureParameters.length > 0
           ? client.from("procedureParameter").insert(
-              parameters.map((parameter) => {
+              procedureParameters.map((parameter: any) => {
                 // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
                 const { id, procedureId, ...rest } = parameter;
                 return {
@@ -2673,7 +2940,7 @@ export async function upsertProcedure(
 }
 
 export async function upsertProcedureStep(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureStep:
     | (Omit<z.infer<typeof procedureStepValidator>, "id"> & {
         companyId: string;
@@ -2700,7 +2967,7 @@ export async function upsertProcedureStep(
 }
 
 export async function upsertProcedureParameter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   procedureParameter:
     | (Omit<z.infer<typeof procedureParameterValidator>, "id"> & {
         companyId: string;
@@ -2727,7 +2994,7 @@ export async function upsertProcedureParameter(
 }
 
 export async function upsertScrapReason(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   scrapReason:
     | (Omit<z.infer<typeof scrapReasonValidator>, "id"> & {
         companyId: string;
@@ -2751,7 +3018,7 @@ export async function upsertScrapReason(
 }
 
 export async function upsertFailureMode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   failureMode:
     | (Omit<z.infer<typeof failureModeValidator>, "id"> & {
         companyId: string;
@@ -2778,7 +3045,7 @@ export async function upsertFailureMode(
 }
 
 export async function upsertMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dispatch:
     | (Omit<z.infer<typeof maintenanceDispatchValidator>, "id"> & {
         maintenanceDispatchId: string;
@@ -2809,7 +3076,7 @@ export async function upsertMaintenanceDispatch(
 }
 
 export async function upsertMaintenanceDispatchComment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   comment:
     | (Omit<z.infer<typeof maintenanceDispatchCommentValidator>, "id"> & {
         companyId: string;
@@ -2835,7 +3102,7 @@ export async function upsertMaintenanceDispatchComment(
 }
 
 export async function upsertMaintenanceDispatchEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   event:
     | (Omit<z.infer<typeof maintenanceDispatchEventValidator>, "id"> & {
         companyId: string;
@@ -2861,7 +3128,7 @@ export async function upsertMaintenanceDispatchEvent(
 }
 
 export async function upsertMaintenanceDispatchItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   item:
     | (Omit<z.infer<typeof maintenanceDispatchItemValidator>, "id"> & {
         companyId: string;
@@ -2887,7 +3154,7 @@ export async function upsertMaintenanceDispatchItem(
 }
 
 export async function upsertMaintenanceDispatchWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   workCenter:
     | (Omit<z.infer<typeof maintenanceDispatchWorkCenterValidator>, "id"> & {
         companyId: string;
@@ -2913,7 +3180,7 @@ export async function upsertMaintenanceDispatchWorkCenter(
 }
 
 export async function upsertMaintenanceSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   schedule:
     | (Omit<z.infer<typeof maintenanceScheduleValidator>, "id"> & {
         companyId: string;
@@ -2939,7 +3206,7 @@ export async function upsertMaintenanceSchedule(
 }
 
 export async function upsertMaintenanceScheduleItem(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   item:
     | (Omit<z.infer<typeof maintenanceScheduleItemValidator>, "id"> & {
         companyId: string;
@@ -2965,7 +3232,7 @@ export async function upsertMaintenanceScheduleItem(
 }
 
 export async function upsertDemandForecasts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   forecasts: Array<{
     itemId: string;
     locationId: string;
@@ -3021,7 +3288,7 @@ export async function upsertDemandForecasts(
 }
 
 export async function upsertDemandProjections(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   forecasts: Array<{
     itemId: string;
     locationId: string;

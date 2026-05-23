@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Array as ArrayInput,
   Hidden,
@@ -70,6 +69,7 @@ import { ConfirmDelete } from "~/components/Modals";
 import { usePermissions, useRouteData, useUser } from "~/hooks";
 import { procedureStepType } from "~/modules/shared";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import {
   procedureParameterValidator,
   procedureStepValidator
@@ -109,7 +109,7 @@ export default function ProcedureExplorer() {
   );
 
   const maxSortOrder =
-    attributes.reduce((acc, attr) => Math.max(acc, attr.sortOrder), 0) ?? 0;
+    attributes.reduce((acc: any, attr: any) => Math.max(acc, attr.sortOrder), 0) ?? 0;
 
   const procedureAttribtueInitialValues = {
     id: selectedAttribute?.id,
@@ -235,8 +235,11 @@ export default function ProcedureExplorer() {
 
   const attributeMap = useMemo(
     () =>
-      attributes.reduce<Record<string, ProcedureStep>>(
-        (acc, attr) => ({ ...acc, [attr.id]: attr }),
+      attributes.reduce(
+        (acc: Record<string, ProcedureStep>, attr: any) => ({
+          ...acc,
+          [attr.id]: attr
+        }),
         {}
       ) ?? {},
     [attributes]
@@ -354,8 +357,8 @@ export default function ProcedureExplorer() {
             >
               {parameters && parameters.length > 0 ? (
                 parameters
-                  .sort((a, b) => a.key.localeCompare(b.key))
-                  .map((parameter) => (
+                  .sort((a: any, b: any) => a.key.localeCompare(b.key))
+                  .map((parameter: any) => (
                     <ProcedureParameterItem
                       key={parameter.id}
                       isDisabled={isDisabled}
@@ -717,7 +720,6 @@ function ProcedureStepForm({
     }
   });
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -752,7 +754,11 @@ function ProcedureStepForm({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

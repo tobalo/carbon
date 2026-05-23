@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  nonConformanceTaskStatusEnum
+} from "@carbon/database/schema";
 
 export enum LinearWorkStateType {
   Triage = "triage",
@@ -10,7 +13,7 @@ export enum LinearWorkStateType {
   Canceled = "canceled"
 }
 
-type CarbonTaskStatus = Database["public"]["Enums"]["nonConformanceTaskStatus"];
+type CarbonTaskStatus = EnumValue<typeof nonConformanceTaskStatusEnum>;
 
 export const mapLinearStatusToCarbonStatus = (
   status: LinearWorkStateType

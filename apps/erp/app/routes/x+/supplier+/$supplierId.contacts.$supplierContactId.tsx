@@ -5,7 +5,10 @@ import {
   notFound,
   success
 } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -25,15 +28,17 @@ import { path } from "~/utils/path";
 import { supplierContactsQuery } from "~/utils/react-query";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId, supplierContactId } = params;
   if (!supplierId) throw notFound("supplierId not found");
   if (!supplierContactId) throw notFound("supplierContactId not found");
+  assertSupplierAccountScope(auth, supplierId);
 
-  const contact = await getSupplierContact(client, supplierContactId);
+  const contact = await getSupplierContact(client, supplierContactId, supplierId);
   if (contact.error) {
     throw redirect(
       path.to.supplierContacts(supplierId),
@@ -51,13 +56,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId, supplierContactId } = params;
   if (!supplierId) throw notFound("supplierId not found");
   if (!supplierContactId) throw notFound("supplierContactId not found");
+  assertSupplierAccountScope(auth, supplierId);
 
   const formData = await request.formData();
   const validation = await validator(supplierContactValidator).validate(
@@ -75,6 +82,25 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (contactId === undefined)
     throw badRequest("contactId is undefined from form data");
+
+  const existingContact = await getSupplierContact(
+    client,
+    supplierContactId,
+    supplierId
+  );
+  const existingContactId = existingContact.data?.contact?.id;
+  if (existingContact.error || !existingContactId) {
+    throw redirect(
+      path.to.supplierContacts(supplierId),
+      await flash(
+        request,
+        error(existingContact.error, "Failed to verify supplier contact")
+      )
+    );
+  }
+  if (contactId !== existingContactId) {
+    throw badRequest("contactId does not match scoped supplier contact");
+  }
 
   const update = await updateSupplierContact(client, {
     contactId,

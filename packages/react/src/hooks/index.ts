@@ -18,7 +18,6 @@ import { useOptimisticLocation } from "./useOptimisticLocation";
 import useOutsideClick from "./useOutsideClick";
 import { usePlan } from "./usePlan";
 import { usePrettifyShortcut } from "./usePrettifyShortcut";
-import { useRealtimeChannel } from "./useRealtimeChannel";
 import { useRouteData } from "./useRouteData";
 import type { Shortcut, ShortcutDefinition } from "./useShortcutKeys";
 import { useShortcutKeys } from "./useShortcutKeys";
@@ -47,7 +46,6 @@ export {
   useOutsideClick,
   usePlan,
   usePrettifyShortcut,
-  useRealtimeChannel,
   useRouteData,
   useShortcutKeys,
   useThrottle,

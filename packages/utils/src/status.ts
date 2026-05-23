@@ -1,7 +1,7 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 
 type SalesOrderLine = Pick<
-  Database["public"]["Tables"]["salesOrderLine"]["Row"],
+  TableRow<"salesOrderLine">,
   | "salesOrderLineType"
   | "invoicedComplete"
   | "sentComplete"
@@ -12,7 +12,7 @@ type SalesOrderLine = Pick<
 >;
 
 type SalesOrderJob = Pick<
-  Database["public"]["Tables"]["job"]["Row"],
+  TableRow<"job">,
   | "salesOrderLineId"
   | "productionQuantity"
   | "quantityComplete"
@@ -37,8 +37,7 @@ export const getSalesOrderStatus = (
     (line) => line.salesOrderLineType === "Comment" || line.sentComplete
   );
 
-  let status: Database["public"]["Tables"]["salesOrder"]["Row"]["status"] =
-    "To Ship and Invoice";
+  let status: TableRow<"salesOrder">["status"] = "To Ship and Invoice";
 
   if (allInvoiced && allShipped) {
     status = "Completed";
@@ -52,7 +51,7 @@ export const getSalesOrderStatus = (
 };
 
 type PurchaseOrderLine = Pick<
-  Database["public"]["Tables"]["purchaseOrderLine"]["Row"],
+  TableRow<"purchaseOrderLine">,
   "purchaseOrderLineType" | "receivedComplete" | "invoicedComplete"
 >;
 
@@ -74,7 +73,7 @@ export const getPurchaseOrderStatus = (
       line.receivedComplete
   );
 
-  let status: Database["public"]["Tables"]["purchaseOrder"]["Row"]["status"] =
+  let status: TableRow<"purchaseOrder">["status"] =
     "To Receive and Invoice";
   if (allInvoices && allLinesReceived) {
     status = "Completed";

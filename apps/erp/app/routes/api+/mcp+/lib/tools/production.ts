@@ -432,7 +432,12 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getActiveJobOperationsByLocation(ctx.client, params.locationId, params.workCenterIds);
+      const result = await getActiveJobOperationsByLocation(
+        ctx.client,
+        params.locationId,
+        ctx.companyId,
+        params.workCenterIds
+      );
       return toMcpResult(result);
     }, "Failed: production_getActiveJobOperationsByLocation"),
   );
@@ -449,7 +454,13 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobsByDateRange(ctx.client, params.locationId, params.startDate, params.endDate);
+      const result = await getJobsByDateRange(
+        ctx.client,
+        params.locationId,
+        ctx.companyId,
+        params.startDate,
+        params.endDate
+      );
       return toMcpResult(result);
     }, "Failed: production_getJobsByDateRange"),
   );
@@ -464,7 +475,11 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getUnscheduledJobs(ctx.client, params.locationId);
+      const result = await getUnscheduledJobs(
+        ctx.client,
+        params.locationId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: production_getUnscheduledJobs"),
   );
@@ -716,7 +731,7 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobByOperationId(ctx.client, params.operationId);
+      const result = await getJobByOperationId(ctx.client, params.operationId, { companyId: ctx.companyId });
       return toMcpResult(result);
     }, "Failed: production_getJobByOperationId"),
   );
@@ -842,7 +857,11 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobMethodTree(ctx.client, params.jobId);
+      const result = await getJobMethodTree(
+        ctx.client,
+        params.jobId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: production_getJobMethodTree"),
   );
@@ -857,7 +876,11 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobMethodTreeArray(ctx.client, params.jobId);
+      const result = await getJobMethodTreeArray(
+        ctx.client,
+        params.jobId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: production_getJobMethodTreeArray"),
   );
@@ -887,7 +910,7 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobMaterialsByMethodId(ctx.client, params.jobMakeMethodId);
+      const result = await getJobMaterialsByMethodId(ctx.client, params.jobMakeMethodId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: production_getJobMaterialsByMethodId"),
   );
@@ -951,7 +974,7 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobOperationAttachments(ctx.client, params.jobOperationIds);
+      const result = await getJobOperationAttachments(ctx.client, params.jobOperationIds, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: production_getJobOperationAttachments"),
   );
@@ -1001,7 +1024,12 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJobOperationStepRecords(ctx.client, params.jobId, params.args);
+      const result = await getJobOperationStepRecords(
+        ctx.client,
+        params.jobId,
+        ctx.companyId,
+        params.args
+      );
       return toMcpResult(result);
     }, "Failed: production_getJobOperationStepRecords"),
   );
@@ -1031,7 +1059,7 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getProcedure(ctx.client, params.id);
+      const result = await getProcedure(ctx.client, params.id, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: production_getProcedure"),
   );
@@ -1125,7 +1153,7 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getProductionEvent(ctx.client, params.id);
+      const result = await getProductionEvent(ctx.client, params.id, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: production_getProductionEvent"),
   );
@@ -1233,7 +1261,7 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getProductionQuantity(ctx.client, params.id);
+      const result = await getProductionQuantity(ctx.client, params.id, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: production_getProductionQuantity"),
   );
@@ -1621,7 +1649,11 @@ export const registerProductionTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await updateJobBatchNumber(ctx.client, params.trackedEntityId, params.value);
+      const result = await updateJobBatchNumber(ctx.client, {
+        trackedEntityId: params.trackedEntityId,
+        value: params.value,
+        companyId: ctx.companyId
+      });
       return toMcpResult(result);
     }, "Failed: production_updateJobBatchNumber"),
   );

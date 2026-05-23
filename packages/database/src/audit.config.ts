@@ -6,8 +6,8 @@
  * When a row in any of those tables changes, the audit system attributes the change
  * to the correct business entity and records the actual field-level diff.
  *
- * The generated Supabase `Database` type (`./types`) is the source of truth for
- * table names and column names used throughout this config.
+ * The generated Drizzle schema is the current source for table and column names
+ * used throughout this config.
  *
  * Table roles:
  * - "root": The primary table for this entity. Its PK is the entity ID.
@@ -20,13 +20,13 @@
  *           through a junction table. Requires a DB query at audit time.
  */
 
-import type { Database } from "./types";
+import type { QueryDatabase } from "./schema";
 
 // ---------------------------------------------------------------------------
 // Schema-derived helpers
 // ---------------------------------------------------------------------------
 
-type PublicSchema = Database["public"];
+type PublicSchema = QueryDatabase["public"];
 
 /** All table names present in the public schema. */
 export type TableName = Extract<keyof PublicSchema["Tables"], string>;

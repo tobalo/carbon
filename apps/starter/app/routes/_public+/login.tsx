@@ -1,11 +1,11 @@
 import {
   assertIsPost,
-  carbonClient,
+  AZURE_CLIENT_ID,
   error,
+  GOOGLE_CLIENT_ID,
   magicLinkValidator,
   RATE_LIMIT,
-  SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID,
-  SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID
+  startOAuthSignIn
 } from "@carbon/auth";
 import { sendMagicLink, verifyAuthSession } from "@carbon/auth/auth.server";
 import { flash, getAuthSession } from "@carbon/auth/session.server";
@@ -49,8 +49,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   return {
-    hasOutlookAuth: !!SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID,
-    hasGoogleAuth: !!SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID
+    hasOutlookAuth: !!AZURE_CLIENT_ID,
+    hasGoogleAuth: !!GOOGLE_CLIENT_ID
   };
 }
 
@@ -111,13 +111,11 @@ export default function LoginRoute() {
   >();
 
   const onSignInWithGoogle = async () => {
-    const { error } = await carbonClient.auth.signInWithOAuth({
+    const { error } = await startOAuthSignIn({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/callback${
-          redirectTo ? `?redirectTo=${redirectTo}` : ""
-        }`
-      }
+      redirectTo: `${window.location.origin}/callback${
+        redirectTo ? `?redirectTo=${redirectTo}` : ""
+      }`
     });
 
     if (error) {
@@ -126,14 +124,12 @@ export default function LoginRoute() {
   };
 
   const onSignInWithAzure = async () => {
-    const { error } = await carbonClient.auth.signInWithOAuth({
+    const { error } = await startOAuthSignIn({
       provider: "azure",
-      options: {
-        scopes: "email",
-        redirectTo: `${window.location.origin}/callback${
-          redirectTo ? `?redirectTo=${redirectTo}` : ""
-        }`
-      }
+      scopes: "email",
+      redirectTo: `${window.location.origin}/callback${
+        redirectTo ? `?redirectTo=${redirectTo}` : ""
+      }`
     });
 
     if (error) {

@@ -1,5 +1,5 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type {
   Activity,
   ActivityInput,
@@ -46,9 +46,10 @@ function newLineageState(): LineageState {
 }
 
 async function expandActivitySiblings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   state: LineageState,
-  activityIds: string[]
+  activityIds: string[],
+  companyId: string
 ): Promise<void> {
   const { entities, activities, inputs, outputs } = state;
   const newActivityIds = activityIds.filter((id) => !activities.has(id));
@@ -56,7 +57,8 @@ async function expandActivitySiblings(
     const fetched = await client
       .from("trackedActivity")
       .select("*")
-      .in("id", newActivityIds);
+      .in("id", newActivityIds)
+      .eq("companyId", companyId);
     for (const row of fetched.data ?? []) {
       activities.set(row.id, row as unknown as Activity);
     }
@@ -68,11 +70,13 @@ async function expandActivitySiblings(
     client
       .from("trackedActivityInput")
       .select("*")
-      .in("trackedActivityId", activityIds),
+      .in("trackedActivityId", activityIds)
+      .eq("companyId", companyId),
     client
       .from("trackedActivityOutput")
       .select("*")
       .in("trackedActivityId", activityIds)
+      .eq("companyId", companyId)
   ]);
 
   const siblingEntityIds = new Set<string>();
@@ -110,7 +114,8 @@ async function expandActivitySiblings(
       const fetched = await client
         .from("trackedEntity")
         .select("*")
-        .in("id", idsToFetch);
+        .in("id", idsToFetch)
+        .eq("companyId", companyId);
       for (const row of fetched.data ?? []) {
         entities.set(row.id, row as TrackedEntity);
       }
@@ -119,11 +124,12 @@ async function expandActivitySiblings(
 }
 
 async function runLineageBfs(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   state: LineageState,
   initialFrontier: string[],
   direction: LineageDirection,
-  safeDepth: number
+  safeDepth: number,
+  companyId: string
 ): Promise<void> {
   const { entities, inputs, outputs, visited } = state;
   let frontier = initialFrontier.filter((id) => {
@@ -152,7 +158,7 @@ async function runLineageBfs(
         (async () => {
           const res = await client.rpc(
             "get_direct_descendants_of_tracked_entities_strict",
-            { p_tracked_entity_ids: frontier }
+            { p_company_id: companyId, p_tracked_entity_ids: frontier }
           );
           descendantsBatch = (res.data ?? []) as BatchRow[];
         })()
@@ -163,7 +169,7 @@ async function runLineageBfs(
         (async () => {
           const res = await client.rpc(
             "get_direct_ancestors_of_tracked_entities_strict",
-            { p_tracked_entity_ids: frontier }
+            { p_company_id: companyId, p_tracked_entity_ids: frontier }
           );
           ancestorsBatch = (res.data ?? []) as BatchRow[];
         })()
@@ -236,14 +242,20 @@ async function runLineageBfs(
       const fetched = await client
         .from("trackedEntity")
         .select("*")
-        .in("id", idsToFetch);
+        .in("id", idsToFetch)
+        .eq("companyId", companyId);
       for (const row of fetched.data ?? []) {
         entities.set(row.id, row as TrackedEntity);
       }
     }
 
     if (activityIds.size > 0) {
-      await expandActivitySiblings(client, state, Array.from(activityIds));
+      await expandActivitySiblings(
+        client,
+        state,
+        Array.from(activityIds),
+        companyId
+      );
     }
 
     frontier = Array.from(nextFrontier);
@@ -251,9 +263,10 @@ async function runLineageBfs(
 }
 
 export async function fetchLineageSubgraph(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   rootEntityId: string,
   depth: number,
+  companyId: string,
   direction: LineageDirection = "both"
 ): Promise<LineagePayload> {
   const safeDepth = clampDepth(depth);
@@ -262,13 +275,29 @@ export async function fetchLineageSubgraph(
     .from("trackedEntity")
     .select("*")
     .eq("id", rootEntityId)
+    .eq("companyId", companyId)
     .maybeSingle();
 
   const state = newLineageState();
-  if (rootEntity.data)
-    state.entities.set(rootEntity.data.id, rootEntity.data as TrackedEntity);
+  if (!rootEntity.data) {
+    return {
+      entities: [],
+      inputs: [],
+      outputs: [],
+      activities: []
+    };
+  }
 
-  await runLineageBfs(client, state, [rootEntityId], direction, safeDepth);
+  state.entities.set(rootEntity.data.id, rootEntity.data as TrackedEntity);
+
+  await runLineageBfs(
+    client,
+    state,
+    [rootEntityId],
+    direction,
+    safeDepth,
+    companyId
+  );
 
   return {
     entities: Array.from(state.entities.values()),
@@ -279,12 +308,15 @@ export async function fetchLineageSubgraph(
 }
 
 export async function fetchJobStepRecords(
-  client: SupabaseClient<Database>,
-  jobId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  jobId: string,
+  companyId: string
 ): Promise<StepRecord[]> {
-  const res = await client.rpc("get_job_operation_step_records", {
-    p_job_id: jobId
+  let query = client.rpc("get_job_operation_step_records", {
+    p_job_id: jobId,
+    p_company_id: companyId
   });
+  const res = await query;
   if (!res.data) return [];
   return (res.data as any[]).map((r) => ({
     id: r.id,
@@ -309,14 +341,15 @@ export async function fetchJobStepRecords(
 }
 
 export async function fetchContainmentsForEntities(
-  client: SupabaseClient<Database>,
-  entityIds: string[]
+  client: CarbonDatabaseClient<QueryDatabase>,
+  entityIds: string[],
+  companyId?: string
 ): Promise<IssueContainment[]> {
   if (entityIds.length === 0) return [];
 
-  // Single round-trip: PostgREST embed pulls the linked issue inline and
+  // Single round-trip: embedded selector pulls the linked issue inline and
   // filters server-side to only Contained/Uncontained statuses.
-  const res = await client
+  let query = client
     .from("nonConformanceTrackedEntity")
     .select(
       `trackedEntityId,
@@ -325,6 +358,10 @@ export async function fetchContainmentsForEntities(
     )
     .in("trackedEntityId", entityIds)
     .in("issue.containmentStatus", ["Contained", "Uncontained"]);
+  if (companyId) {
+    query = query.eq("companyId", companyId);
+  }
+  const res = await query;
 
   const containments: IssueContainment[] = [];
   for (const row of res.data ?? []) {
@@ -350,15 +387,24 @@ export async function fetchContainmentsForEntities(
 }
 
 export async function fetchJobScopedLineage(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   jobId: string,
-  depth: number
+  depth: number,
+  companyId: string
 ): Promise<LineagePayload> {
   const safeDepth = clampDepth(depth);
 
   const [seedEntitiesRes, seedActivitiesRes] = await Promise.all([
-    client.from("trackedEntity").select("*").eq("attributes->>Job", jobId),
-    client.from("trackedActivity").select("*").eq("attributes->>Job", jobId)
+    client
+      .from("trackedEntity")
+      .select("*")
+      .eq("attributes->>Job", jobId)
+      .eq("companyId", companyId),
+    client
+      .from("trackedActivity")
+      .select("*")
+      .eq("attributes->>Job", jobId)
+      .eq("companyId", companyId)
   ]);
 
   const state = newLineageState();
@@ -373,7 +419,8 @@ export async function fetchJobScopedLineage(
     await expandActivitySiblings(
       client,
       state,
-      Array.from(state.activities.keys())
+      Array.from(state.activities.keys()),
+      companyId
     );
   }
 
@@ -383,13 +430,15 @@ export async function fetchJobScopedLineage(
       state,
       Array.from(state.entities.keys()),
       "both",
-      safeDepth
+      safeDepth,
+      companyId
     );
   }
 
   const containments = await fetchContainmentsForEntities(
     client,
-    Array.from(state.entities.keys())
+    Array.from(state.entities.keys()),
+    companyId
   );
 
   return {

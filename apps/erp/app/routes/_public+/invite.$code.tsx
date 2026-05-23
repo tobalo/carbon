@@ -2,15 +2,17 @@ import {
   CarbonEdition,
   error,
   getAppUrl,
+  getLegacyPermissionCacheKey,
   getPermissionCacheKey
 } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { setCompanyId } from "@carbon/auth/company.server";
 import {
   flash,
   getAuthSession,
   updateCompanySession
 } from "@carbon/auth/session.server";
+import { sendInviteByEmail } from "@carbon/auth/auth.server";
 import { redis } from "@carbon/kv";
 import { Button as _Button, Heading as _Heading, VStack } from "@carbon/react";
 import { updateSubscriptionQuantityForCompany } from "@carbon/stripe/stripe.server";
@@ -34,18 +36,31 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const { code } = params;
   if (!code) throw new Error("No code provided");
 
-  const serviceRole = getCarbonServiceRole();
-  const invite = await serviceRole
+  const serviceClient = getCarbonServiceClient();
+  const invite = await serviceClient
     .from("invite")
-    .select("*, company(name)")
+    .select("*")
     .eq("code", code)
+    .is("acceptedAt", null)
+    .is("revokedAt", null)
     .single();
 
-  if (!invite.data || invite.data.acceptedAt) {
+  if (!invite.data) {
     return { success: false, company: null };
   }
 
-  return { success: true, company: invite.data.company };
+  const company = await serviceClient
+    .from("company")
+    .select("name")
+    .eq("id", invite.data.companyId)
+    .eq("active", true)
+    .single();
+
+  if (!company.data) {
+    return { success: false, company: null };
+  }
+
+  return { success: true, company: company.data };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -53,9 +68,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (!code) throw new Error("No code provided");
   const authSession = await getAuthSession(request);
 
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
 
-  const accept = await acceptInvite(serviceRole, code, authSession?.email);
+  const accept = await acceptInvite(serviceClient, code, authSession?.email);
   if (accept.error) {
     throw redirect(
       path.to.root,
@@ -71,9 +86,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (authSession) {
-    await redis.del(getPermissionCacheKey(authSession.userId));
+    await redis.del(
+      getPermissionCacheKey(authSession.userId, accept.data.companyId),
+      getLegacyPermissionCacheKey(authSession.userId)
+    );
 
-    const { data: companyRecord } = await serviceRole
+    const { data: companyRecord } = await serviceClient
       .from("company")
       .select("companyGroupId")
       .eq("id", accept.data.companyId)
@@ -92,12 +110,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       ]
     });
   } else {
-    const magicLink = await serviceRole.auth.admin.generateLink({
-      type: "magiclink",
-      email: accept.data.email,
-      options: {
-        redirectTo: `${getAppUrl()}/callback`
-      }
+    const magicLink = await sendInviteByEmail(accept.data.email, {
+      redirectTo: `${getAppUrl()}/callback`
     });
     throw redirect(magicLink.data?.properties?.action_link ?? path.to.root);
   }

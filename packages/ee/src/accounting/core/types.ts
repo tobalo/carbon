@@ -1,6 +1,6 @@
-import type { Database } from "@carbon/database";
-import type { Kysely, KyselyDatabase, KyselyTx } from "@carbon/database/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { and, eq, type DrizzleDb } from "@carbon/database/drizzle";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
+import { accountTable, companyTable } from "@carbon/database/schema";
 import type z from "zod";
 import type { AccountingProvider } from "../providers";
 import {
@@ -144,8 +144,8 @@ export interface EntityDefinition {
 export type AccountingSyncPayload = z.infer<typeof AccountingSyncSchema>;
 
 export type SyncFn = (input: {
-  client: SupabaseClient<Database>;
-  kysely: Kysely<KyselyDatabase>;
+  client: DatabaseQueryClient;
+  database: DrizzleDb;
   entity: AccountingEntity;
   provider: AccountingProvider;
   payload: AccountingSyncPayload;
@@ -161,7 +161,7 @@ export interface AccountingEntity<
 }
 
 export interface SyncContext {
-  database: Kysely<KyselyDatabase>;
+  database: DrizzleDb;
   companyId: string;
   provider: AccountingProvider;
   config: EntityConfig;
@@ -220,7 +220,7 @@ export abstract class BaseEntitySyncer<
   TOmit extends string | symbol | number // Fields to omit from mapping
 > implements IEntitySyncer
 {
-  protected database: Kysely<KyselyDatabase>;
+  protected database: DrizzleDb;
   protected companyId: string;
   protected provider: AccountingProvider;
   protected config: EntityConfig;
@@ -276,7 +276,7 @@ export abstract class BaseEntitySyncer<
    * Can be overridden by subclasses for custom behavior.
    */
   protected async linkEntities(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     localId: string,
     remoteId: string,
     remoteUpdatedAt?: Date
@@ -292,32 +292,38 @@ export abstract class BaseEntitySyncer<
     );
   }
 
-  protected async getCompanyGroupId(dbOrTx?: KyselyTx): Promise<string | null> {
+  protected async getCompanyGroupId(
+    dbOrTx?: DrizzleDb
+  ): Promise<string | null> {
     if (this._companyGroupId !== undefined) return this._companyGroupId;
     const db = dbOrTx ?? this.database;
-    const result = await db
-      .selectFrom("company")
-      .select("companyGroupId")
-      .where("id", "=", this.companyId)
-      .executeTakeFirst();
+    const [result] = await db
+      .select({ companyGroupId: companyTable.companyGroupId })
+      .from(companyTable)
+      .where(eq(companyTable.id, this.companyId))
+      .limit(1);
     this._companyGroupId = result?.companyGroupId ?? null;
     return this._companyGroupId;
   }
 
   protected async resolveAccountIdByNumber(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     accountNumber: string
   ): Promise<string | null> {
     const companyGroupId = await this.getCompanyGroupId(tx);
     if (!companyGroupId) return null;
 
-    const match = await tx
-      .selectFrom("account")
-      .select("id")
-      .where("companyGroupId", "=", companyGroupId)
-      .where("number", "=", accountNumber)
-      .where("active", "=", true)
-      .executeTakeFirst();
+    const [match] = await tx
+      .select({ id: accountTable.id })
+      .from(accountTable)
+      .where(
+        and(
+          eq(accountTable.companyGroupId, companyGroupId),
+          eq(accountTable.number, accountNumber),
+          eq(accountTable.active, true)
+        )
+      )
+      .limit(1);
 
     return match?.id ?? null;
   }
@@ -337,7 +343,7 @@ export abstract class BaseEntitySyncer<
   protected abstract getRemoteUpdatedAt(remote: TRemote): Date | null;
 
   protected abstract upsertLocal(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<TLocal>,
     remoteId: string
   ): Promise<string>;

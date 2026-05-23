@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
@@ -14,7 +14,7 @@ const oauthTokenValidator = z.object({
 });
 
 export async function action({ request }: ActionFunctionArgs) {
-  const client = getCarbonServiceRole();
+  const client = getCarbonServiceClient();
   const validation = await validator(oauthTokenValidator).validate(
     await request.formData()
   );
@@ -45,6 +45,7 @@ export async function action({ request }: ActionFunctionArgs) {
       { status: 401 }
     );
   }
+  const clientCompanyId = oauthClient.data.companyId;
 
   if (grant_type === "authorization_code") {
     if (!code || !redirect_uri) {
@@ -59,14 +60,17 @@ export async function action({ request }: ActionFunctionArgs) {
 
     // Verify the authorization code
     const [oauthCode] = await Promise.all([
-      client.from("oauthCode").select("*").eq("code", code).single()
+      client
+        .from("oauthCode")
+        .select("*")
+        .eq("code", code)
+        .eq("clientId", client_id)
+        .eq("redirectUri", redirect_uri)
+        .eq("companyId", clientCompanyId)
+        .single()
     ]);
 
-    if (
-      !oauthCode.data ||
-      oauthCode.data.clientId !== client_id ||
-      oauthCode.data.redirectUri !== redirect_uri
-    ) {
+    if (!oauthCode.data) {
       return data(
         {
           data: null,
@@ -102,7 +106,12 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     // Delete the used authorization code
-    await client.from("oauthCode").delete().eq("code", code);
+    await client
+      .from("oauthCode")
+      .delete()
+      .eq("code", code)
+      .eq("clientId", client_id)
+      .eq("companyId", clientCompanyId);
 
     return {
       data: {
@@ -130,10 +139,12 @@ export async function action({ request }: ActionFunctionArgs) {
         .from("oauthToken")
         .select("*")
         .eq("refreshToken", refresh_token)
+        .eq("clientId", client_id)
+        .eq("companyId", clientCompanyId)
         .single()
     ]);
 
-    if (!tokenResult.data || tokenResult.data.clientId !== client_id) {
+    if (!tokenResult.data) {
       return data(
         { data: null, error: "Invalid refresh token" },
         { status: 400 }
@@ -151,6 +162,8 @@ export async function action({ request }: ActionFunctionArgs) {
           expiresAt: new Date(Date.now() + 3600 * 1000).toISOString() // 1 hour expiration
         })
         .eq("refreshToken", refresh_token)
+        .eq("clientId", client_id)
+        .eq("companyId", tokenResult.data.companyId)
     ]);
 
     if (updateResult.error) {

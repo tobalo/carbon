@@ -55,7 +55,7 @@ import {
   useUser
 } from "~/hooks";
 import { useIntegrations } from "~/hooks/useIntegrations";
-import { useRealtime } from "~/hooks/useRealtime";
+import { usePollingRevalidation } from "~/hooks/usePollingRevalidation";
 import type {
   Issue,
   IssueActionTask,
@@ -65,6 +65,7 @@ import type {
 import { nonConformanceTaskStatus } from "~/modules/quality";
 import { useSuppliers } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import { JiraIssueDialog } from "./Jira/IssueDialog";
 import { LinearIssueDialog } from "./Linear/IssueDialog";
 
@@ -278,7 +279,7 @@ export function TaskItem({
   showDragHandle?: boolean;
   dragControls?: DragControls;
 }) {
-  useRealtime("nonConformanceActionTask", `id=eq.${task.id}`);
+  usePollingRevalidation("nonConformanceActionTask", `id=eq.${task.id}`);
 
   const { t } = useLingui();
   const integrations = useIntegrations();
@@ -341,9 +342,7 @@ export function TaskItem({
             </button>
           )}
 
-          {/* @ts-expect-error TS2322 */}
           {integrations.has("linear") && <LinearIssueDialog task={task} />}
-          {/* @ts-expect-error TS2322 */}
           {integrations.has("jira") && <JiraIssueDialog task={task} />}
 
           <IconButton
@@ -475,7 +474,11 @@ function useTaskNotes({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -495,7 +498,6 @@ function useTaskNotes({
     async (content: JSONContent) => {
       // Update notes in Carbon database
       await carbon
-        // @ts-expect-error -
         ?.from(table)
         .update({
           notes: content,
@@ -788,7 +790,7 @@ function TaskProcesses({
 
   // Get current process IDs from the task (memoized to prevent unnecessary re-renders)
   const currentProcessIds = useMemo(
-    () => task.nonConformanceActionProcess?.map((p) => p.processId) ?? [],
+    () => task.nonConformanceActionProcess?.map((p: any) => p.processId) ?? [],
     [task.nonConformanceActionProcess]
   );
 

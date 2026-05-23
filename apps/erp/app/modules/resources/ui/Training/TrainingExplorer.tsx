@@ -92,7 +92,7 @@ export default function TrainingExplorer() {
   );
 
   const maxSortOrder =
-    questions.reduce((acc, q) => Math.max(acc, q.sortOrder), 0) ?? 0;
+    questions.reduce((acc: any, q: any) => Math.max(acc, q.sortOrder), 0) ?? 0;
 
   const trainingQuestionInitialValues = {
     id: selectedQuestion?.id,
@@ -183,8 +183,11 @@ export default function TrainingExplorer() {
 
   const questionMap = useMemo(
     () =>
-      questions.reduce<Record<string, TrainingQuestion>>(
-        (acc, q) => ({ ...acc, [q.id]: q }),
+      questions.reduce(
+        (acc: Record<string, TrainingQuestion>, q: any) => ({
+          ...acc,
+          [q.id]: q
+        }),
         {}
       ) ?? {},
     [questions]

@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -49,12 +48,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
 
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     update: "settings",
     role: "employee"
   });
 
-  const serviceRole = getCarbonServiceRole();
   const { id } = params;
   if (!id) throw new Error("Rule ID is required");
 
@@ -66,7 +64,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   // Get existing rule to check permissions
-  const rules = await getApprovalRules(serviceRole, companyId);
+  const rules = await getApprovalRules(client, companyId);
   const existingRule = rules.data?.find((r) => r.id === id);
 
   if (!existingRule) {
@@ -92,7 +90,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     });
   }
 
-  const result = await upsertApprovalRule(serviceRole, {
+  const result = await upsertApprovalRule(client, {
     id,
     updatedBy: userId,
     documentType: validation.data.documentType,

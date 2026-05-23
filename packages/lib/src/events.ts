@@ -1,7 +1,10 @@
-import type { Database } from "@carbon/database";
+import type {
+  approvalDocumentTypeEnum,
+  EnumValue
+} from "@carbon/database/schema";
 import type { NotificationEvent } from "@carbon/notifications";
 
-type ApprovalDocumentType = Database["public"]["Enums"]["approvalDocumentType"];
+type ApprovalDocumentType = EnumValue<typeof approvalDocumentTypeEnum>;
 
 /**
  * Event definitions for the Carbon inngest functions.

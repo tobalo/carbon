@@ -718,7 +718,7 @@ export const registerInventoryTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getShipmentLines(ctx.client, params.shipmentId);
+      const result = await getShipmentLines(ctx.client, params.shipmentId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: inventory_getShipmentLines"),
   );
@@ -1037,7 +1037,7 @@ export const registerInventoryTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await updateStockTransferStatus(ctx.client, { ...params.args, updatedBy: ctx.userId });
+      const result = await updateStockTransferStatus(ctx.client, { ...params.args, companyId: ctx.companyId, updatedBy: ctx.userId });
       return toMcpResult(result);
     }, "Failed: inventory_updateStockTransferStatus"),
   );
@@ -1203,7 +1203,7 @@ export const registerInventoryTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await updateWarehouseTransferStatus(ctx.client, params.transferId, params.status, ctx.userId);
+      const result = await updateWarehouseTransferStatus(ctx.client, params.transferId, params.status, ctx.userId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: inventory_updateWarehouseTransferStatus"),
   );

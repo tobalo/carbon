@@ -12,7 +12,7 @@ import { path } from "~/utils/path";
 import { getGenericQueryFilters } from "~/utils/query";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "production",
     role: "employee"
   });
@@ -27,13 +27,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const { limit, offset, sorts, filters } =
     getGenericQueryFilters(searchParams);
 
-  const stepRecords = await getJobOperationStepRecords(client, jobId, {
-    limit,
-    offset,
-    sorts,
-    filters,
-    search
-  });
+  const stepRecords = await getJobOperationStepRecords(
+    client,
+    jobId,
+    companyId,
+    {
+      limit,
+      offset,
+      sorts,
+      filters,
+      search
+    }
+  );
 
   if (stepRecords.error) {
     redirect(
@@ -62,7 +67,6 @@ export default function JobOperationStepRecordsRoute() {
 
   return (
     <VStack spacing={0} className="h-[calc(100dvh-99px)]">
-      {/* @ts-expect-error TS2322 */}
       <JobOperationStepRecordsTable data={stepRecords} count={count} />
     </VStack>
   );

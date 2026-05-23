@@ -29,6 +29,9 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!modelPath) {
     throw new Error("Model path is required");
   }
+  if (!modelPath.startsWith(`${companyId}/models/`)) {
+    throw new Error("Model path must belong to the current company");
+  }
 
   const modelRecord = await client.from("modelUpload").insert({
     id: modelId,
@@ -47,28 +50,36 @@ export async function action({ request }: ActionFunctionArgs) {
     await client
       .from("item")
       .update({ modelUploadId: modelId })
-      .eq("id", itemId);
+      .eq("id", itemId)
+      .eq("companyId", companyId);
   }
   if (salesRfqLineId) {
     await client
       .from("salesRfqLine")
       .update({ modelUploadId: modelId })
-      .eq("id", salesRfqLineId);
+      .eq("id", salesRfqLineId)
+      .eq("companyId", companyId);
   }
   if (quoteLineId) {
     await client
       .from("quoteLine")
       .update({ modelUploadId: modelId })
-      .eq("id", quoteLineId);
+      .eq("id", quoteLineId)
+      .eq("companyId", companyId);
   }
   if (salesOrderLineId) {
     await client
       .from("salesOrderLine")
       .update({ modelUploadId: modelId })
-      .eq("id", salesOrderLineId);
+      .eq("id", salesOrderLineId)
+      .eq("companyId", companyId);
   }
   if (jobId) {
-    await client.from("job").update({ modelUploadId: modelId }).eq("id", jobId);
+    await client
+      .from("job")
+      .update({ modelUploadId: modelId })
+      .eq("id", jobId)
+      .eq("companyId", companyId);
   }
 
   await trigger("model-thumbnail", {

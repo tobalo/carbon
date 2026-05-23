@@ -7,7 +7,10 @@ import {
 } from "@carbon/ee/jira.server";
 import type { LoaderFunctionArgs } from "react-router";
 import { data, redirect } from "react-router";
-import { upsertCompanyIntegration } from "~/modules/settings/settings.server";
+import {
+  upsertCompanyIntegration,
+  withIntegrationWebhookSecret
+} from "~/modules/settings/settings.server";
 import { oAuthCallbackSchema } from "~/modules/shared";
 import { path } from "~/utils/path";
 
@@ -67,7 +70,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const createdJiraIntegration = await upsertCompanyIntegration(client, {
       id: "jira",
       active: true,
-      metadata: {
+      metadata: withIntegrationWebhookSecret({
         credentials: {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
@@ -75,7 +78,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           cloudId: resource.id,
           siteUrl: resource.url
         }
-      },
+      }) as any,
       updatedBy: userId,
       companyId: companyId
     });

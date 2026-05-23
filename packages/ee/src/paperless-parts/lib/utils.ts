@@ -1,9 +1,9 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { CalendarDate, getLocalTimeZone, today } from "@internationalized/date";
 
 export function calculatePromisedDate(
   leadTime: number,
-  holidays: Database["public"]["Tables"]["holiday"]["Row"][]
+  holidays: TableRow<"holiday">[]
 ) {
   const now = new Date();
   const cutoffHour = 10;

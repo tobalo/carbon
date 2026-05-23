@@ -37,11 +37,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const [makeMethod, methodMaterials, methodOperations, tags] =
     await Promise.all([
-      getMakeMethodById(client, makeMethodId, companyId),
-      getMethodMaterialsByMakeMethod(client, makeMethodId),
-      getMethodOperationsByMakeMethodId(client, makeMethodId),
-      getTagsList(client, companyId, "operation")
-    ]);
+    getMakeMethodById(client, makeMethodId, companyId),
+    getMethodMaterialsByMakeMethod(client, makeMethodId, companyId),
+    getMethodOperationsByMakeMethodId(client, makeMethodId, companyId),
+    getTagsList(client, companyId, "operation")
+  ]);
 
   if (makeMethod.error) {
     throw redirect(
@@ -135,7 +135,6 @@ export default function ToolMakeMethodPage() {
       <BillOfMaterial
         key={`bom:${makeMethodId}`}
         makeMethod={makeMethod}
-        // @ts-expect-error TS2322 - TODO: fix type
         materials={methodMaterials}
         operations={methodOperations}
         replenishmentSystem={toolData?.toolSummary?.replenishmentSystem}
@@ -144,7 +143,6 @@ export default function ToolMakeMethodPage() {
         key={`bop:${makeMethodId}`}
         makeMethod={makeMethod}
         materials={methodMaterials}
-        // @ts-expect-error
         operations={methodOperations}
         tags={tags}
       />

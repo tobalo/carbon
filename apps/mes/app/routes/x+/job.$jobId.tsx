@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { Heading, SidebarTrigger } from "@carbon/react";
 import { LuArrowLeft } from "react-icons/lu";
 import type { LoaderFunctionArgs } from "react-router";
@@ -12,16 +11,20 @@ import {
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  await requirePermissions(request, {});
-  const serviceRole = getCarbonServiceRole();
+  const { client, companyId } = await requirePermissions(request, {});
 
   const { jobId } = params;
   if (!jobId) throw new Error("Could not find jobId");
 
   const [job, operations, dependencies] = await Promise.all([
-    serviceRole.from("jobs").select("jobId").eq("id", jobId).single(),
-    getJobOperations(serviceRole, jobId),
-    getJobOperationDependencies(serviceRole, jobId)
+    client
+      .from("jobs")
+      .select("jobId")
+      .eq("id", jobId)
+      .eq("companyId", companyId)
+      .single(),
+    getJobOperations(client, jobId, companyId),
+    getJobOperationDependencies(client, jobId, companyId)
   ]);
 
   return {

@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import {
   getCompanyEmployees,
   getJiraClient,
@@ -37,15 +37,21 @@ export const jiraSyncFunction = inngest.createFunction(
       };
     }
 
-    const carbon = getCarbonServiceRole();
+    const carbon = getCarbonServiceClient();
 
     const [company, integration] = await Promise.all([
-      carbon.from("company").select("*").eq("id", payload.companyId).single(),
+      carbon
+        .from("company")
+        .select("id, active")
+        .eq("id", payload.companyId)
+        .eq("active", true)
+        .single(),
       carbon
         .from("companyIntegration")
-        .select("*")
+        .select("id, active")
         .eq("companyId", payload.companyId)
         .eq("id", "jira")
+        .eq("active", true)
         .single()
     ]);
 

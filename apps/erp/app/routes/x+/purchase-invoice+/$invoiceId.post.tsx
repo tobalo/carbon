@@ -1,5 +1,5 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { getCompanySettings } from "~/modules/settings";
 
@@ -19,7 +19,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .update({
       status: "Pending"
     })
-    .eq("id", invoiceId);
+    .eq("id", invoiceId)
+    .eq("companyId", companyId);
 
   if (setPendingState.error) {
     return {
@@ -31,8 +32,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   let receiptIds: string[] | undefined;
 
   try {
-    const serviceRole = await getCarbonServiceRole();
-    const postPurchaseInvoice = await serviceRole.functions.invoke<{
+    const postPurchaseInvoice = await invokeFunction<{
       receiptIds?: string[];
     }>("post-purchase-invoice", {
       body: {
@@ -40,7 +40,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         userId: userId,
         companyId: companyId,
         skipReceiptPost: skipReceiptPost
-      }
+      },
     });
 
     if (postPurchaseInvoice.error) {
@@ -49,7 +49,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         .update({
           status: "Draft"
         })
-        .eq("id", invoiceId);
+        .eq("id", invoiceId)
+        .eq("companyId", companyId);
 
       return {
         success: false,
@@ -60,12 +61,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     receiptIds = postPurchaseInvoice.data?.receiptIds;
 
     // Check if we should update prices on invoice post
-    const companySettings = await getCompanySettings(serviceRole, companyId);
+    const companySettings = await getCompanySettings(client, companyId);
     if (
       !companySettings.data?.purchasePriceUpdateTiming ||
       companySettings.data.purchasePriceUpdateTiming === "Purchase Invoice Post"
     ) {
-      const priceUpdate = await serviceRole.functions.invoke(
+      const priceUpdate = await invokeFunction(
         "update-purchased-prices",
         {
           body: {
@@ -74,7 +75,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             source: "purchaseInvoice",
             updatePrices: true,
             updateLeadTimes: false
-          }
+          },
         }
       );
 
@@ -84,7 +85,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
           .update({
             status: "Draft"
           })
-          .eq("id", invoiceId);
+          .eq("id", invoiceId)
+          .eq("companyId", companyId);
 
         return {
           success: false,
@@ -99,7 +101,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .update({
         status: "Draft"
       })
-      .eq("id", invoiceId);
+      .eq("id", invoiceId)
+      .eq("companyId", companyId);
 
     return {
       success: false,

@@ -3,6 +3,7 @@ import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
+import { signDownload } from "@carbon/storage";
 import { tiptapToHTML } from "@carbon/utils";
 import type { JSONContent } from "@tiptap/react";
 import type { ActionFunctionArgs } from "react-router";
@@ -239,13 +240,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     for (const doc of rfqDocs) {
       const storagePath = `${companyId}/supplier-interaction/${rfqId}/${doc.name}`;
-      const { data: signedUrlData } = await client.storage
-        .from("private")
-        .createSignedUrl(storagePath, 3600);
-
-      if (signedUrlData?.signedUrl) {
-        attachments.push({ filename: doc.name, path: signedUrlData.signedUrl });
-      }
+      const signedUrl = await signDownload({
+        companyId,
+        key: storagePath,
+        expiresIn: 3600
+      });
+      attachments.push({ filename: doc.name, path: signedUrl });
     }
 
     // Fetch line-level supplier interaction documents
@@ -260,16 +260,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
       for (const doc of lineDocs) {
         const storagePath = `${companyId}/supplier-interaction-line/${line.id}/${doc.name}`;
-        const { data: signedUrlData } = await client.storage
-          .from("private")
-          .createSignedUrl(storagePath, 3600);
-
-        if (signedUrlData?.signedUrl) {
-          attachments.push({
-            filename: doc.name,
-            path: signedUrlData.signedUrl
-          });
-        }
+        const signedUrl = await signDownload({
+          companyId,
+          key: storagePath,
+          expiresIn: 3600
+        });
+        attachments.push({
+          filename: doc.name,
+          path: signedUrl
+        });
       }
     }
 

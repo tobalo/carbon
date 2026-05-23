@@ -1,5 +1,9 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type {
+  EnumValue,
+  jobStatusEnum,
+  salesOrderStatusEnum
+} from "@carbon/database/schema";
 import {
   Avatar,
   cn,
@@ -40,7 +44,7 @@ import { SalesStatus } from "~/modules/sales/ui/SalesOrder";
 import { getCompany } from "~/modules/settings/settings.service";
 import { operationTypes } from "~/modules/shared";
 import {
-  getBase64ImageFromSupabase,
+  getBase64ImageFromStorage,
   getCustomerPortal
 } from "~/modules/shared/shared.service";
 import { path } from "~/utils/path";
@@ -66,14 +70,18 @@ const defaultColumnPinning = {
   left: ["customerReference"]
 };
 
+function isExpired(date: string | null | undefined) {
+  return Boolean(date && new Date(date) < new Date());
+}
+
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const { id } = params;
   if (!id) {
     throw new Error("Customer ID is required");
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const customer = await getCustomerPortal(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const customer = await getCustomerPortal(serviceClient, id);
 
   if (customer.error) {
     console.error(customer.error);
@@ -85,6 +93,10 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Error("Customer not found");
   }
 
+  if (isExpired(customer.data.expiresAt)) {
+    throw new Error("Customer portal expired");
+  }
+
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const search = searchParams.get("search");
@@ -92,14 +104,19 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     getGenericQueryFilters(searchParams);
 
   const [company, salesOrderLines] = await Promise.all([
-    getCompany(serviceRole, customer.data.companyId),
-    getExternalSalesOrderLines(serviceRole, customer.data.customerId, {
-      search,
-      limit,
-      offset,
-      sorts,
-      filters
-    })
+    getCompany(serviceClient, customer.data.companyId),
+    getExternalSalesOrderLines(
+      serviceClient,
+      customer.data.customerId,
+      customer.data.companyId,
+      {
+        search,
+        limit,
+        offset,
+        sorts,
+        filters
+      }
+    )
   ]);
 
   if (salesOrderLines.error) {
@@ -108,12 +125,11 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   const jobOperationIds = jobOperationValidator
-    .safeParse(salesOrderLines.data?.flatMap((line) => line.jobOperations))
+    .safeParse(salesOrderLines.data?.flatMap((line: any) => line.jobOperations))
     .data?.map((operation) => operation.id);
 
-  const thumbnailPaths = salesOrderLines.data?.reduce<
-    Record<string, string | null>
-  >((acc, line) => {
+  const thumbnailPaths = salesOrderLines.data?.reduce(
+    (acc: Record<string, string | null>, line: any) => {
     if (line.thumbnailPath) {
       acc[line.readableIdWithRevision] = line.thumbnailPath;
     }
@@ -123,11 +139,11 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const [thumbnails, jobOperationAttachments] = await Promise.all([
     (thumbnailPaths
       ? await Promise.all(
-          Object.entries(thumbnailPaths).map(([id, path]) => {
+          (Object.entries(thumbnailPaths) as [string, string | null][]).map(([id, path]) => {
             if (!path) {
               return null;
             }
-            return getBase64ImageFromSupabase(serviceRole, path).then(
+            return getBase64ImageFromStorage(serviceClient, path).then(
               (data) => ({
                 id,
                 data
@@ -142,7 +158,11 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       }
       return acc;
     }, {}) ?? {},
-    getJobOperationAttachments(serviceRole, jobOperationIds ?? [])
+    getJobOperationAttachments(
+      serviceClient,
+      jobOperationIds ?? [],
+      customer.data.companyId
+    )
   ]);
 
   return {
@@ -378,9 +398,9 @@ function SalesOrderLineStatus({
 }: {
   quantityOrdered: number;
   quantityShipped: number;
-  jobStatus: Database["public"]["Enums"]["jobStatus"];
+  jobStatus: EnumValue<typeof jobStatusEnum>;
   jobOperations: z.infer<typeof jobOperationValidator>;
-  salesOrderStatus: Database["public"]["Enums"]["salesOrderStatus"];
+  salesOrderStatus: EnumValue<typeof salesOrderStatusEnum>;
 }) {
   if (
     ["Draft", "Needs Approval", "Completed", "Cancelled", "Invoiced"].includes(

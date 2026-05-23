@@ -1,7 +1,7 @@
 "use client";
 
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import { Combobox, useFormContext } from "@carbon/form";
 import {
   Button,
@@ -16,7 +16,7 @@ import {
   toast
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse, SupabaseClient } from "@supabase/supabase-js";
+import type { QueryResponse, CarbonDatabaseClient } from "@carbon/database/query-client";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { LuInfo, LuMoveRight } from "react-icons/lu";
 import { useFetcher } from "react-router";
@@ -40,9 +40,9 @@ type EnumData =
       default: string;
       description: string;
       fetcher: (
-        client: SupabaseClient<Database>,
+        client: CarbonDatabaseClient<QueryDatabase>,
         companyId: string
-      ) => Promise<PostgrestResponse<ListItem>>;
+      ) => Promise<QueryResponse<ListItem>>;
     };
 
 export function FieldMapping({

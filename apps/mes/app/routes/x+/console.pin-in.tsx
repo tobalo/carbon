@@ -1,6 +1,5 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data, redirect } from "react-router";
 import { setConsolePinIn } from "~/services/console.server";
@@ -8,7 +7,7 @@ import { path } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId } = await requirePermissions(request, {});
+  const { client, companyId } = await requirePermissions(request, {});
 
   const formData = await request.formData();
   const userId = formData.get("userId") as string;
@@ -20,10 +19,8 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: "userId and name are required" }, { status: 400 });
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
   // Validate user exists and is active
-  const userCheck = await serviceRole
+  const userCheck = await client
     .from("user")
     .select("id, active")
     .eq("id", userId)
@@ -33,7 +30,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: "User not found or inactive" }, { status: 400 });
   }
 
-  const employeeCheck = await serviceRole
+  const employeeCheck = await client
     .from("employee")
     .select("*")
     .eq("id", userId)

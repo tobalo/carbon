@@ -98,7 +98,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getTrialBalance(ctx.client, params.companyGroupId, ctx.companyId, params.args);
+      const result = await getTrialBalance(ctx.client, ctx.companyGroupId, ctx.companyId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getTrialBalance"),
   );
@@ -117,7 +117,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getFinancialStatementBalances(ctx.client, params.companyGroupId, ctx.companyId, params.args);
+      const result = await getFinancialStatementBalances(ctx.client, ctx.companyGroupId, ctx.companyId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getFinancialStatementBalances"),
   );
@@ -132,7 +132,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getCompaniesInGroup(ctx.client, params.companyGroupId);
+      const result = await getCompaniesInGroup(ctx.client, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: accounting_getCompaniesInGroup"),
   );
@@ -226,7 +226,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getAccounts(ctx.client, params.companyGroupId, params.args);
+      const result = await getAccounts(ctx.client, ctx.companyGroupId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getAccounts"),
   );
@@ -245,7 +245,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getAccountsList(ctx.client, params.companyGroupId, params.args);
+      const result = await getAccountsList(ctx.client, ctx.companyGroupId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getAccountsList"),
   );
@@ -264,7 +264,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getGroupAccounts(ctx.client, params.companyGroupId);
+      const result = await getGroupAccounts(ctx.client, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: accounting_getAccountCategories"),
   );
@@ -373,7 +373,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getChartOfAccounts(ctx.client, params.companyGroupId, params.args);
+      const result = await getChartOfAccounts(ctx.client, ctx.companyGroupId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getChartOfAccounts"),
   );
@@ -388,7 +388,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getCurrency(ctx.client, params.currencyId);
+      const result = await getCurrency(ctx.client, params.currencyId, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: accounting_getCurrency"),
   );
@@ -403,7 +403,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getCurrencyByCode(ctx.client, params.companyGroupId, params.currencyCode);
+      const result = await getCurrencyByCode(ctx.client, ctx.companyGroupId, params.currencyCode);
       return toMcpResult(result);
     }, "Failed: accounting_getCurrencyByCode"),
   );
@@ -422,7 +422,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getCurrencies(ctx.client, params.companyGroupId, params.args);
+      const result = await getCurrencies(ctx.client, ctx.companyGroupId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getCurrencies"),
   );
@@ -861,7 +861,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getDimensions(ctx.client, params.companyGroupId, params.args);
+      const result = await getDimensions(ctx.client, ctx.companyGroupId, params.args);
       return toMcpResult(result);
     }, "Failed: accounting_getDimensions"),
   );
@@ -876,7 +876,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getDimension(ctx.client, params.dimensionId);
+      const result = await getDimension(ctx.client, params.dimensionId, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: accounting_getDimension"),
   );
@@ -922,7 +922,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getActiveDimensionsWithValues(ctx.client, params.companyGroupId, ctx.companyId);
+      const result = await getActiveDimensionsWithValues(ctx.client, ctx.companyGroupId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: accounting_getActiveDimensionsWithValues"),
   );
@@ -971,7 +971,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await translateCompanyBalances(ctx.client, params.companyGroupId, ctx.companyId, params.targetCurrency, params.periodEnd, params.periodStart);
+      const result = await translateCompanyBalances(ctx.client, ctx.companyGroupId, ctx.companyId, params.targetCurrency, params.periodEnd, params.periodStart);
       return toMcpResult(result);
     }, "Failed: accounting_translateCompanyBalances"),
   );
@@ -990,7 +990,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getConsolidatedBalances(ctx.client, params.companyGroupId, params.companyIds, params.targetCurrency, params.periodEnd, params.periodStart);
+      const result = await getConsolidatedBalances(ctx.client, ctx.companyGroupId, params.companyIds, params.targetCurrency, params.periodEnd, params.periodStart);
       return toMcpResult(result);
     }, "Failed: accounting_getConsolidatedBalances"),
   );
@@ -1010,7 +1010,11 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getIntercompanyTransactions(ctx.client, params.companyGroupId, params.args);
+      const result = await getIntercompanyTransactions(
+        ctx.client,
+        ctx.companyGroupId,
+        params.args
+      );
       return toMcpResult(result);
     }, "Failed: accounting_getIntercompanyTransactions"),
   );
@@ -1025,7 +1029,11 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await createIntercompanyTransaction(ctx.client, { ...params.input, userId: ctx.userId });
+      const result = await createIntercompanyTransaction(ctx.client, {
+        ...params.input,
+        companyGroupId: ctx.companyGroupId,
+        userId: ctx.userId
+      });
       return toMcpResult(result);
     }, "Failed: accounting_createIntercompanyTransaction"),
   );
@@ -1039,8 +1047,11 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
     },
       annotations: WRITE_ANNOTATIONS,
     },
-    withErrorHandling(async (params) => {
-      const result = await runIntercompanyMatching(ctx.client, params.companyGroupId);
+    withErrorHandling(async (_params) => {
+      const result = await runIntercompanyMatching(
+        ctx.client,
+        ctx.companyGroupId
+      );
       return toMcpResult(result);
     }, "Failed: accounting_runIntercompanyMatching"),
   );
@@ -1054,8 +1065,12 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
     },
       annotations: WRITE_ANNOTATIONS,
     },
-    withErrorHandling(async (params) => {
-      const result = await generateEliminations(ctx.client, params.companyGroupId, ctx.userId);
+    withErrorHandling(async (_params) => {
+      const result = await generateEliminations(
+        ctx.client,
+        ctx.companyGroupId,
+        ctx.userId
+      );
       return toMcpResult(result);
     }, "Failed: accounting_generateEliminations"),
   );
@@ -1069,8 +1084,8 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
     },
       annotations: READ_ONLY_ANNOTATIONS,
     },
-    withErrorHandling(async (params) => {
-      const result = await getIntercompanyBalance(ctx.client, params.companyGroupId);
+    withErrorHandling(async (_params) => {
+      const result = await getIntercompanyBalance(ctx.client, ctx.companyGroupId);
       return toMcpResult(result);
     }, "Failed: accounting_getIntercompanyBalance"),
   );
@@ -1086,7 +1101,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getExchangeRateHistory(ctx.client, params.companyGroupId, params.currencyCode);
+      const result = await getExchangeRateHistory(ctx.client, ctx.companyGroupId, params.currencyCode);
       return toMcpResult(result);
     }, "Failed: accounting_getExchangeRateHistory"),
   );
@@ -1121,7 +1136,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getJournalEntry(ctx.client, params.id);
+      const result = await getJournalEntry(ctx.client, params.id, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: accounting_getJournalEntry"),
   );
@@ -1238,7 +1253,7 @@ export const registerAccountingTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await postJournalEntry(ctx.client, params.id, ctx.userId);
+      const result = await postJournalEntry(ctx.client, params.id, ctx.companyId, ctx.userId);
       return toMcpResult(result);
     }, "Failed: accounting_postJournalEntry"),
   );

@@ -1,17 +1,24 @@
-import type { Database, Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCarbonServiceRole } from "../lib/supabase/client.server";
+import { updateSubscriptionQuantityForCompany } from "@carbon/stripe/stripe.server";
+import { Edition } from "@carbon/utils";
+import { CarbonEdition } from "../config/env";
+import { getCarbonServiceClient } from "../lib/carbon/client.server";
 import type { Permission, Result } from "../types";
 import { error, success } from "../utils/result";
 import {
   getClaims,
+  getLegacyPermissionCacheKey,
   getPermissionCacheKey,
   makePermissionsFromClaims
 } from "./users";
 
+type QueryClient = {
+  from(table: string): any;
+};
+
 export async function getUserByEmail(email: string) {
-  return getCarbonServiceRole()
+  return getCarbonServiceClient()
     .from("user")
     .select("*")
     .eq("email", email.toLowerCase())
@@ -25,7 +32,9 @@ export async function getUserClaims(userId: string, companyId: string) {
   } | null = null;
 
   try {
-    const cachedClaims = await redis.get(getPermissionCacheKey(userId));
+    const cachedClaims = await redis.get(
+      getPermissionCacheKey(userId, companyId)
+    );
     if (cachedClaims) {
       claims = JSON.parse(cachedClaims) as {
         permissions: Record<string, Permission>;
@@ -37,9 +46,9 @@ export async function getUserClaims(userId: string, companyId: string) {
   } finally {
     // if we don't have permissions from redis, get them from the database
     if (!claims) {
-      // TODO: remove service role from here, and move it up a level
+      // TODO: move this service client call up a level
       const rawClaims = await getClaims(
-        getCarbonServiceRole(),
+        getCarbonServiceClient(),
         userId,
         companyId
       );
@@ -52,7 +61,10 @@ export async function getUserClaims(userId: string, companyId: string) {
       claims = makePermissionsFromClaims(rawClaims.data as Json[]);
 
       // store claims in redis
-      await redis.set(getPermissionCacheKey(userId), JSON.stringify(claims));
+      await redis.set(
+        getPermissionCacheKey(userId, companyId),
+        JSON.stringify(claims)
+      );
 
       if (!claims) {
         throw new Error("Failed to get claims");
@@ -64,11 +76,11 @@ export async function getUserClaims(userId: string, companyId: string) {
 }
 
 export async function deactivateCustomer(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: QueryClient,
   userId: string,
   companyId: string
 ): Promise<Result> {
-  const currentPermissions = await serviceRole
+  const currentPermissions = await serviceClient
     .from("userPermission")
     .select("*")
     .eq("id", userId)
@@ -85,32 +97,33 @@ export async function deactivateCustomer(
     return acc;
   }, {});
 
-  const companyGroups = await serviceRole
+  const companyGroups = await serviceClient
     .from("group")
     .select("id")
     .eq("companyId", companyId);
 
-  const groupIds = companyGroups.data?.map((g) => g.id) ?? [];
+  const groupIds =
+    companyGroups.data?.map((g: { id: string }) => g.id) ?? [];
 
   const [updatePermissions, userToCompanyDelete, customerAccountDelete] =
     await Promise.all([
-      serviceRole
+      serviceClient
         .from("userPermission")
         .update({ permissions })
         .eq("id", userId),
-      serviceRole
+      serviceClient
         .from("userToCompany")
         .delete()
         .eq("userId", userId)
         .eq("companyId", companyId),
-      serviceRole
+      serviceClient
         .from("customerAccount")
         .delete()
         .eq("id", userId)
         .eq("companyId", companyId),
       ...(groupIds.length > 0
         ? [
-            serviceRole
+            serviceClient
               .from("membership")
               .delete()
               .eq("memberUserId", userId)
@@ -141,11 +154,11 @@ export async function deactivateCustomer(
 }
 
 export async function deactivateEmployee(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: QueryClient,
   userId: string,
   companyId: string
 ): Promise<Result> {
-  const currentPermissions = await serviceRole
+  const currentPermissions = await serviceClient
     .from("userPermission")
     .select("*")
     .eq("id", userId)
@@ -162,37 +175,38 @@ export async function deactivateEmployee(
     return acc;
   }, {});
 
-  const companyGroups = await serviceRole
+  const companyGroups = await serviceClient
     .from("group")
     .select("id")
     .eq("companyId", companyId);
 
-  const groupIds = companyGroups.data?.map((g) => g.id) ?? [];
+  const groupIds =
+    companyGroups.data?.map((g: { id: string }) => g.id) ?? [];
 
   const [updatePermissions, userToCompanyDelete, employeeDeactivate] =
     await Promise.all([
-      serviceRole
+      serviceClient
         .from("userPermission")
         .update({ permissions })
         .eq("id", userId),
-      serviceRole
+      serviceClient
         .from("userToCompany")
         .delete()
         .eq("userId", userId)
         .eq("companyId", companyId),
-      serviceRole
+      serviceClient
         .from("employee")
         .update({ active: false })
         .eq("id", userId)
         .eq("companyId", companyId),
-      serviceRole
+      serviceClient
         .from("employeeJob")
         .delete()
         .eq("id", userId)
         .eq("companyId", companyId),
       ...(groupIds.length > 0
         ? [
-            serviceRole
+            serviceClient
               .from("membership")
               .delete()
               .eq("memberUserId", userId)
@@ -220,11 +234,11 @@ export async function deactivateEmployee(
 }
 
 export async function deactivateUser(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: QueryClient,
   userId: string,
   companyId: string
 ) {
-  const userToCompany = await serviceRole
+  const userToCompany = await serviceClient
     .from("userToCompany")
     .select("role")
     .eq("userId", userId)
@@ -235,7 +249,7 @@ export async function deactivateUser(
 
   if (userToCompany.error) {
     // No userToCompany row — either pending invite, or already deactivated.
-    const user = await serviceRole
+    const user = await serviceClient
       .from("user")
       .select("*")
       .eq("id", userId)
@@ -244,11 +258,13 @@ export async function deactivateUser(
       return error(user.error, "Failed to get user");
     }
 
-    const invite = await serviceRole
+    const invite = await serviceClient
       .from("invite")
       .select("*")
       .eq("email", user.data?.email)
       .eq("companyId", companyId)
+      .is("acceptedAt", null)
+      .is("revokedAt", null)
       .maybeSingle();
 
     if (!invite.data) {
@@ -257,21 +273,21 @@ export async function deactivateUser(
     }
 
     if (invite.data.role === "customer") {
-      result = await deactivateCustomer(serviceRole, userId, companyId);
+      result = await deactivateCustomer(serviceClient, userId, companyId);
     } else if (invite.data.role === "employee") {
-      result = await deactivateEmployee(serviceRole, userId, companyId);
+      result = await deactivateEmployee(serviceClient, userId, companyId);
     } else if (invite.data.role === "supplier") {
-      result = await deactivateSupplier(serviceRole, userId, companyId);
+      result = await deactivateSupplier(serviceClient, userId, companyId);
     } else {
       throw new Error("Invalid user role");
     }
   } else {
     if (userToCompany.data?.role === "customer") {
-      result = await deactivateCustomer(serviceRole, userId, companyId);
+      result = await deactivateCustomer(serviceClient, userId, companyId);
     } else if (userToCompany.data?.role === "employee") {
-      result = await deactivateEmployee(serviceRole, userId, companyId);
+      result = await deactivateEmployee(serviceClient, userId, companyId);
     } else if (userToCompany.data?.role === "supplier") {
-      result = await deactivateSupplier(serviceRole, userId, companyId);
+      result = await deactivateSupplier(serviceClient, userId, companyId);
     } else {
       throw new Error("Invalid user role");
     }
@@ -279,23 +295,27 @@ export async function deactivateUser(
 
   // Clear stale permission cache
   if (result && result.success) {
-    await redis.del(getPermissionCacheKey(userId));
+    await redis.del(
+      getPermissionCacheKey(userId, companyId),
+      getLegacyPermissionCacheKey(userId)
+    );
   }
 
   // Mark any invite for this user/company as revoked so the link cannot be
   // redeemed and the UI no longer surfaces resend/revoke actions on it.
   if (result && result.success) {
-    const userRecord = await serviceRole
+    const userRecord = await serviceClient
       .from("user")
       .select("email")
       .eq("id", userId)
       .single();
     if (!userRecord.error && userRecord.data?.email) {
-      await serviceRole
+      await serviceClient
         .from("invite")
         .update({ revokedAt: new Date().toISOString() })
         .eq("email", userRecord.data.email)
         .eq("companyId", companyId)
+        .is("acceptedAt", null)
         .is("revokedAt", null);
     }
   }
@@ -304,11 +324,11 @@ export async function deactivateUser(
 }
 
 export async function deactivateSupplier(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: QueryClient,
   userId: string,
   companyId: string
 ): Promise<Result> {
-  const currentPermissions = await serviceRole
+  const currentPermissions = await serviceClient
     .from("userPermission")
     .select("*")
     .eq("id", userId)
@@ -325,32 +345,33 @@ export async function deactivateSupplier(
     return acc;
   }, {});
 
-  const companyGroups = await serviceRole
+  const companyGroups = await serviceClient
     .from("group")
     .select("id")
     .eq("companyId", companyId);
 
-  const groupIds = companyGroups.data?.map((g) => g.id) ?? [];
+  const groupIds =
+    companyGroups.data?.map((g: { id: string }) => g.id) ?? [];
 
   const [updatePermissions, userToCompanyDelete, supplierAccountDelete] =
     await Promise.all([
-      serviceRole
+      serviceClient
         .from("userPermission")
         .update({ permissions })
         .eq("id", userId),
-      serviceRole
+      serviceClient
         .from("userToCompany")
         .delete()
         .eq("userId", userId)
         .eq("companyId", companyId),
-      serviceRole
+      serviceClient
         .from("supplierAccount")
         .delete()
         .eq("id", userId)
         .eq("companyId", companyId),
       ...(groupIds.length > 0
         ? [
-            serviceRole
+            serviceClient
               .from("membership")
               .delete()
               .eq("memberUserId", userId)

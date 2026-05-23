@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { recalculateJobOperationDependencies } from "~/modules/production/production.service";
@@ -29,7 +28,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const { error } = await client.from("jobOperation").delete().eq("id", id);
+  const { error } = await client
+    .from("jobOperation")
+    .delete()
+    .eq("id", id)
+    .eq("jobId", jobId)
+    .eq("companyId", companyId);
 
   if (error) {
     return data(
@@ -41,7 +45,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const recalculateResult = await recalculateJobOperationDependencies(
-    getCarbonServiceRole(),
+    client,
     {
       jobId,
       companyId,

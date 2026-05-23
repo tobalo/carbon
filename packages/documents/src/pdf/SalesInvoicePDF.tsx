@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { JSONContent } from "@carbon/react";
 import { formatDate, isEoriCountry } from "@carbon/utils";
 import { Image, Text, View } from "@react-pdf/renderer";
@@ -15,19 +15,19 @@ import {
 import { AddressBlock, Header, Note, Template } from "./components";
 
 type SalesInvoiceLocations =
-  Database["public"]["Views"]["salesInvoiceLocations"]["Row"] & {
+  TableRow<"salesInvoiceLocations"> & {
     customerTaxId?: string | null;
     customerVatNumber?: string | null;
   };
 
 interface SalesInvoicePDFProps extends PDF {
-  salesInvoice: Database["public"]["Views"]["salesInvoices"]["Row"];
-  salesInvoiceLines: Database["public"]["Views"]["salesInvoiceLines"]["Row"][];
+  salesInvoice: TableRow<"salesInvoices">;
+  salesInvoiceLines: TableRow<"salesInvoiceLines">[];
   salesInvoiceLocations: SalesInvoiceLocations;
-  salesInvoiceShipment: Database["public"]["Tables"]["salesInvoiceShipment"]["Row"];
+  salesInvoiceShipment: TableRow<"salesInvoiceShipment">;
   accountsReceivableBillingAddress?: AccountsReceivableBillingAddress | null;
   companySettings?:
-    | Database["public"]["Tables"]["companySettings"]["Row"]
+    | TableRow<"companySettings">
     | null;
   paymentTerms: { id: string; name: string }[];
   shippingMethods: { id: string; name: string }[];

@@ -1,5 +1,4 @@
-import type { Kysely, KyselyDatabase, KyselyTx } from "@carbon/database/client";
-import { sql } from "kysely";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import type {
   AuthProvider,
   OAuthClientOptions,
@@ -13,17 +12,17 @@ import type {
  * Uses PostgreSQL session variable `app.sync_in_progress` which is checked
  * by the `dispatch_event_batch` trigger function.
  *
- * @param db - The Kysely database instance
+ * @param db - The Drizzle database instance
  * @param operation - A callback that receives the transaction and performs DB operations
  */
 export async function withTriggersDisabled<T>(
-  db: Kysely<KyselyDatabase>,
-  operation: (tx: KyselyTx) => Promise<T>
+  db: DrizzleDb,
+  operation: (tx: DrizzleDb) => Promise<T>
 ): Promise<T> {
-  return db.transaction().execute(async (tx) => {
+  return db.transaction(async (tx) => {
     // Set the session variable to disable event triggers for this transaction
-    await sql`SET LOCAL "app.sync_in_progress" = 'true'`.execute(tx);
-    return await operation(tx);
+    await tx.execute(sql`SET LOCAL "app.sync_in_progress" = 'true'`);
+    return await operation(tx as DrizzleDb);
   });
 }
 

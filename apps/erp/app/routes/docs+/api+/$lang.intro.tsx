@@ -34,8 +34,8 @@ export default function Route() {
               You should never expose the API key in the client
             </AlertTitle>
             <AlertDescription>
-              Your API key gives full access to your database. Never expose it
-              in a public-facing client.
+              Your API key grants scoped access to company data. Never expose
+              it in a public-facing client.
             </AlertDescription>
           </Alert>
         </article>
@@ -71,12 +71,12 @@ export default function Route() {
       </div>
       {selectedLang == "js" ? (
         <>
-          <h2 className="doc-heading">Client Library SDK</h2>
+          <h2 className="doc-heading">HTTP API</h2>
           <div className="doc-section">
             <article className="code-column text-foreground">
               <p>
-                The easiest way to interact with the public API is via the
-                JavaScript Client Library SDK.
+                The easiest way to interact with the public API is through the
+                app-owned HTTP routes.
               </p>
               <p>Save the API Key as an Environment Variable.</p>
               <article>
@@ -90,10 +90,10 @@ export default function Route() {
                 header when making requests to the API.
               </p>
               <p>
-                As with your API Key, we recommend setting your Client Key as an
-                Environment Variable.
+                As with your API Key, keep server-side API calls outside
+                public-facing clients.
               </p>
-              <p>Initialize the client as follows:</p>
+              <p>Initialize a small HTTP helper as follows:</p>
               <div className="doc-section doc-section--client-libraries">
                 <article className="code">
                   <CodeSnippet
@@ -103,8 +103,8 @@ export default function Route() {
                 </article>
               </div>
               <p>
-                You can now make requests to the API using the client. See the
-                specific tables and views for more details.
+                You can now make requests to supported API routes using this
+                helper. Table and view pages provide schema metadata.
               </p>
             </article>
           </div>

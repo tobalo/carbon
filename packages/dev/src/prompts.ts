@@ -59,7 +59,7 @@ export async function pickApps(): Promise<AppId[]> {
   if (!process.stdin.isTTY) return APP_CHOICES.map((c) => c.value);
 
   note(
-    "When no apps are selected it will only run (postgres, kong, supabase, inngest, mail) without spawning ERP/MES dev servers.",
+    "When no apps are selected it will only run (postgres, minio, inngest, mail) without spawning ERP/MES dev servers.",
     "Tip"
   );
   const picked = await multiselect({

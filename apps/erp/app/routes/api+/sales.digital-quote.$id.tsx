@@ -1,17 +1,24 @@
 import { assertIsPost, notFound } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
+import { uploadObject } from "@carbon/storage";
 import type { ActionFunctionArgs } from "react-router";
 import {
   convertQuoteToOrder,
+  externalQuoteValidator,
   getQuoteByExternalId,
   getSalesOrder,
   selectedLinesValidator
 } from "~/modules/sales";
 import { getCompanySettings } from "~/modules/settings";
+import { getExternalLink } from "~/modules/shared";
 import { generateAndAttachSalesOrderPdf } from "~/modules/shared/shared.server";
 import { loader as pdfLoader } from "~/routes/file+/sales-order+/$id[.]pdf";
+
+function isExpired(date: string | null | undefined) {
+  return Boolean(date && new Date(date) < new Date());
+}
 
 export async function action(args: ActionFunctionArgs) {
   const { request, params } = args;
@@ -23,8 +30,24 @@ export async function action(args: ActionFunctionArgs) {
   const formData = await request.formData();
   const type = String(formData.get("type"));
 
-  const serviceRole = getCarbonServiceRole();
-  const quote = await getQuoteByExternalId(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const externalLink = await getExternalLink(serviceClient, id);
+  if (
+    externalLink.error ||
+    externalLink.data?.documentType !== "Quote" ||
+    isExpired(externalLink.data.expiresAt)
+  ) {
+    return {
+      success: false,
+      message: "Quote not found"
+    };
+  }
+
+  const quote = await getQuoteByExternalId(serviceClient, id, {
+    companyId: externalLink.data.companyId,
+    documentId: externalLink.data.documentId,
+    customerId: externalLink.data.customerId
+  });
 
   if (quote.error) {
     console.error("Quote not found", quote.error);
@@ -35,18 +58,30 @@ export async function action(args: ActionFunctionArgs) {
   }
 
   const companySettings = await getCompanySettings(
-    serviceRole,
+    serviceClient,
     quote.data.companyId
   );
 
   switch (type) {
     case "accept":
-      const digitalQuoteAcceptedBy = String(
-        formData.get("digitalQuoteAcceptedBy")
-      );
-      const digitalQuoteAcceptedByEmail = String(
-        formData.get("digitalQuoteAcceptedByEmail")
-      );
+      const acceptedValidation = externalQuoteValidator.safeParse({
+        type,
+        digitalQuoteAcceptedBy: formData.get("digitalQuoteAcceptedBy"),
+        digitalQuoteAcceptedByEmail: formData.get(
+          "digitalQuoteAcceptedByEmail"
+        )
+      });
+
+      if (!acceptedValidation.success) {
+        return { success: false, message: "Invalid quote response" };
+      }
+
+      if (acceptedValidation.data.type !== "accept") {
+        return { success: false, message: "Invalid quote response" };
+      }
+
+      const { digitalQuoteAcceptedBy, digitalQuoteAcceptedByEmail } =
+        acceptedValidation.data;
       const selectedLinesRaw = formData.get("selectedLines") ?? "{}";
       const file = formData.get("file");
 
@@ -64,6 +99,27 @@ export async function action(args: ActionFunctionArgs) {
       }
 
       const selectedLines = parseResult.data;
+      const selectedLineIds = Object.keys(selectedLines);
+
+      if (selectedLineIds.length === 0) {
+        return { success: false, message: "Invalid selected lines data" };
+      }
+
+      const validLines = await serviceClient
+        .from("quoteLine")
+        .select("id")
+        .eq("quoteId", quote.data.id)
+        .eq("companyId", quote.data.companyId)
+        .in("id", selectedLineIds);
+
+      if (
+        validLines.error ||
+        new Set((validLines.data ?? []).map((line) => line.id)).size !==
+          selectedLineIds.length
+      ) {
+        console.error("Invalid selected quote lines", validLines.error);
+        return { success: false, message: "Invalid selected lines data" };
+      }
 
       // Extract purchase order number from PDF filename if available
       let purchaseOrderNumber = "";
@@ -72,7 +128,7 @@ export async function action(args: ActionFunctionArgs) {
       }
 
       const [convert] = await Promise.all([
-        convertQuoteToOrder(serviceRole, {
+        convertQuoteToOrder(serviceClient, {
           id: quote.data.id,
           companyId: quote.data.companyId,
           userId: quote.data.createdBy,
@@ -95,8 +151,12 @@ export async function action(args: ActionFunctionArgs) {
       const salesOrderId = convert.data?.convertedId;
       if (salesOrderId) {
         try {
-          const salesOrder = await getSalesOrder(serviceRole, salesOrderId);
-          if (salesOrder.data?.salesOrderId && salesOrder.data?.opportunityId) {
+          const salesOrder = await getSalesOrder(serviceClient, salesOrderId);
+          if (
+            salesOrder.data?.companyId === quote.data.companyId &&
+            salesOrder.data?.salesOrderId &&
+            salesOrder.data?.opportunityId
+          ) {
             await generateAndAttachSalesOrderPdf({
               routeArgs: args,
               salesOrderId,
@@ -104,7 +164,7 @@ export async function action(args: ActionFunctionArgs) {
               opportunityId: salesOrder.data.opportunityId,
               companyId: quote.data.companyId,
               userId: quote.data.createdBy,
-              serviceRole,
+              client: serviceClient,
               pdfLoader
             });
           }
@@ -148,24 +208,28 @@ export async function action(args: ActionFunctionArgs) {
       if (file && file instanceof File) {
         const purchaseOrderDocumentPath = `${companySettings.data.id}/opportunity/${quote.data.opportunityId}/${file.name}`;
 
-        const fileUpload = await serviceRole.storage
-          .from("private")
-          .upload(purchaseOrderDocumentPath, file);
-
-        if (fileUpload.error) {
-          console.error("Failed to upload file", fileUpload.error);
+        try {
+          await uploadObject({
+            companyId: companySettings.data.id,
+            key: purchaseOrderDocumentPath,
+            body: new Uint8Array(await file.arrayBuffer()),
+            contentType: file.type || "application/octet-stream"
+          });
+        } catch (uploadError) {
+          console.error("Failed to upload file", uploadError);
           return {
             success: false,
             message: "Failed to upload file"
           };
         }
 
-        const updateOpportunity = await serviceRole
+        const updateOpportunity = await serviceClient
           .from("opportunity")
           .update({
             purchaseOrderDocumentPath
           })
-          .eq("id", quote.data.opportunityId!);
+          .eq("id", quote.data.opportunityId!)
+          .eq("companyId", quote.data.companyId);
 
         if (updateOpportunity.error) {
           console.error(
@@ -181,21 +245,35 @@ export async function action(args: ActionFunctionArgs) {
       };
 
     case "reject":
-      const digitalQuoteRejectedBy = String(
-        formData.get("digitalQuoteRejectedBy")
-      );
-      const digitalQuoteRejectedByEmail = String(
-        formData.get("digitalQuoteRejectedByEmail")
-      );
+      const rejectedValidation = externalQuoteValidator.safeParse({
+        type,
+        digitalQuoteRejectedBy: formData.get("digitalQuoteRejectedBy"),
+        digitalQuoteRejectedByEmail: formData.get(
+          "digitalQuoteRejectedByEmail"
+        )
+      });
 
-      const rejectQuote = await serviceRole
+      if (!rejectedValidation.success) {
+        return { success: false, message: "Invalid quote response" };
+      }
+
+      if (rejectedValidation.data.type !== "reject") {
+        return { success: false, message: "Invalid quote response" };
+      }
+
+      const { digitalQuoteRejectedBy, digitalQuoteRejectedByEmail } =
+        rejectedValidation.data;
+
+      const rejectQuote = await serviceClient
         .from("quote")
         .update({
           status: "Lost",
           digitalQuoteRejectedBy,
           digitalQuoteRejectedByEmail
         })
-        .eq("id", quote.data.id);
+        .eq("id", quote.data.id)
+        .eq("companyId", quote.data.companyId)
+        .eq("externalLinkId", id);
 
       if (rejectQuote.error) {
         console.error("Failed to reject quote", rejectQuote.error);

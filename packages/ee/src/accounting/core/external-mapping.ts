@@ -1,4 +1,5 @@
-import type { Kysely, KyselyDatabase, KyselyTx } from "@carbon/database/client";
+import { and, eq, sql, type DrizzleDb } from "@carbon/database/drizzle";
+import { externalIntegrationMappingTable } from "@carbon/database/schema";
 
 export interface ExternalIntegrationMapping {
   id: string;
@@ -34,7 +35,7 @@ export interface LinkOptions {
  */
 export class ExternalIntegrationMappingService {
   constructor(
-    private db: Kysely<KyselyDatabase> | KyselyTx,
+    private db: DrizzleDb,
     private companyId: string
   ) {}
 
@@ -59,8 +60,9 @@ export class ExternalIntegrationMappingService {
     const allowDuplicateExternalId = options?.allowDuplicateExternalId ?? false;
 
     await this.db
-      .insertInto("externalIntegrationMapping")
+      .insert(externalIntegrationMappingTable)
       .values({
+        id: crypto.randomUUID(),
         entityType,
         entityId,
         integration,
@@ -73,20 +75,23 @@ export class ExternalIntegrationMappingService {
         createdBy: options?.createdBy ?? null,
         createdAt: now,
         updatedAt: now
-      } as any)
-      .onConflict((oc) =>
-        oc
-          .columns(["entityType", "entityId", "integration", "companyId"])
-          .doUpdateSet({
-            externalId,
-            allowDuplicateExternalId,
-            metadata: (options?.metadata ?? null) as any,
-            lastSyncedAt: now,
-            remoteUpdatedAt,
-            updatedAt: now
-          })
-      )
-      .execute();
+      })
+      .onConflictDoUpdate({
+        target: [
+          externalIntegrationMappingTable.entityType,
+          externalIntegrationMappingTable.entityId,
+          externalIntegrationMappingTable.integration,
+          externalIntegrationMappingTable.companyId
+        ],
+        set: {
+          externalId,
+          allowDuplicateExternalId,
+          metadata: options?.metadata ?? null,
+          lastSyncedAt: now,
+          remoteUpdatedAt,
+          updatedAt: now
+        }
+      });
   }
 
   /**
@@ -98,12 +103,15 @@ export class ExternalIntegrationMappingService {
     integration: string
   ): Promise<void> {
     await this.db
-      .deleteFrom("externalIntegrationMapping")
-      .where("entityType", "=", entityType)
-      .where("entityId", "=", entityId)
-      .where("integration", "=", integration)
-      .where("companyId", "=", this.companyId)
-      .execute();
+      .delete(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.entityType, entityType),
+          eq(externalIntegrationMappingTable.entityId, entityId),
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.companyId, this.companyId)
+        )
+      );
   }
 
   /**
@@ -114,14 +122,18 @@ export class ExternalIntegrationMappingService {
     entityId: string,
     integration: string
   ): Promise<string | null> {
-    const mapping = await this.db
-      .selectFrom("externalIntegrationMapping")
-      .select("externalId")
-      .where("entityType", "=", entityType)
-      .where("entityId", "=", entityId)
-      .where("integration", "=", integration)
-      .where("companyId", "=", this.companyId)
-      .executeTakeFirst();
+    const [mapping] = await this.db
+      .select({ externalId: externalIntegrationMappingTable.externalId })
+      .from(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.entityType, entityType),
+          eq(externalIntegrationMappingTable.entityId, entityId),
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.companyId, this.companyId)
+        )
+      )
+      .limit(1);
 
     return mapping?.externalId ?? null;
   }
@@ -134,18 +146,20 @@ export class ExternalIntegrationMappingService {
     externalId: string,
     entityType?: string
   ): Promise<string | null> {
-    let query = this.db
-      .selectFrom("externalIntegrationMapping")
-      .select("entityId")
-      .where("integration", "=", integration)
-      .where("externalId", "=", externalId)
-      .where("companyId", "=", this.companyId);
-
-    if (entityType) {
-      query = query.where("entityType", "=", entityType);
-    }
-
-    const mapping = await query.executeTakeFirst();
+    const [mapping] = await this.db
+      .select({ entityId: externalIntegrationMappingTable.entityId })
+      .from(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.externalId, externalId),
+          eq(externalIntegrationMappingTable.companyId, this.companyId),
+          entityType
+            ? eq(externalIntegrationMappingTable.entityType, entityType)
+            : undefined
+        )
+      )
+      .limit(1);
     return mapping?.entityId ?? null;
   }
 
@@ -157,14 +171,18 @@ export class ExternalIntegrationMappingService {
     entityId: string,
     integration: string
   ): Promise<ExternalIntegrationMapping | null> {
-    const mapping = await this.db
-      .selectFrom("externalIntegrationMapping")
-      .selectAll()
-      .where("entityType", "=", entityType)
-      .where("entityId", "=", entityId)
-      .where("integration", "=", integration)
-      .where("companyId", "=", this.companyId)
-      .executeTakeFirst();
+    const [mapping] = await this.db
+      .select()
+      .from(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.entityType, entityType),
+          eq(externalIntegrationMappingTable.entityId, entityId),
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.companyId, this.companyId)
+        )
+      )
+      .limit(1);
 
     return (mapping as ExternalIntegrationMapping) ?? null;
   }
@@ -177,18 +195,20 @@ export class ExternalIntegrationMappingService {
     externalId: string,
     entityType?: string
   ): Promise<ExternalIntegrationMapping | null> {
-    let query = this.db
-      .selectFrom("externalIntegrationMapping")
-      .selectAll()
-      .where("integration", "=", integration)
-      .where("externalId", "=", externalId)
-      .where("companyId", "=", this.companyId);
-
-    if (entityType) {
-      query = query.where("entityType", "=", entityType);
-    }
-
-    const mapping = await query.executeTakeFirst();
+    const [mapping] = await this.db
+      .select()
+      .from(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.externalId, externalId),
+          eq(externalIntegrationMappingTable.companyId, this.companyId),
+          entityType
+            ? eq(externalIntegrationMappingTable.entityType, entityType)
+            : undefined
+        )
+      )
+      .limit(1);
     return (mapping as ExternalIntegrationMapping) ?? null;
   }
 
@@ -200,12 +220,15 @@ export class ExternalIntegrationMappingService {
     entityId: string
   ): Promise<ExternalIntegrationMapping[]> {
     const mappings = await this.db
-      .selectFrom("externalIntegrationMapping")
-      .selectAll()
-      .where("entityType", "=", entityType)
-      .where("entityId", "=", entityId)
-      .where("companyId", "=", this.companyId)
-      .execute();
+      .select()
+      .from(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.entityType, entityType),
+          eq(externalIntegrationMappingTable.entityId, entityId),
+          eq(externalIntegrationMappingTable.companyId, this.companyId)
+        )
+      );
 
     return mappings as ExternalIntegrationMapping[];
   }
@@ -217,17 +240,18 @@ export class ExternalIntegrationMappingService {
     integration: string,
     entityType?: string
   ): Promise<ExternalIntegrationMapping[]> {
-    let query = this.db
-      .selectFrom("externalIntegrationMapping")
-      .selectAll()
-      .where("integration", "=", integration)
-      .where("companyId", "=", this.companyId);
-
-    if (entityType) {
-      query = query.where("entityType", "=", entityType);
-    }
-
-    const mappings = await query.execute();
+    const mappings = await this.db
+      .select()
+      .from(externalIntegrationMappingTable)
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.companyId, this.companyId),
+          entityType
+            ? eq(externalIntegrationMappingTable.entityType, entityType)
+            : undefined
+        )
+      );
     return mappings as ExternalIntegrationMapping[];
   }
 
@@ -259,22 +283,20 @@ export class ExternalIntegrationMappingService {
     integration: string,
     limit: number
   ): Promise<string[]> {
-    const result = await (this.db as any)
-      .selectFrom(tableName)
-      .leftJoin("externalIntegrationMapping as m", (join: any) =>
-        join
-          .onRef("m.entityId", "=", `${tableName}.id`)
-          .on("m.entityType", "=", entityType)
-          .on("m.integration", "=", integration)
-          .on("m.companyId", "=", this.companyId)
-      )
-      .select([`${tableName}.id`])
-      .where(`${tableName}.companyId`, "=", this.companyId)
-      .where("m.id", "is", null)
-      .limit(limit)
-      .execute();
+    const result = await this.db.execute<{ id: string }>(sql`
+      select t.id
+      from ${sql.identifier(tableName)} t
+      left join "externalIntegrationMapping" m
+        on m."entityId" = t.id
+        and m."entityType" = ${entityType}
+        and m."integration" = ${integration}
+        and m."companyId" = ${this.companyId}
+      where t."companyId" = ${this.companyId}
+        and m.id is null
+      limit ${limit}
+    `);
 
-    return (result as Array<{ id: string }>).map((r) => r.id);
+    return result.rows.map((r) => r.id);
   }
 
   /**
@@ -286,16 +308,19 @@ export class ExternalIntegrationMappingService {
     integration: string
   ): Promise<void> {
     await this.db
-      .updateTable("externalIntegrationMapping")
+      .update(externalIntegrationMappingTable)
       .set({
         lastSyncedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       })
-      .where("entityType", "=", entityType)
-      .where("entityId", "=", entityId)
-      .where("integration", "=", integration)
-      .where("companyId", "=", this.companyId)
-      .execute();
+      .where(
+        and(
+          eq(externalIntegrationMappingTable.entityType, entityType),
+          eq(externalIntegrationMappingTable.entityId, entityId),
+          eq(externalIntegrationMappingTable.integration, integration),
+          eq(externalIntegrationMappingTable.companyId, this.companyId)
+        )
+      );
   }
 
   /**
@@ -316,6 +341,7 @@ export class ExternalIntegrationMappingService {
     const now = new Date().toISOString();
 
     const values = mappings.map((m) => ({
+      id: crypto.randomUUID(),
       entityType: m.entityType,
       entityId: m.entityId,
       integration: m.integration,
@@ -335,23 +361,24 @@ export class ExternalIntegrationMappingService {
     }));
 
     await this.db
-      .insertInto("externalIntegrationMapping")
-      .values(values as any)
-      .onConflict((oc) =>
-        oc
-          .columns(["entityType", "entityId", "integration", "companyId"])
-          .doUpdateSet((eb) => ({
-            externalId: eb.ref("excluded.externalId"),
-            allowDuplicateExternalId: eb.ref(
-              "excluded.allowDuplicateExternalId"
-            ),
-            metadata: eb.ref("excluded.metadata"),
-            lastSyncedAt: eb.ref("excluded.lastSyncedAt"),
-            remoteUpdatedAt: eb.ref("excluded.remoteUpdatedAt"),
-            updatedAt: eb.ref("excluded.updatedAt")
-          }))
-      )
-      .execute();
+      .insert(externalIntegrationMappingTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          externalIntegrationMappingTable.entityType,
+          externalIntegrationMappingTable.entityId,
+          externalIntegrationMappingTable.integration,
+          externalIntegrationMappingTable.companyId
+        ],
+        set: {
+          externalId: sql`excluded."externalId"`,
+          allowDuplicateExternalId: sql`excluded."allowDuplicateExternalId"`,
+          metadata: sql`excluded."metadata"`,
+          lastSyncedAt: sql`excluded."lastSyncedAt"`,
+          remoteUpdatedAt: sql`excluded."remoteUpdatedAt"`,
+          updatedAt: sql`excluded."updatedAt"`
+        }
+      });
   }
 }
 
@@ -359,7 +386,7 @@ export class ExternalIntegrationMappingService {
  * Create a new ExternalIntegrationMappingService instance.
  */
 export function createMappingService(
-  db: Kysely<KyselyDatabase> | KyselyTx,
+  db: DrizzleDb,
   companyId: string
 ): ExternalIntegrationMappingService {
   return new ExternalIntegrationMappingService(db, companyId);

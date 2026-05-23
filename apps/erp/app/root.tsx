@@ -44,14 +44,13 @@ import { getMode, setMode } from "~/services/mode.server";
 import Background from "~/styles/background.css?url";
 import NProgress from "~/styles/nprogress.css?url";
 import Tailwind from "~/styles/tailwind.css?url";
-import type { Route } from "./+types/root";
 import "./polyfill";
 import { getTheme } from "./services/theme.server";
 
 export const middleware = [flashMiddleware];
 export const clientMiddleware = [flashClientMiddleware];
 
-export const links: Route.LinksFunction = () => [
+export const links = () => [
   { rel: "stylesheet", href: Tailwind },
   { rel: "stylesheet", href: Background },
   { rel: "stylesheet", href: NProgress },
@@ -74,6 +73,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     CONTROLLED_ENVIRONMENT,
     ERP_URL,
     GOOGLE_PLACES_API_KEY,
+    IMAGE_RESIZER_URL,
     JIRA_CLIENT_ID,
     MES_URL,
     NODE_ENV,
@@ -83,8 +83,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     POSTHOG_API_HOST,
     POSTHOG_PROJECT_PUBLIC_KEY,
     QUICKBOOKS_CLIENT_ID,
-    SUPABASE_ANON_KEY,
-    SUPABASE_URL,
+    S3_PUBLIC_BASE_URL,
+    TRANSCRIPTION_SERVICE_URL,
     DEFAULT_LANGUAGE,
     VERCEL_ENV,
     VERCEL_URL,
@@ -104,6 +104,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         CONTROLLED_ENVIRONMENT,
         ERP_URL,
         GOOGLE_PLACES_API_KEY,
+        IMAGE_RESIZER_URL,
         JIRA_CLIENT_ID,
         MES_URL,
         NODE_ENV,
@@ -113,8 +114,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         POSTHOG_API_HOST,
         POSTHOG_PROJECT_PUBLIC_KEY,
         QUICKBOOKS_CLIENT_ID,
-        SUPABASE_ANON_KEY,
-        SUPABASE_URL,
+        S3_PUBLIC_BASE_URL,
+        TRANSCRIPTION_SERVICE_URL,
         DEFAULT_LANGUAGE,
         VERCEL_ENV,
         VERCEL_URL,
@@ -271,7 +272,7 @@ export default function App() {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+export function ErrorBoundary({ error }: { error: unknown }) {
   const message = isRouteErrorResponse(error)
     ? (error.data.message ?? error.data)
     : error instanceof Error

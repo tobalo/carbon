@@ -442,7 +442,7 @@ export const registerItemsTools: RegisterTools = (server, ctx) => {
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await assertMethodOperationIsDraft(ctx.client, params.operationId);
+      const result = await assertMethodOperationIsDraft(ctx.client, params.operationId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: items_assertMethodOperationIsDraft"),
   );
@@ -1199,7 +1199,7 @@ export const registerItemsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getMethodMaterial(ctx.client, params.materialId);
+      const result = await getMethodMaterial(ctx.client, params.materialId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: items_getMethodMaterial"),
   );
@@ -1233,7 +1233,7 @@ export const registerItemsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getMethodMaterialsByMakeMethod(ctx.client, params.makeMethodId);
+      const result = await getMethodMaterialsByMakeMethod(ctx.client, params.makeMethodId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: items_getMethodMaterialsByMakeMethod"),
   );
@@ -1267,7 +1267,7 @@ export const registerItemsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getMethodOperationsByMakeMethodId(ctx.client, params.makeMethodId);
+      const result = await getMethodOperationsByMakeMethodId(ctx.client, params.makeMethodId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: items_getMethodOperationsByMakeMethodId"),
   );
@@ -1282,7 +1282,11 @@ export const registerItemsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getMethodTree(ctx.client, params.makeMethodId);
+      const result = await getMethodTree(
+        ctx.client,
+        params.makeMethodId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: items_getMethodTree"),
   );
@@ -1297,7 +1301,11 @@ export const registerItemsTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getMethodTreeArray(ctx.client, params.makeMethodId);
+      const result = await getMethodTreeArray(
+        ctx.client,
+        params.makeMethodId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: items_getMethodTreeArray"),
   );

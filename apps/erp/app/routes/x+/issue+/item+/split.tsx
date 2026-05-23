@@ -23,7 +23,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const existing = await client
     .from("nonConformanceItem")
-    .select("*, nonConformance(status)")
+    .select("*")
     .eq("id", id)
     .eq("companyId", companyId)
     .single();
@@ -35,8 +35,14 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
+  const issue = await client
+    .from("nonConformance")
+    .select("status")
+    .eq("id", existing.data.nonConformanceId)
+    .eq("companyId", companyId)
+    .single();
   const lockedError = requireUnlockedBulk({
-    statuses: [(existing.data as any).nonConformance?.status ?? null],
+    statuses: [issue.data?.status ?? null],
     checkFn: isIssueLocked,
     message: "Cannot modify a closed issue. Reopen it first."
   });

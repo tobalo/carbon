@@ -54,7 +54,7 @@ import { flattenTree } from "~/components/TreeView";
 import {
   useOptimisticLocation,
   usePermissions,
-  useRealtime,
+  usePollingRevalidation,
   useRouteData,
   useUser
 } from "~/hooks";
@@ -102,7 +102,7 @@ export default function QuoteExplorer({ methods }: QuoteExplorerProps) {
     taxPercent: quoteData?.customer?.taxPercent ?? 0
   };
 
-  useRealtime(
+  usePollingRevalidation(
     "modelUpload",
     `modelPath=in.(${quoteData?.lines.map((d) => d.modelPath).join(",")})`
   );
@@ -195,7 +195,7 @@ export default function QuoteExplorer({ methods }: QuoteExplorerProps) {
               linesToRender.map((line) =>
                 !isQuoteLine(line) ? (
                   <OptimisticQuoteLineItem
-                    key={line.itemId}
+                    key={(line as OptimisticQuoteLine).itemId}
                     line={line as OptimisticQuoteLine}
                   />
                 ) : (

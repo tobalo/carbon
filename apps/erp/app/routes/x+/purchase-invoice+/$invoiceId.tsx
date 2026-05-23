@@ -56,7 +56,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     purchaseInvoice.data?.supplierId
       ? getSupplier(client, purchaseInvoice.data.supplierId)
       : null,
-    getSupplierInteraction(client, purchaseInvoice.data.supplierInteractionId!),
+    getSupplierInteraction(client, companyId, purchaseInvoice.data.supplierInteractionId!),
     getSupplierInteractionDocuments(
       client,
       companyId,

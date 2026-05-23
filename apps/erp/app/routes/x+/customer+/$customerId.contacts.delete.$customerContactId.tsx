@@ -1,5 +1,8 @@
 import { error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type {
   ActionFunctionArgs,
@@ -11,9 +14,10 @@ import { path } from "~/utils/path";
 import { customerContactsQuery } from "~/utils/react-query";
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     delete: "sales"
   });
+  const { client } = auth;
 
   const { customerId, customerContactId } = params;
   if (!customerId || !customerContactId) {
@@ -22,6 +26,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await flash(request, error(params, "Failed to get a customer contact id"))
     );
   }
+  assertCustomerAccountScope(auth, customerId);
 
   // TODO: check whether this person has an account or is a partner first
 

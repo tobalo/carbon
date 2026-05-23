@@ -1,5 +1,5 @@
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import {
   Boolean,
   DatePicker,
@@ -43,7 +43,7 @@ import {
 } from "@carbon/react";
 import { Editor } from "@carbon/react/Editor";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "@carbon/storage";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
@@ -62,6 +62,7 @@ import {
 import { useGauges } from "~/components/Form/Gauge";
 import { usePermissions, useRouteData, useUser } from "~/hooks";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import { gaugeCalibrationRecordValidator } from "../../quality.models";
 import type { Gauge } from "../../types";
 import { GaugeRole } from "../Gauge/GaugeStatus";
@@ -94,7 +95,7 @@ const GaugeCalibrationRecordForm = ({
     : !permissions.can("create", "quality");
 
   const routeData = useRouteData<{
-    companySettings: Database["public"]["Tables"]["companySettings"]["Row"];
+    companySettings: TableRow<"companySettings">;
   }>(path.to.authenticatedRoot);
   const isMetric = routeData?.companySettings?.useMetric ?? false;
 
@@ -154,7 +155,11 @@ const GaugeCalibrationRecordForm = ({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

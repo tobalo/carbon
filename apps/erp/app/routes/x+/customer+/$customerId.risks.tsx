@@ -1,12 +1,19 @@
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import type { LoaderFunctionArgs } from "react-router";
 import { data, useParams } from "react-router";
 import CustomerRiskRegister from "~/modules/sales/ui/Customer/CustomerRiskRegister";
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  await requirePermissions(request, {
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const auth = await requirePermissions(request, {
     view: "sales"
   });
+
+  const { customerId } = params;
+  if (!customerId) throw new Error("Could not find customerId");
+  assertCustomerAccountScope(auth, customerId);
 
   return data({});
 }

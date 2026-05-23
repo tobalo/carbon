@@ -1,12 +1,9 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import {
-  getPostgresClient,
-  getPostgresConnectionPool
-} from "@carbon/database/client";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { EventSchema } from "@carbon/database/event";
 import {
   type AccountingEntityType,
   type BatchSyncResult,
+  createAccountingDatabaseClient,
   getAccountingIntegration,
   getProviderIntegration,
   ProviderID,
@@ -14,7 +11,6 @@ import {
   SyncFactory
 } from "@carbon/ee/accounting";
 import { groupBy, pluckUnique } from "@carbon/utils";
-import { PostgresDriver } from "kysely";
 import { z } from "zod";
 import { inngest } from "../../client";
 
@@ -70,9 +66,9 @@ export const syncFunction = inngest.createFunction(
       return `${companyId}:${provider}`;
     });
 
-    const pool = getPostgresConnectionPool(10);
-    const kysely = getPostgresClient(pool, PostgresDriver);
-    const client = getCarbonServiceRole();
+    const accountingDatabase = createAccountingDatabaseClient(10);
+    const database = accountingDatabase.database;
+    const client = getCarbonServiceClient();
 
     try {
       for (const [key, records] of Object.entries(byCompanyProvider)) {
@@ -150,7 +146,7 @@ export const syncFunction = inngest.createFunction(
                 );
 
                 const syncer = SyncFactory.getSyncer({
-                  database: kysely,
+                  database,
                   companyId,
                   provider: providerInstance,
                   config: providerInstance.getSyncConfig(
@@ -219,7 +215,7 @@ export const syncFunction = inngest.createFunction(
         results.skipped.push(...groupResult.skipped);
       }
     } finally {
-      await pool.end();
+      await accountingDatabase.close();
     }
 
     console.log("Sync function completed", {

@@ -1,6 +1,8 @@
 import { assertIsPost, error, notFound, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -19,15 +21,14 @@ import { customerContactsQuery } from "~/utils/react-query";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     create: "sales"
   });
-
-  // RLS doesn't work for selecting a contact with no customer
-  const client = getCarbonServiceRole();
+  const { client, companyId } = auth;
 
   const { customerId } = params;
   if (!customerId) throw notFound("customerId not found");
+  assertCustomerAccountScope(auth, customerId);
 
   const formData = await request.formData();
   const modal = formData.get("type") === "modal";

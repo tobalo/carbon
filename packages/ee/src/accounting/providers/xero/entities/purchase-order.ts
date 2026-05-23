@@ -1,4 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import { createMappingService } from "../../../core/external-mapping";
 import {
   type Accounting,
@@ -122,49 +122,49 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
     if (ids.length === 0) return new Map();
 
     // Fetch purchase orders
-    const orderRows = await this.database
-      .selectFrom("purchaseOrder")
-      .select([
-        "id",
-        "companyId",
-        "purchaseOrderId",
-        "supplierId",
-        "status",
-        "orderDate",
-        "currencyCode",
-        "exchangeRate",
-        "supplierReference",
-        "updatedAt"
-      ])
-      .where("id", "in", ids)
-      .where("companyId", "=", this.companyId)
-      .execute();
+    const { rows: orderRows } =
+      await this.database.execute<PurchaseOrderRow>(sql`
+        select
+          id,
+          "companyId",
+          "purchaseOrderId",
+          "supplierId",
+          status,
+          "orderDate",
+          "currencyCode",
+          "exchangeRate",
+          "supplierReference",
+          "updatedAt"
+        from "purchaseOrder"
+        where id = any(${ids}::text[])
+          and "companyId" = ${this.companyId}
+      `);
 
     if (orderRows.length === 0) return new Map();
 
     // Fetch lines for all orders
     const orderIds = orderRows.map((o) => o.id);
-    const lineRows = await this.database
-      .selectFrom("purchaseOrderLine")
-      .leftJoin("item", "item.id", "purchaseOrderLine.itemId")
-      .leftJoin("account", "account.id", "purchaseOrderLine.accountId")
-      .select([
-        "purchaseOrderLine.id",
-        "purchaseOrderLine.purchaseOrderId",
-        "purchaseOrderLine.description",
-        "purchaseOrderLine.purchaseQuantity",
-        "purchaseOrderLine.unitPrice",
-        "purchaseOrderLine.itemId",
-        "purchaseOrderLine.taxPercent",
-        "purchaseOrderLine.taxAmount",
-        "purchaseOrderLine.extendedPrice",
-        "purchaseOrderLine.quantityReceived",
-        "purchaseOrderLine.quantityInvoiced",
-        "item.readableId as itemCode",
-        "account.number as accountNumber"
-      ])
-      .where("purchaseOrderLine.purchaseOrderId", "in", orderIds)
-      .execute();
+    const { rows: lineRows } =
+      await this.database.execute<PurchaseOrderLineRow>(sql`
+        select
+          pol.id,
+          pol."purchaseOrderId",
+          pol.description,
+          pol."purchaseQuantity",
+          pol."unitPrice",
+          pol."itemId",
+          pol."taxPercent",
+          pol."taxAmount",
+          pol."extendedPrice",
+          pol."quantityReceived",
+          pol."quantityInvoiced",
+          i."readableId" as "itemCode",
+          a.number as "accountNumber"
+        from "purchaseOrderLine" pol
+        left join item i on i.id = pol."itemId"
+        left join account a on a.id = pol."accountId"
+        where pol."purchaseOrderId" = any(${orderIds}::text[])
+      `);
 
     // Fetch supplier external IDs for mapping via the mapping service
     const supplierIds = orderRows.map((o) => o.supplierId);
@@ -325,11 +325,15 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
           await this.ensureDependencySynced("item", line.itemId);
           // If we don't have the itemCode, fetch it from the item table
           if (!itemCode) {
-            const item = await this.database
-              .selectFrom("item")
-              .select("readableId")
-              .where("id", "=", line.itemId)
-              .executeTakeFirst();
+            const { rows } = await this.database.execute<{
+              readableId: string | null;
+            }>(sql`
+              select "readableId"
+              from item
+              where id = ${line.itemId}
+              limit 1
+            `);
+            const item = rows[0];
             itemCode = item?.readableId ?? null;
           }
         }
@@ -429,7 +433,7 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.PurchaseOrder>,
     remoteId: string
   ): Promise<string> {
@@ -448,20 +452,19 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
 
     if (existingLocalId) {
       // Update existing purchase order (mapping is handled by linkEntities in base class)
-      await tx
-        .updateTable("purchaseOrder")
-        .set({
-          supplierId: supplierId ?? undefined,
-          status: data.status,
-          orderDate: data.orderDate,
-          currencyCode: data.currencyCode,
-          exchangeRate: data.exchangeRate,
-          supplierReference: data.supplierReference,
-          updatedAt: new Date().toISOString()
-        })
-        .where("id", "=", existingLocalId)
-        .where("companyId", "=", this.companyId)
-        .execute();
+      await tx.execute(sql`
+        update "purchaseOrder"
+        set
+          "supplierId" = coalesce(${supplierId}, "supplierId"),
+          status = ${data.status},
+          "orderDate" = ${data.orderDate},
+          "currencyCode" = ${data.currencyCode},
+          "exchangeRate" = ${data.exchangeRate},
+          "supplierReference" = ${data.supplierReference},
+          "updatedAt" = ${new Date().toISOString()}
+        where id = ${existingLocalId}
+          and "companyId" = ${this.companyId}
+      `);
 
       // Update lines
       await this.upsertLines(tx, existingLocalId, data.lines ?? []);
@@ -477,15 +480,15 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
   }
 
   private async upsertLines(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     purchaseOrderId: string,
     lines: Accounting.PurchaseOrderLine[]
   ): Promise<void> {
     // Delete existing lines
-    await tx
-      .deleteFrom("purchaseOrderLine")
-      .where("purchaseOrderId", "=", purchaseOrderId)
-      .execute();
+    await tx.execute(sql`
+      delete from "purchaseOrderLine"
+      where "purchaseOrderId" = ${purchaseOrderId}
+    `);
 
     if (lines.length === 0) return;
 
@@ -496,12 +499,15 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
 
     const itemMap = new Map<string, string>();
     if (itemCodes.length > 0) {
-      const items = await tx
-        .selectFrom("item")
-        .select(["id", "readableId"])
-        .where("readableId", "in", itemCodes)
-        .where("companyId", "=", this.companyId)
-        .execute();
+      const { rows: items } = await tx.execute<{
+        id: string;
+        readableId: string;
+      }>(sql`
+        select id, "readableId"
+        from item
+        where "readableId" = any(${itemCodes}::text[])
+          and "companyId" = ${this.companyId}
+      `);
 
       for (const item of items) {
         itemMap.set(item.readableId, item.id);
@@ -518,13 +524,16 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
     if (accountNumbers.length > 0) {
       const companyGroupId = await this.getCompanyGroupId(tx);
       if (companyGroupId) {
-        const accounts = await tx
-          .selectFrom("account")
-          .select(["id", "number"])
-          .where("companyGroupId", "=", companyGroupId)
-          .where("number", "in", accountNumbers)
-          .where("active", "=", true)
-          .execute();
+        const { rows: accounts } = await tx.execute<{
+          id: string;
+          number: string | null;
+        }>(sql`
+          select id, number
+          from account
+          where "companyGroupId" = ${companyGroupId}
+            and number = any(${accountNumbers}::text[])
+            and active = true
+        `);
         for (const a of accounts) {
           if (a.number) accountIdMap.set(a.number, a.id);
         }
@@ -532,11 +541,18 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
     }
 
     // Get the PO to get companyId and createdBy
-    const po = await tx
-      .selectFrom("purchaseOrder")
-      .select(["companyId", "createdBy", "exchangeRate"])
-      .where("id", "=", purchaseOrderId)
-      .executeTakeFirstOrThrow();
+    const { rows: poRows } = await tx.execute<{
+      companyId: string;
+      createdBy: string | null;
+      exchangeRate: number | null;
+    }>(sql`
+      select "companyId", "createdBy", "exchangeRate"
+      from "purchaseOrder"
+      where id = ${purchaseOrderId}
+      limit 1
+    `);
+    const po = poRows[0];
+    if (!po) throw new Error("Purchase order not found");
 
     // Insert new lines
     for (const line of lines) {
@@ -544,33 +560,51 @@ export class PurchaseOrderSyncer extends BaseEntitySyncer<
         ? (itemMap.get(line.itemCode) ?? null)
         : null;
 
-      await tx
-        .insertInto("purchaseOrderLine")
-        .values({
-          purchaseOrderId,
-          companyId: po.companyId,
-          createdBy: po.createdBy,
-          description: line.description,
-          purchaseQuantity: line.quantity,
-          unitPrice: line.unitPrice,
-          supplierUnitPrice: line.unitPrice,
-          itemId,
-          accountId: line.accountNumber
-            ? (accountIdMap.get(line.accountNumber) ?? null)
-            : null,
-          taxPercent: line.taxPercent,
-          taxAmount: line.taxAmount,
-          supplierTaxAmount: line.taxAmount ?? 0,
-          extendedPrice: line.totalAmount,
-          supplierExtendedPrice: line.totalAmount,
-          exchangeRate: po.exchangeRate ?? 1,
-          purchaseOrderLineType: itemId ? "Part" : "G/L Account",
-          supplierShippingCost: 0,
-          invoicedComplete: false,
-          receivedComplete: false,
-          requiresInspection: false
-        })
-        .execute();
+      await tx.execute(sql`
+        insert into "purchaseOrderLine" (
+          "purchaseOrderId",
+          "companyId",
+          "createdBy",
+          description,
+          "purchaseQuantity",
+          "unitPrice",
+          "supplierUnitPrice",
+          "itemId",
+          "accountId",
+          "taxPercent",
+          "taxAmount",
+          "supplierTaxAmount",
+          "extendedPrice",
+          "supplierExtendedPrice",
+          "exchangeRate",
+          "purchaseOrderLineType",
+          "supplierShippingCost",
+          "invoicedComplete",
+          "receivedComplete",
+          "requiresInspection"
+        ) values (
+          ${purchaseOrderId},
+          ${po.companyId},
+          ${po.createdBy},
+          ${line.description},
+          ${line.quantity},
+          ${line.unitPrice},
+          ${line.unitPrice},
+          ${itemId},
+          ${line.accountNumber ? (accountIdMap.get(line.accountNumber) ?? null) : null},
+          ${line.taxPercent},
+          ${line.taxAmount},
+          ${line.taxAmount ?? 0},
+          ${line.totalAmount},
+          ${line.totalAmount},
+          ${po.exchangeRate ?? 1},
+          ${itemId ? "Part" : "G/L Account"},
+          ${0},
+          ${false},
+          ${false},
+          ${false}
+        )
+      `);
     }
   }
 

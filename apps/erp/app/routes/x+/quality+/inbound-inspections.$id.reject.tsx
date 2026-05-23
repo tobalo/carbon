@@ -1,10 +1,9 @@
 import { assertIsPost, ERP_URL, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { flash } from "@carbon/auth/session.server";
 import { notifyIssueCreated } from "@carbon/ee/notifications";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import { FunctionRegion } from "@supabase/supabase-js";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import invariant from "tiny-invariant";
@@ -53,8 +52,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // 2. Auto-create an NCR and navigate the user straight to it so MRB can
   //    formally disposition (scrap / rework / return / use-as-is).
-  const serviceRole = await getCarbonServiceRole();
-
   const [inspection, userDefaults, issueTypes] = await Promise.all([
     getInboundInspection(client, id),
     getUserDefaults(client, userId, companyId),
@@ -91,7 +88,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const nextSequence = await getNextSequence(
-    serviceRole,
+    client,
     "nonConformance",
     companyId
   );
@@ -120,7 +117,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .filter(Boolean)
     .join(" ");
 
-  const createIssue = await upsertIssue(serviceRole, {
+  const createIssue = await upsertIssue(client, {
     nonConformanceId: nextSequence.data,
     name: issueTitle,
     description: `Auto-created from inbound inspection ${inspectionReadableId}. Lot size ${insp.lotSize}, sample ${insp.sampleSize}, Ac ${insp.acceptanceNumber} / Re ${insp.rejectionNumber}. Supplier: ${supplierName}.`,
@@ -157,7 +154,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // Use As Is / split later).
   let scrapRowId: string | null = null;
   if (insp.itemId) {
-    await serviceRole
+    await client
       .from("nonConformanceItem")
       .update({
         quantity: Number(insp.lotSize ?? 0),
@@ -166,20 +163,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
         updatedAt: new Date().toISOString()
       })
       .eq("nonConformanceId", ncrId)
-      .eq("itemId", insp.itemId);
+      .eq("itemId", insp.itemId)
+      .eq("companyId", companyId);
 
-    const scrapRow = await serviceRole
+    const scrapRow = await client
       .from("nonConformanceItem")
       .select("id")
       .eq("nonConformanceId", ncrId)
       .eq("itemId", insp.itemId)
+      .eq("companyId", companyId)
       .single();
     scrapRowId = scrapRow.data?.id ?? null;
   }
 
   // Link the source inspection to the NCR so the issue explorer can surface
   // the origin and deep-link back to the inspection lot.
-  await serviceRole.from("nonConformanceInboundInspection").insert({
+  await client.from("nonConformanceInboundInspection").insert({
     nonConformanceId: ncrId,
     inboundInspectionId: insp.id,
     companyId,
@@ -189,7 +188,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // Also link the receipt line — gives the explorer the supplier / receipt
   // context through the existing "Receipt Lines" association branch.
   if (insp.receiptLineId && insp.receiptId) {
-    await serviceRole.from("nonConformanceReceiptLine").insert({
+    await client.from("nonConformanceReceiptLine").insert({
       nonConformanceId: ncrId,
       receiptLineId: insp.receiptLineId,
       receiptId: insp.receiptId,
@@ -217,7 +216,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   );
 
   if (allLotEntityIds.length > 0) {
-    await serviceRole.from("nonConformanceTrackedEntity").insert(
+    await client.from("nonConformanceTrackedEntity").insert(
       allLotEntityIds.map((trackedEntityId) => ({
         nonConformanceId: ncrId,
         trackedEntityId,
@@ -230,7 +229,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     // split / reassign specific entities to other dispositions. Each entity
     // contributes its own quantity to the row.
     if (scrapRowId) {
-      const entityQuantities = await serviceRole
+      const entityQuantities = await client
         .from("trackedEntity")
         .select("id, quantity")
         .in("id", allLotEntityIds)
@@ -243,24 +242,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
         createdBy: userId
       }));
       if (rows.length > 0) {
-        await (serviceRole as any)
+        await (client as any)
           .from("nonConformanceItemTrackedEntity")
           .insert(rows);
       }
     }
   }
 
-  const tasks = await serviceRole.functions.invoke("create", {
+  const tasks = await invokeFunction("create", {
     body: {
       type: "nonConformanceTasks",
       id: ncrId,
       companyId,
       userId
-    },
-    region: FunctionRegion.UsEast1
+    }
   });
   if (tasks.error) {
-    await deleteIssue(serviceRole, ncrId);
+    await deleteIssue(client, ncrId);
     throw redirect(
       path.to.inboundInspection(id),
       await flash(
@@ -272,7 +270,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   try {
     const integrations = await getCompanyIntegrations(client, companyId);
-    await notifyIssueCreated({ client, serviceRole }, integrations, {
+    await notifyIssueCreated({ client }, integrations, {
       companyId,
       userId,
       carbonUrl: `${ERP_URL}${path.to.issue(ncrId)}`,

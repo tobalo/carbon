@@ -1,27 +1,35 @@
-import type { Database, Json } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { SUPABASE_URL } from "../config/env";
+import type { Json } from "@carbon/database/schema";
 import type { Permission } from "../types";
+import { getPublicStorageUrl } from "../utils/storage";
+
+type QueryClient = {
+  rpc(fn: string, params?: Record<string, unknown>): any;
+  from(table: string): any;
+};
 
 export async function getClaims(
-  client: SupabaseClient<Database>,
+  client: QueryClient,
   uid: string,
   company?: string
 ) {
   return client.rpc("get_claims", { uid, company: company ?? "" });
 }
 
-export function getPermissionCacheKey(userId: string) {
+export function getPermissionCacheKey(userId: string, companyId: string) {
+  return `permissions:${userId}:${companyId}`;
+}
+
+export function getLegacyPermissionCacheKey(userId: string) {
   return `permissions:${userId}`;
 }
 
 export async function getCompanies(
-  client: SupabaseClient<Database>,
+  client: QueryClient,
   userId: string
 ) {
   const companies = await client
     .from("companies")
-    .select("*, companyGroup(name)")
+    .select("*")
     .eq("userId", userId)
     .order("name");
 
@@ -30,20 +38,19 @@ export async function getCompanies(
   }
 
   return {
-    data: companies.data.map(({ companyGroup, ...company }) => ({
+    data: (companies.data as CompanyRecord[]).map((company) => ({
       ...company,
-      companyGroupName: (companyGroup as { name: string } | null)?.name ?? null,
       logoLightIcon: company.logoLightIcon
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoLightIcon}`
+        ? getPublicStorageUrl(company.logoLightIcon)
         : null,
       logoDarkIcon: company.logoDarkIcon
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoDarkIcon}`
+        ? getPublicStorageUrl(company.logoDarkIcon)
         : null,
       logoLight: company.logoLight
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoLight}`
+        ? getPublicStorageUrl(company.logoLight)
         : null,
       logoDark: company.logoDark
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoDark}`
+        ? getPublicStorageUrl(company.logoDark)
         : null
     })),
     error: null
@@ -51,7 +58,7 @@ export async function getCompanies(
 }
 
 export async function getCompaniesForUser(
-  client: SupabaseClient<Database>,
+  client: QueryClient,
   userId: string
 ) {
   const { data, error } = await client
@@ -64,10 +71,10 @@ export async function getCompaniesForUser(
     return [];
   }
 
-  return data?.map((row) => row.companyId) ?? [];
+  return (data as { companyId: string }[] | null)?.map((row) => row.companyId) ?? [];
 }
 
-export async function getUser(client: SupabaseClient<Database>, id: string) {
+export async function getUser(client: QueryClient, id: string) {
   return client
     .from("user")
     .select("*")
@@ -75,6 +82,15 @@ export async function getUser(client: SupabaseClient<Database>, id: string) {
     .eq("active", true)
     .single();
 }
+
+type CompanyRecord = {
+  companyGroupName?: string | null;
+  logoLightIcon: string | null;
+  logoDarkIcon: string | null;
+  logoLight: string | null;
+  logoDark: string | null;
+  [key: string]: unknown;
+};
 
 function isClaimPermission(key: string, value: unknown) {
   const action = key.split("_")[1];

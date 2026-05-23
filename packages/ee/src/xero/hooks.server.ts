@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import type { CreateSubscriptionParams } from "@carbon/database/event";
 import {
   createEventSystemSubscription,
@@ -15,7 +15,7 @@ export async function xeroHealthcheck(
   metadata: Record<string, unknown>
 ) {
   const provider = getProviderIntegration(
-    getCarbonServiceRole(),
+    getCarbonServiceClient(),
     companyId,
     ProviderID.XERO,
     metadata as ProviderIntegrationMetadata
@@ -25,7 +25,7 @@ export async function xeroHealthcheck(
 }
 
 export async function xeroOnInstall(companyId: string) {
-  const client = getCarbonServiceRole();
+  const client = getCarbonServiceClient();
 
   const tables: CreateSubscriptionParams["table"][] = [
     "address",
@@ -53,6 +53,6 @@ export async function xeroOnInstall(companyId: string) {
 }
 
 export async function xeroOnUninstall(companyId: string) {
-  const client = getCarbonServiceRole();
+  const client = getCarbonServiceClient();
   await deleteEventSystemSubscriptionsByName(client, companyId, "xero-sync");
 }

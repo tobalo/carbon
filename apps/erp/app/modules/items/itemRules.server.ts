@@ -5,7 +5,7 @@
 // All functions here are server-only. Never import from a client module.
 
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import { companyHasPlan } from "@carbon/ee/plan.server";
 import {
   type CompiledRule,
@@ -20,7 +20,7 @@ import {
   type ValueOptionsLoader,
   type Violation
 } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { LoaderFunctionArgs } from "react-router";
 import { getStorageTypesList } from "~/modules/inventory";
 import { getLocationsList } from "~/modules/resources";
@@ -31,7 +31,7 @@ import {
   getRuleAssignmentsForItem
 } from "./items.service";
 
-type Client = SupabaseClient<Database>;
+type Client = CarbonDatabaseClient<QueryDatabase>;
 
 // ---------------------------------------------------------------------------
 // Plan gate
@@ -103,7 +103,7 @@ export async function getItemRulesDataForItem(
 
   const assignments: { ruleId: string; rule: AssignedRuleNode }[] = [];
   for (const row of assignmentsRes.data ?? []) {
-    // Supabase returns joined relation as object or single-element array
+    // The data adapter returns joined relation as object or single-element array
     // depending on FK shape. Normalise once.
     const joined = (
       row as { itemRule: AssignedRuleNode | AssignedRuleNode[] | null }
@@ -272,7 +272,7 @@ export type RuleLineInput = {
 };
 
 export type EvaluateLinesForSurfaceArgs = {
-  /** Service-role client — `item` / `storageUnit` reads bypass RLS. */
+  /** Authorized request or system client scoped to the target company. */
   client: Client;
   companyId: string;
   userId: string;

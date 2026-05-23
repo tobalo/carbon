@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Combobox,
   DateTimePicker,
@@ -54,6 +53,7 @@ import { stepRecordValidator } from "~/services/models";
 import type { JobOperationStep } from "~/services/types";
 import { useItems, usePeople } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import FileDropzone from "../../FileDropzone";
 
 export function StepsListItem({
@@ -89,7 +89,7 @@ export function StepsListItem({
 
   if (!operationId) return null;
   const record = step.jobOperationStepRecord.find(
-    (r) => r.index === activeStep
+    (r: any) => r.index === activeStep
   );
 
   return (
@@ -287,7 +287,7 @@ export function PreviewStepRecord({
 
   if (!step.jobOperationStepRecord) return null;
   const record = step.jobOperationStepRecord.find(
-    (r) => r.index === activeStep
+    (r: any) => r.index === activeStep
   );
 
   return (
@@ -360,7 +360,6 @@ export function RecordModal({
   }, [employees]);
 
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [filePath, setFilePath] = useState<string | null>(null);
@@ -368,7 +367,7 @@ export function RecordModal({
   const fetcher = useFetcher<{ success: boolean }>();
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!acceptedFiles[0] || !carbon) return;
+    if (!acceptedFiles[0]) return;
     const fileUpload = acceptedFiles[0];
 
     setFile(fileUpload);
@@ -376,12 +375,11 @@ export function RecordModal({
 
     const fileName = `${company.id}/job/${attribute.operationId}/${attribute.id}/${nanoid()}/${fileUpload.name}`;
 
-    const upload = await carbon?.storage
-      .from("private")
-      .upload(fileName, fileUpload, {
-        cacheControl: `${12 * 60 * 60}`,
-        upsert: true
-      });
+    const upload = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file: fileUpload
+    });
 
     if (upload.error) {
       toast.error(t`Failed to upload file: ${fileUpload.name}`);
@@ -398,7 +396,7 @@ export function RecordModal({
   }, [fetcher.data?.success, onClose]);
 
   const record = attribute?.jobOperationStepRecord.find(
-    (r) => r.index === activeStep
+    (r: any) => r.index === activeStep
   );
 
   const [booleanControlled, setBooleanControlled] = useState(
@@ -491,7 +489,7 @@ export function RecordModal({
                 <Select
                   name="value"
                   label=""
-                  options={(attribute.listValues ?? []).map((value) => ({
+                  options={(attribute.listValues ?? []).map((value: string) => ({
                     label: value,
                     value
                   }))}

@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -55,10 +55,9 @@ export async function action({ request }: ActionFunctionArgs) {
     currentShipment.data.locationId !== d.locationId;
 
   if (shipmentDataHasChanged) {
-    const serviceRole = getCarbonServiceRole();
     switch (d.sourceDocument) {
       case "Sales Order":
-        const salesOrderShipment = await serviceRole.functions.invoke<{
+        const salesOrderShipment = await invokeFunction<{
           id: string;
         }>("create", {
           body: {
@@ -68,7 +67,7 @@ export async function action({ request }: ActionFunctionArgs) {
             salesOrderId: d.sourceDocumentId,
             shipmentId: id,
             userId: userId
-          }
+          },
         });
         if (!salesOrderShipment.data || salesOrderShipment.error) {
           console.error(salesOrderShipment.error);
@@ -82,7 +81,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         break;
       case "Purchase Order":
-        const purchaseOrderShipment = await serviceRole.functions.invoke<{
+        const purchaseOrderShipment = await invokeFunction<{
           id: string;
         }>("create", {
           body: {
@@ -92,7 +91,7 @@ export async function action({ request }: ActionFunctionArgs) {
             purchaseOrderId: d.sourceDocumentId,
             shipmentId: id,
             userId: userId
-          }
+          },
         });
         if (!purchaseOrderShipment.data || purchaseOrderShipment.error) {
           console.error(purchaseOrderShipment.error);
@@ -106,7 +105,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
         break;
       case "Outbound Transfer":
-        const warehouseTransferShipment = await serviceRole.functions.invoke<{
+        const warehouseTransferShipment = await invokeFunction<{
           id: string;
         }>("create", {
           body: {
@@ -115,7 +114,7 @@ export async function action({ request }: ActionFunctionArgs) {
             warehouseTransferId: d.sourceDocumentId,
             shipmentId: id,
             userId: userId
-          }
+          },
         });
         if (
           !warehouseTransferShipment.data ||

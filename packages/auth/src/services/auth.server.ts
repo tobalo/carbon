@@ -1,10 +1,6 @@
-import type { Database } from "@carbon/database";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { checkApiKeyRateLimit } from "@carbon/database/ratelimit";
 import { Edition, Plan } from "@carbon/utils";
-import type {
-  AuthSession as SupabaseAuthSession,
-  SupabaseClient
-} from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { redirect } from "react-router";
 import {
@@ -13,12 +9,15 @@ import {
   STRIPE_BYPASS_COMPANY_IDS,
   VERCEL_URL
 } from "../config/env";
-import { getCarbon } from "../lib/supabase";
-import { getCarbonAPIKeyClient } from "../lib/supabase/client";
-import { getCarbonServiceRole } from "../lib/supabase/client.server";
+import { getCarbon } from "../lib/carbon";
+import { getCarbonAPIKeyClient } from "../lib/carbon/client";
+import { getCarbonServiceClient } from "../lib/carbon/client.server";
+import { authProvider } from "../provider";
+import type { Session as ProviderSession } from "../provider";
 import type { AuthSession } from "../types";
 import { path } from "../utils/path";
 import { error } from "../utils/result";
+import { verifyConsolePinPayload } from "./console.server";
 import {
   destroyAuthSession,
   flash,
@@ -32,41 +31,39 @@ export async function createEmailAuthAccount(
   password: string,
   meta?: Record<string, unknown>
 ) {
-  const { data, error } = await getCarbonServiceRole().auth.admin.createUser({
+  const user = await authProvider.createUser({
     email,
     password,
-    email_confirm: true,
-    app_metadata: {
-      ...meta
-    }
+    emailVerified: true,
+    metadata: meta
   });
 
-  if (!data.user || error) return null;
-
-  return data.user;
+  return { id: user.userId, email };
 }
 
 export async function deleteAuthAccount(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   userId: string
 ) {
-  const [supabaseDelete, carbonDelete] = await Promise.all([
-    client.auth.admin.deleteUser(userId),
+  const [, carbonDelete] = await Promise.all([
+    authProvider.deleteUser(userId),
     client.from("user").delete().eq("id", userId)
   ]);
 
-  if (supabaseDelete.error || carbonDelete.error) return null;
+  if (carbonDelete.error) return null;
 
   return true;
 }
 
 export async function getAuthAccountByAccessToken(accessToken: string) {
-  const { data, error } =
-    await getCarbonServiceRole().auth.getUser(accessToken);
+  const session = await authProvider.getSessionByAccessToken(accessToken);
 
-  if (!data.user || error) return null;
+  if (!session) return null;
 
-  return data.user;
+  return {
+    id: session.userId,
+    email: session.email
+  };
 }
 
 /** Hash an API key using SHA-256 for secure storage/lookup */
@@ -85,41 +82,99 @@ type ApiKeyRecord = {
   expiresAt: string | null;
 };
 
-function getCompanyIdFromAPIKey(apiKey: string) {
-  const serviceRole = getCarbonServiceRole();
+type ExternalAccountScope = {
+  role: string | null;
+  customerId: string | null;
+  supplierId: string | null;
+};
+
+export function assertCustomerAccountScope(
+  scope: Pick<ExternalAccountScope, "role" | "customerId">,
+  customerId: string | null | undefined
+) {
+  if (
+    scope.role === "customer" &&
+    (!customerId || scope.customerId !== customerId)
+  ) {
+    throw new Response("Customer account scope mismatch", { status: 403 });
+  }
+}
+
+export function assertSupplierAccountScope(
+  scope: Pick<ExternalAccountScope, "role" | "supplierId">,
+  supplierId: string | null | undefined
+) {
+  if (
+    scope.role === "supplier" &&
+    (!supplierId || scope.supplierId !== supplierId)
+  ) {
+    throw new Response("Supplier account scope mismatch", { status: 403 });
+  }
+}
+
+async function getCompanyIdFromAPIKey(apiKey: string) {
+  const serviceClient = getCarbonServiceClient();
   const keyHash = hashApiKey(apiKey);
-  return serviceRole
+  const apiKeyRecord = await serviceClient
     .from("apiKey")
     .select(
-      "id, companyId, ...company(companyGroupId), createdBy, scopes, rateLimit, rateLimitWindow, expiresAt"
+      "id, companyId, createdBy, scopes, rateLimit, rateLimitWindow, expiresAt"
     )
     .eq("keyHash", keyHash)
     .single();
+
+  if (apiKeyRecord.error || !apiKeyRecord.data) {
+    return apiKeyRecord;
+  }
+
+  const company = await serviceClient
+    .from("company")
+    .select("companyGroupId")
+    .eq("id", apiKeyRecord.data.companyId)
+    .single();
+
+  if (company.error || !company.data) {
+    return { data: null, error: company.error };
+  }
+
+  return {
+    data: {
+      ...apiKeyRecord.data,
+      companyGroupId: company.data.companyGroupId ?? ""
+    },
+    error: null
+  };
 }
 
 function makeAuthSession(
-  supabaseSession: SupabaseAuthSession | null,
+  providerSession: ProviderSession | null,
   companyId: string,
   companyGroupId: string
 ): AuthSession | null {
-  if (!supabaseSession) return null;
+  if (!providerSession) return null;
 
-  if (!supabaseSession.refresh_token)
-    throw new Error("User should have a refresh token");
+  const sessionToken = providerSession.refreshToken || providerSession.accessToken;
 
-  if (!supabaseSession.user?.email)
+  if (!sessionToken)
+    throw new Error("User should have a session token");
+
+  if (!providerSession.email)
     throw new Error("User should have an email");
 
+  const expiresAt = Math.floor(providerSession.expiresAt.getTime() / 1000);
+
   return {
-    accessToken: supabaseSession.access_token,
+    accessToken: providerSession.accessToken,
     companyId,
     companyGroupId,
-    refreshToken: supabaseSession.refresh_token,
-    userId: supabaseSession.user.id,
-    email: supabaseSession.user.email,
-    expiresIn:
-      (supabaseSession.expires_in ?? 3000) - REFRESH_ACCESS_TOKEN_THRESHOLD,
-    expiresAt: supabaseSession.expires_at ?? -1
+    refreshToken: sessionToken,
+    userId: providerSession.userId,
+    email: providerSession.email,
+    expiresIn: Math.max(
+      expiresAt - Math.floor(Date.now() / 1000) - REFRESH_ACCESS_TOKEN_THRESHOLD,
+      0
+    ),
+    expiresAt
   };
 }
 
@@ -131,12 +186,12 @@ function makeAuthSession(
  * Console mode is read from the auth session; pin-in state is
  * still read from the `console-pin-{companyId}` cookie.
  */
-function getEffectiveUser(
+async function getEffectiveUser(
   request: Request,
   companyId: string,
   sessionUserId: string,
   consoleMode: boolean
-): string {
+): Promise<string> {
   if (!consoleMode) return sessionUserId;
 
   const cookieHeader = request.headers.get("cookie");
@@ -153,14 +208,77 @@ function getEffectiveUser(
   const pinRaw = cookies[`console-pin-${companyId}`];
   if (!pinRaw) return sessionUserId;
 
-  try {
-    const pinIn = JSON.parse(pinRaw);
-    const elapsed = Date.now() - pinIn.pinnedAt;
-    if (elapsed > 3600000) return sessionUserId;
-    return pinIn.userId ?? sessionUserId;
-  } catch {
+  const pinIn = verifyConsolePinPayload(pinRaw);
+  if (!pinIn) return sessionUserId;
+
+  const elapsed = Date.now() - pinIn.pinnedAt;
+  if (elapsed > 3600000) return sessionUserId;
+
+  const employee = await getCarbonServiceClient()
+    .from("employee")
+    .select("id")
+    .eq("id", pinIn.userId)
+    .eq("companyId", companyId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (employee.error || !employee.data) {
     return sessionUserId;
   }
+
+  return pinIn.userId;
+}
+
+async function getExternalAccountScope(
+  userId: string,
+  companyId: string,
+  role: string | null
+): Promise<ExternalAccountScope> {
+  if (role === "customer") {
+    const account = await getCarbonServiceClient()
+      .from("customerAccount")
+      .select("customerId")
+      .eq("id", userId)
+      .eq("companyId", companyId)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (account.error || !account.data?.customerId) {
+      throw new Response("Customer account scope not found", { status: 403 });
+    }
+
+    return {
+      role,
+      customerId: account.data.customerId,
+      supplierId: null
+    };
+  }
+
+  if (role === "supplier") {
+    const account = await getCarbonServiceClient()
+      .from("supplierAccount")
+      .select("supplierId")
+      .eq("id", userId)
+      .eq("companyId", companyId)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (account.error || !account.data?.supplierId) {
+      throw new Response("Supplier account scope not found", { status: 403 });
+    }
+
+    return {
+      role,
+      customerId: null,
+      supplierId: account.data.supplierId
+    };
+  }
+
+  return {
+    role,
+    customerId: null,
+    supplierId: null
+  };
 }
 
 export async function requirePermissions(
@@ -174,13 +292,16 @@ export async function requirePermissions(
     bypassRls?: boolean;
   }
 ): Promise<{
-  client: SupabaseClient<Database>;
+  client: DatabaseQueryClient;
   companyId: string;
   companyGroupId: string;
   email: string;
   userId: string;
   sessionUserId: string;
   consoleMode: boolean;
+  role: string | null;
+  customerId: string | null;
+  supplierId: string | null;
 }> {
   const apiKey = request.headers.get("carbon-key");
 
@@ -198,9 +319,9 @@ export async function requirePermissions(
       }
 
       // Check rate limit via Postgres function
-      const serviceRole = getCarbonServiceRole();
+      const serviceClient = getCarbonServiceClient();
       const rl = await checkApiKeyRateLimit(
-        serviceRole,
+        serviceClient,
         apiKeyData.id,
         apiKeyData.rateLimit,
         apiKeyData.rateLimitWindow
@@ -221,10 +342,11 @@ export async function requirePermissions(
       }
 
       // Update lastUsedAt (fire-and-forget)
-      void serviceRole
+      void serviceClient
         .from("apiKey")
         .update({ lastUsedAt: new Date().toISOString() } as any)
-        .eq("id" as any, apiKeyData.id);
+        .eq("id" as any, apiKeyData.id)
+        .eq("companyId" as any, companyId);
 
       // Check scopes against required permissions
       const scopes = apiKeyData.scopes ?? {};
@@ -263,7 +385,7 @@ export async function requirePermissions(
           : false;
 
         if (!isBypass) {
-          const { data: planData } = await serviceRole
+          const { data: planData } = await serviceClient
             .from("companyPlan")
             .select("planId")
             .eq("id", companyId)
@@ -278,8 +400,9 @@ export async function requirePermissions(
         }
       }
 
-      const client = getCarbonAPIKeyClient(apiKey);
-
+      const client = getCarbonAPIKeyClient(
+        apiKeyData.id
+      ) as unknown as DatabaseQueryClient;
       return {
         client,
         companyId,
@@ -287,7 +410,10 @@ export async function requirePermissions(
         userId,
         sessionUserId: userId,
         email: "",
-        consoleMode: false
+        consoleMode: false,
+        role: null,
+        customerId: null,
+        supplierId: null
       };
     }
   }
@@ -298,20 +424,32 @@ export async function requirePermissions(
   const consoleMode = authSession.console === companyId;
 
   const myClaims = await getUserClaims(userId, companyId);
+  const effectiveUserId = await getEffectiveUser(
+    request,
+    companyId,
+    userId,
+    consoleMode
+  );
+  const externalAccountScope = await getExternalAccountScope(
+    effectiveUserId,
+    companyId,
+    myClaims.role
+  );
 
   // early exit if no requiredPermissions are required
   if (Object.keys(requiredPermissions).length === 0) {
     return {
       client:
         requiredPermissions.bypassRls && myClaims.role === "employee"
-          ? getCarbonServiceRole()
-          : getCarbon(accessToken),
+          ? getCarbonServiceClient()
+          : (getCarbon(accessToken, effectiveUserId) as unknown as DatabaseQueryClient),
       companyId,
       companyGroupId,
       email,
-      userId: getEffectiveUser(request, companyId, userId, consoleMode),
+      userId: effectiveUserId,
       sessionUserId: userId,
-      consoleMode
+      consoleMode,
+      ...externalAccountScope
     };
   }
 
@@ -362,23 +500,20 @@ export async function requirePermissions(
   return {
     client:
       !!requiredPermissions.bypassRls && myClaims.role === "employee"
-        ? getCarbonServiceRole()
-        : getCarbon(accessToken),
+        ? getCarbonServiceClient()
+        : (getCarbon(accessToken, effectiveUserId) as unknown as DatabaseQueryClient),
     companyId,
     companyGroupId,
     email,
-    userId: getEffectiveUser(request, companyId, userId, consoleMode),
+    userId: effectiveUserId,
     sessionUserId: userId,
-    consoleMode
+    consoleMode,
+    ...externalAccountScope
   };
 }
 
 export async function resetPassword(accessToken: string, password: string) {
-  const { error } = await getCarbon(accessToken).auth.updateUser({
-    password
-  });
-
-  if (error) return null;
+  await authProvider.updatePassword({ accessToken, newPassword: password });
 
   return true;
 }
@@ -387,41 +522,36 @@ export async function sendInviteByEmail(
   email: string,
   data?: Record<string, unknown>
 ) {
-  return getCarbonServiceRole().auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${VERCEL_URL}/callback`,
-    data
+  const { url } = await authProvider.generateMagicLink({
+    email,
+    redirectTo: `${VERCEL_URL}`
   });
+
+  return { data: { properties: { action_link: url }, user: data }, error: null };
 }
 
 export async function sendMagicLink(email: string) {
-  return getCarbonServiceRole().auth.signInWithOtp({
+  await authProvider.sendMagicLink({
     email,
-    options: {
-      emailRedirectTo: `${VERCEL_URL}/callback`
-    }
+    redirectTo: `${VERCEL_URL}`
   });
+
+  return { data: null, error: null };
 }
 
 export async function signInWithBypassEmail(
   email: string
 ): Promise<AuthSession | null> {
-  const client = getCarbonServiceRole();
+  const client = getCarbonServiceClient();
+  const { url } = await authProvider.generateMagicLink({
+    email,
+    redirectTo: `${VERCEL_URL}`
+  });
+  const token = new URL(url).searchParams.get("token");
+  if (!token) return null;
 
-  const { data: linkData, error: linkError } =
-    await client.auth.admin.generateLink({ type: "magiclink", email });
-
-  if (linkError || !linkData?.properties?.hashed_token) return null;
-
-  const { data: sessionData, error: verifyError } = await client.auth.verifyOtp(
-    { token_hash: linkData.properties.hashed_token, type: "magiclink" }
-  );
-
-  if (verifyError || !sessionData?.session) return null;
-
-  const companies = await getCompaniesForUser(
-    client,
-    sessionData.session.user.id
-  );
+  const providerSession = await authProvider.verifyMagicLinkToken(token);
+  const companies = await getCompaniesForUser(client, providerSession.userId);
   const { data: companyRecord } = await client
     .from("company")
     .select("companyGroupId")
@@ -429,21 +559,68 @@ export async function signInWithBypassEmail(
     .single();
 
   return makeAuthSession(
-    sessionData.session,
+    providerSession,
     companies?.[0] ?? "",
     companyRecord?.companyGroupId ?? ""
   );
 }
 
+export async function signInWithMagicLinkToken(
+  token: string
+): Promise<AuthSession | null> {
+  const client = getCarbonServiceClient();
+  const providerSession = await authProvider.verifyMagicLinkToken(token);
+  const companies = await getCompaniesForUser(client, providerSession.userId);
+  const companyId = companies?.[0] ?? "";
+
+  const { data: companyRecord } = await client
+    .from("company")
+    .select("companyGroupId")
+    .eq("id", companyId)
+    .single();
+
+  return makeAuthSession(
+    providerSession,
+    companyId,
+    companyRecord?.companyGroupId ?? ""
+  );
+}
+
+export async function signInWithRequest(
+  request: Request,
+  preferredCompanyId?: string
+): Promise<AuthSession | null> {
+  const client = getCarbonServiceClient();
+  const providerSession = await authProvider.getSessionFromRequest(request);
+  if (!providerSession) return null;
+
+  const companies = await getCompaniesForUser(client, providerSession.userId);
+  const companyId =
+    preferredCompanyId && companies?.includes(preferredCompanyId)
+      ? preferredCompanyId
+      : (companies?.[0] ?? "");
+
+  const { data: companyRecord } = await client
+    .from("company")
+    .select("companyGroupId")
+    .eq("id", companyId)
+    .single();
+
+  return makeAuthSession(
+    providerSession,
+    companyId,
+    companyRecord?.companyGroupId ?? ""
+  );
+}
+
 export async function signInWithEmail(email: string, password: string) {
-  const client = getCarbonServiceRole();
-  const { data, error } = await client.auth.signInWithPassword({
+  const client = getCarbonServiceClient();
+  const providerSession = await authProvider.signInWithPassword({
     email,
     password
   });
 
-  if (!data.session || error) return null;
-  const companies = await getCompaniesForUser(client, data.user.id);
+  const companies = await getCompaniesForUser(client, providerSession.userId);
 
   const { data: companyRecord } = await client
     .from("company")
@@ -452,7 +629,7 @@ export async function signInWithEmail(email: string, password: string) {
     .single();
 
   return makeAuthSession(
-    data.session,
+    providerSession,
     companies?.[0] ?? "",
     companyRecord?.companyGroupId ?? ""
   );
@@ -465,15 +642,29 @@ export async function refreshAccessToken(
 ): Promise<AuthSession | null> {
   if (!refreshToken) return null;
 
-  const client = getCarbonServiceRole();
+  const providerSession = await authProvider.refreshSession(refreshToken);
+  const client = getCarbonServiceClient();
+  const companies = await getCompaniesForUser(client, providerSession.userId);
+  const refreshedCompanyId =
+    companyId && companies.includes(companyId)
+      ? companyId
+      : (companies[0] ?? "");
 
-  const { data, error } = await client.auth.refreshSession({
-    refresh_token: refreshToken
-  });
+  if (!refreshedCompanyId) {
+    return makeAuthSession(providerSession, "", "");
+  }
 
-  if (!data.session || error) return null;
+  const { data: companyRecord } = await client
+    .from("company")
+    .select("companyGroupId")
+    .eq("id", refreshedCompanyId)
+    .single();
 
-  return makeAuthSession(data.session, companyId!, companyGroupId!);
+  return makeAuthSession(
+    providerSession,
+    refreshedCompanyId,
+    companyRecord?.companyGroupId ?? companyGroupId ?? ""
+  );
 }
 
 export async function verifyAuthSession(authSession: AuthSession) {

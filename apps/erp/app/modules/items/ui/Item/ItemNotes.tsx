@@ -17,6 +17,7 @@ import { nanoid } from "nanoid";
 import { useState } from "react";
 import { usePermissions, useUser } from "~/hooks";
 import { getPrivateUrl } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 
 const ItemNotes = ({
   id,
@@ -43,7 +44,11 @@ const ItemNotes = ({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/notes/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

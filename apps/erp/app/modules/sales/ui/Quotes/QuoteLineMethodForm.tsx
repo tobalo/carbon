@@ -1,7 +1,7 @@
 import { Combobox, Hidden, SelectControlled } from "@carbon/form";
 import { useMount, VStack } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import { path } from "~/utils/path";
@@ -11,7 +11,7 @@ export function QuoteLineMethodForm() {
   const { t } = useLingui();
   const quoteFetcher =
     useFetcher<
-      PostgrestResponse<{ id: string; quoteId: string; revisionId: number }>
+      QueryResponse<{ id: string; quoteId: string; revisionId: number }>
     >();
   const quoteLineFetcher =
     useFetcher<Awaited<ReturnType<typeof getQuoteLinesList>>>();

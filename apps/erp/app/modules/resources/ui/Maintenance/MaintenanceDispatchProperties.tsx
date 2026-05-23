@@ -99,7 +99,7 @@ const MaintenanceDispatchProperties = () => {
     (field: string, value: string | null) => {
       const formData = new FormData();
       formData.append("ids", dispatchId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value?.toString() ?? "");
       fetcher.submit(formData, {
         method: "post",

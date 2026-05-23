@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { JSONContent } from "@carbon/react";
 import { formatDate, isEoriCountry } from "@carbon/utils";
 import { Image, Text, View } from "@react-pdf/renderer";
@@ -14,21 +14,23 @@ import {
 import { formatTaxPercent } from "../utils/shared";
 import { AddressBlock, Header, Note, Template } from "./components";
 
-const INDIRECT_TYPES = new Set([
-  "Service",
-  "G/L Account",
-  "Fixed Asset",
-  "Comment"
-]);
-const isIndirect = (t: string | null | undefined) =>
-  !!t && INDIRECT_TYPES.has(t);
+const INDIRECT_TYPES = new Set<string>(
+  [
+    "Service",
+    "G/L Account",
+    "Fixed Asset",
+    "Comment"
+  ] satisfies TableRow<"purchaseOrderLine">["purchaseOrderLineType"][]
+);
+const isIndirect = (t: unknown) =>
+  typeof t === "string" && INDIRECT_TYPES.has(t);
 
 interface PurchaseOrderPDFProps extends PDF {
-  purchaseOrder: Database["public"]["Views"]["purchaseOrders"]["Row"];
-  purchaseOrderLines: Database["public"]["Views"]["purchaseOrderLines"]["Row"][];
-  purchaseOrderLocations: Database["public"]["Views"]["purchaseOrderLocations"]["Row"];
+  purchaseOrder: TableRow<"purchaseOrders">;
+  purchaseOrderLines: TableRow<"purchaseOrderLines">[];
+  purchaseOrderLocations: TableRow<"purchaseOrderLocations">;
   companySettings?:
-    | Database["public"]["Tables"]["companySettings"]["Row"]
+    | TableRow<"companySettings">
     | null;
   accountsPayableBillingAddress?: AccountsPayableBillingAddress | null;
   paymentTerms?: { id: string; name: string }[];

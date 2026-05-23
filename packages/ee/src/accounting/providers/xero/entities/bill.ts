@@ -1,5 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
-import { sql } from "kysely";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import { createMappingService } from "../../../core/external-mapping";
 import { type Accounting, BaseEntitySyncer } from "../../../core/types";
 import { throwXeroApiError } from "../../../core/utils";
@@ -93,7 +92,7 @@ export class BillSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async linkEntities(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     localId: string,
     remoteId: string,
     remoteUpdatedAt?: Date
@@ -136,56 +135,54 @@ export class BillSyncer extends BaseEntitySyncer<
     if (ids.length === 0) return new Map();
 
     // Fetch bills
-    const billRows = await this.database
-      .selectFrom("purchaseInvoice")
-      .select([
-        "id",
+    const { rows: billRows } = await this.database.execute<BillRow>(sql`
+      select
+        id,
         "companyId",
         "invoiceId",
         "supplierId",
-        "status",
+        status,
         "dateIssued",
         "dateDue",
         "datePaid",
         "currencyCode",
         "exchangeRate",
-        "subtotal",
+        subtotal,
         "totalTax",
         "totalDiscount",
         "totalAmount",
-        "balance",
+        balance,
         "supplierReference",
         "updatedAt",
         "customFields"
-      ])
-      .where("id", "in", ids)
-      .where("companyId", "=", this.companyId)
-      .execute();
+      from "purchaseInvoice"
+      where id = any(${ids}::text[])
+        and "companyId" = ${this.companyId}
+    `);
 
     if (billRows.length === 0) return new Map();
 
     // Fetch lines for all bills
     const billIds = billRows.map((b) => b.id);
-    const lineRows = await this.database
-      .selectFrom("purchaseInvoiceLine")
-      .leftJoin("item", "item.id", "purchaseInvoiceLine.itemId")
-      .leftJoin("account", "account.id", "purchaseInvoiceLine.accountId")
-      .select([
-        "purchaseInvoiceLine.id",
-        "purchaseInvoiceLine.invoiceId",
-        "purchaseInvoiceLine.description",
-        "purchaseInvoiceLine.quantity",
-        "purchaseInvoiceLine.unitPrice",
-        "purchaseInvoiceLine.itemId",
-        "purchaseInvoiceLine.taxPercent",
-        "purchaseInvoiceLine.taxAmount",
-        "purchaseInvoiceLine.totalAmount",
-        "purchaseInvoiceLine.purchaseOrderLineId",
-        "item.readableId as itemCode",
-        "account.number as accountNumber"
-      ])
-      .where("purchaseInvoiceLine.invoiceId", "in", billIds)
-      .execute();
+    const { rows: lineRows } = await this.database.execute<BillLineRow>(sql`
+      select
+        pil.id,
+        pil."invoiceId",
+        pil.description,
+        pil.quantity,
+        pil."unitPrice",
+        pil."itemId",
+        pil."taxPercent",
+        pil."taxAmount",
+        pil."totalAmount",
+        pil."purchaseOrderLineId",
+        i."readableId" as "itemCode",
+        a.number as "accountNumber"
+      from "purchaseInvoiceLine" pil
+      left join item i on i.id = pil."itemId"
+      left join account a on a.id = pil."accountId"
+      where pil."invoiceId" = any(${billIds}::text[])
+    `);
 
     // Fetch supplier external IDs for mapping via the mapping service
     const supplierIds = billRows
@@ -343,11 +340,15 @@ export class BillSyncer extends BaseEntitySyncer<
 
         // If we have an itemId but no itemCode, try to get it from the item table
         if (!itemCode && line.itemId) {
-          const item = await this.database
-            .selectFrom("item")
-            .select("readableId")
-            .where("id", "=", line.itemId)
-            .executeTakeFirst();
+          const { rows } = await this.database.execute<{
+            readableId: string | null;
+          }>(sql`
+            select "readableId"
+            from item
+            where id = ${line.itemId}
+            limit 1
+          `);
+          const item = rows[0];
           itemCode = item?.readableId ?? null;
         }
 
@@ -491,7 +492,7 @@ export class BillSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     data: Partial<Accounting.Bill>,
     remoteId: string
   ): Promise<string> {
@@ -510,27 +511,26 @@ export class BillSyncer extends BaseEntitySyncer<
 
     if (existingLocalId) {
       // Update existing purchase invoice (mapping is handled by linkEntities in base class)
-      await tx
-        .updateTable("purchaseInvoice")
-        .set({
-          supplierId,
-          status: data.status,
-          dateIssued: data.dateIssued,
-          dateDue: data.dateDue,
-          datePaid: data.datePaid,
-          currencyCode: data.currencyCode,
-          exchangeRate: data.exchangeRate,
-          subtotal: data.subtotal,
-          totalTax: data.totalTax,
-          totalDiscount: data.totalDiscount,
-          totalAmount: data.totalAmount,
-          balance: data.balance,
-          supplierReference: data.supplierReference,
-          updatedAt: new Date().toISOString()
-        })
-        .where("id", "=", existingLocalId)
-        .where("companyId", "=", this.companyId)
-        .execute();
+      await tx.execute(sql`
+        update "purchaseInvoice"
+        set
+          "supplierId" = ${supplierId},
+          status = ${data.status},
+          "dateIssued" = ${data.dateIssued},
+          "dateDue" = ${data.dateDue},
+          "datePaid" = ${data.datePaid},
+          "currencyCode" = ${data.currencyCode},
+          "exchangeRate" = ${data.exchangeRate},
+          subtotal = ${data.subtotal},
+          "totalTax" = ${data.totalTax},
+          "totalDiscount" = ${data.totalDiscount},
+          "totalAmount" = ${data.totalAmount},
+          balance = ${data.balance},
+          "supplierReference" = ${data.supplierReference},
+          "updatedAt" = ${new Date().toISOString()}
+        where id = ${existingLocalId}
+          and "companyId" = ${this.companyId}
+      `);
 
       // Update lines - delete existing and recreate
       await this.upsertLines(tx, existingLocalId, data.lines ?? []);
@@ -556,19 +556,20 @@ export class BillSyncer extends BaseEntitySyncer<
     }
 
     // Create supplier interaction for this invoice
-    const supplierInteraction = await tx
-      .insertInto("supplierInteraction")
-      .values({
-        companyId: this.companyId,
-        supplierId
-      })
-      .returning("id")
-      .executeTakeFirstOrThrow();
+    const { rows: supplierInteractions } = await tx.execute<{ id: string }>(sql`
+      insert into "supplierInteraction" ("companyId", "supplierId")
+      values (${this.companyId}, ${supplierId})
+      returning id
+    `);
+    const supplierInteraction = supplierInteractions[0];
+    if (!supplierInteraction) {
+      throw new Error("Failed to create supplier interaction");
+    }
 
     // Get next invoice ID from sequence
-    const sequenceResult = await sql<{ get_next_sequence: string }>`
+    const sequenceResult = await tx.execute<{ get_next_sequence: string }>(sql`
       SELECT get_next_sequence('purchaseInvoice', ${this.companyId}) as get_next_sequence
-    `.execute(tx);
+    `);
 
     const invoiceId =
       sequenceResult.rows[0]?.get_next_sequence ??
@@ -576,29 +577,48 @@ export class BillSyncer extends BaseEntitySyncer<
       `XERO-${remoteId.slice(0, 8)}`;
 
     // Insert the new purchase invoice
-    const newInvoice = await tx
-      .insertInto("purchaseInvoice")
-      .values({
-        invoiceId,
-        companyId: this.companyId,
-        createdBy: defaultUser,
-        supplierId,
-        supplierInteractionId: supplierInteraction.id,
-        status: data.status ?? "Draft",
-        dateIssued: data.dateIssued ?? null,
-        dateDue: data.dateDue ?? null,
-        datePaid: data.datePaid ?? null,
-        currencyCode: data.currencyCode ?? "USD",
-        exchangeRate: data.exchangeRate ?? 1,
-        subtotal: data.subtotal ?? 0,
-        totalTax: data.totalTax ?? 0,
-        totalDiscount: data.totalDiscount ?? 0,
-        totalAmount: data.totalAmount ?? 0,
-        balance: data.balance ?? 0,
-        supplierReference: data.supplierReference ?? null
-      })
-      .returning("id")
-      .executeTakeFirstOrThrow();
+    const { rows: newInvoices } = await tx.execute<{ id: string }>(sql`
+      insert into "purchaseInvoice" (
+        "invoiceId",
+        "companyId",
+        "createdBy",
+        "supplierId",
+        "supplierInteractionId",
+        status,
+        "dateIssued",
+        "dateDue",
+        "datePaid",
+        "currencyCode",
+        "exchangeRate",
+        subtotal,
+        "totalTax",
+        "totalDiscount",
+        "totalAmount",
+        balance,
+        "supplierReference"
+      ) values (
+        ${invoiceId},
+        ${this.companyId},
+        ${defaultUser},
+        ${supplierId},
+        ${supplierInteraction.id},
+        ${data.status ?? "Draft"},
+        ${data.dateIssued ?? null},
+        ${data.dateDue ?? null},
+        ${data.datePaid ?? null},
+        ${data.currencyCode ?? "USD"},
+        ${data.exchangeRate ?? 1},
+        ${data.subtotal ?? 0},
+        ${data.totalTax ?? 0},
+        ${data.totalDiscount ?? 0},
+        ${data.totalAmount ?? 0},
+        ${data.balance ?? 0},
+        ${data.supplierReference ?? null}
+      )
+      returning id
+    `);
+    const newInvoice = newInvoices[0];
+    if (!newInvoice) throw new Error("Failed to create purchase invoice");
 
     // Insert lines for the new invoice
     await this.upsertLines(tx, newInvoice.id, data.lines ?? []);
@@ -610,43 +630,46 @@ export class BillSyncer extends BaseEntitySyncer<
    * Get a default user for system-generated records.
    * Tries company owner first, then falls back to first active employee.
    */
-  private async getDefaultUser(tx: KyselyTx): Promise<string | null> {
+  private async getDefaultUser(tx: DrizzleDb): Promise<string | null> {
     // Try company group owner first
-    const group = await tx
-      .selectFrom("company")
-      .innerJoin("companyGroup", "companyGroup.id", "company.companyGroupId")
-      .select("companyGroup.ownerId")
-      .where("company.id", "=", this.companyId)
-      .executeTakeFirst();
+    const { rows: groups } = await tx.execute<{ ownerId: string | null }>(sql`
+      select cg."ownerId"
+      from company c
+      inner join "companyGroup" cg on cg.id = c."companyGroupId"
+      where c.id = ${this.companyId}
+      limit 1
+    `);
+    const group = groups[0];
 
     if (group?.ownerId) {
       return group.ownerId;
     }
 
     // Fall back to first active employee for this company (by user creation date)
-    const employee = await tx
-      .selectFrom("employeeJob")
-      .innerJoin("user", "user.id", "employeeJob.id")
-      .select("employeeJob.id")
-      .where("employeeJob.companyId", "=", this.companyId)
-      .where("user.active", "=", true)
-      .orderBy("user.createdAt", "asc")
-      .limit(1)
-      .executeTakeFirst();
+    const { rows: employees } = await tx.execute<{ id: string }>(sql`
+      select ej.id
+      from "employeeJob" ej
+      inner join "user" u on u.id = ej.id
+      where ej."companyId" = ${this.companyId}
+        and u.active = true
+      order by u."createdAt" asc
+      limit 1
+    `);
+    const employee = employees[0];
 
     return employee?.id ?? null;
   }
 
   private async upsertLines(
-    tx: KyselyTx,
+    tx: DrizzleDb,
     invoiceId: string,
     lines: Accounting.BillLine[]
   ): Promise<void> {
     // Delete existing lines
-    await tx
-      .deleteFrom("purchaseInvoiceLine")
-      .where("invoiceId", "=", invoiceId)
-      .execute();
+    await tx.execute(sql`
+      delete from "purchaseInvoiceLine"
+      where "invoiceId" = ${invoiceId}
+    `);
 
     if (lines.length === 0) return;
 
@@ -657,12 +680,15 @@ export class BillSyncer extends BaseEntitySyncer<
 
     const itemMap = new Map<string, string>();
     if (itemCodes.length > 0) {
-      const items = await tx
-        .selectFrom("item")
-        .select(["id", "readableId"])
-        .where("readableId", "in", itemCodes)
-        .where("companyId", "=", this.companyId)
-        .execute();
+      const { rows: items } = await tx.execute<{
+        id: string;
+        readableId: string;
+      }>(sql`
+        select id, "readableId"
+        from item
+        where "readableId" = any(${itemCodes}::text[])
+          and "companyId" = ${this.companyId}
+      `);
 
       for (const item of items) {
         itemMap.set(item.readableId, item.id);
@@ -679,13 +705,16 @@ export class BillSyncer extends BaseEntitySyncer<
     if (accountNumbers.length > 0) {
       const companyGroupId = await this.getCompanyGroupId(tx);
       if (companyGroupId) {
-        const accounts = await tx
-          .selectFrom("account")
-          .select(["id", "number"])
-          .where("companyGroupId", "=", companyGroupId)
-          .where("number", "in", accountNumbers)
-          .where("active", "=", true)
-          .execute();
+        const { rows: accounts } = await tx.execute<{
+          id: string;
+          number: string | null;
+        }>(sql`
+          select id, number
+          from account
+          where "companyGroupId" = ${companyGroupId}
+            and number = any(${accountNumbers}::text[])
+            and active = true
+        `);
         for (const a of accounts) {
           if (a.number) accountIdMap.set(a.number, a.id);
         }
@@ -693,11 +722,18 @@ export class BillSyncer extends BaseEntitySyncer<
     }
 
     // Get the invoice to get companyId and createdBy
-    const invoice = await tx
-      .selectFrom("purchaseInvoice")
-      .select(["companyId", "createdBy", "exchangeRate"])
-      .where("id", "=", invoiceId)
-      .executeTakeFirstOrThrow();
+    const { rows: invoiceRows } = await tx.execute<{
+      companyId: string;
+      createdBy: string | null;
+      exchangeRate: number | null;
+    }>(sql`
+      select "companyId", "createdBy", "exchangeRate"
+      from "purchaseInvoice"
+      where id = ${invoiceId}
+      limit 1
+    `);
+    const invoice = invoiceRows[0];
+    if (!invoice) throw new Error("Purchase invoice not found");
 
     // Insert new lines
     for (const line of lines) {
@@ -705,30 +741,45 @@ export class BillSyncer extends BaseEntitySyncer<
         ? (itemMap.get(line.itemCode) ?? null)
         : null;
 
-      await tx
-        .insertInto("purchaseInvoiceLine")
-        .values({
-          invoiceId,
-          companyId: invoice.companyId,
-          createdBy: invoice.createdBy,
-          description: line.description,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          supplierUnitPrice: line.unitPrice,
-          itemId,
-          accountId: line.accountNumber
-            ? (accountIdMap.get(line.accountNumber) ?? null)
-            : null,
-          taxPercent: line.taxPercent,
-          taxAmount: line.taxAmount,
-          supplierTaxAmount: line.taxAmount ?? 0,
-          totalAmount: line.totalAmount,
-          supplierExtendedPrice: line.totalAmount,
-          exchangeRate: invoice.exchangeRate,
-          invoiceLineType: itemId ? "Part" : "G/L Account",
-          supplierShippingCost: 0
-        })
-        .execute();
+      await tx.execute(sql`
+        insert into "purchaseInvoiceLine" (
+          "invoiceId",
+          "companyId",
+          "createdBy",
+          description,
+          quantity,
+          "unitPrice",
+          "supplierUnitPrice",
+          "itemId",
+          "accountId",
+          "taxPercent",
+          "taxAmount",
+          "supplierTaxAmount",
+          "totalAmount",
+          "supplierExtendedPrice",
+          "exchangeRate",
+          "invoiceLineType",
+          "supplierShippingCost"
+        ) values (
+          ${invoiceId},
+          ${invoice.companyId},
+          ${invoice.createdBy},
+          ${line.description},
+          ${line.quantity},
+          ${line.unitPrice},
+          ${line.unitPrice},
+          ${itemId},
+          ${line.accountNumber ? (accountIdMap.get(line.accountNumber) ?? null) : null},
+          ${line.taxPercent},
+          ${line.taxAmount},
+          ${line.taxAmount ?? 0},
+          ${line.totalAmount},
+          ${line.totalAmount},
+          ${invoice.exchangeRate ?? 1},
+          ${itemId ? "Part" : "G/L Account"},
+          ${0}
+        )
+      `);
     }
   }
 

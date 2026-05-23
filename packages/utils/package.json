@@ -2,7 +2,6 @@
   "name": "@carbon/utils",
   "dependencies": {
     "@internationalized/date": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "@tiptap/react": "catalog:",
     "cookie": "catalog:",
     "dompurify": "catalog:",

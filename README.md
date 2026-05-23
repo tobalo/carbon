@@ -16,7 +16,7 @@
   </p>
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/Postgres-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="Postgres" />
   <img src="https://img.shields.io/badge/Typescript-1a67f3?style=for-the-badge&logo=react&logoColor=white" alt="Typescript" />
   <img src="https://img.shields.io/badge/React-23272F?style=for-the-badge&logo=react&logoColor=white" alt="React" />
 </p>
@@ -41,7 +41,34 @@ Carbon is designed to make it easy for you to extend the platform by building yo
 
 ![Carbon Functonality](https://github.com/user-attachments/assets/150c3025-ddcb-4ae4-b7b4-27c670d6cb81)
 
-![Carbon Architecture](https://github.com/user-attachments/assets/3674b2d0-28c7-415f-a8ea-4d8c796337eb)
+```mermaid
+flowchart LR
+  user["Users and API clients"] --> ingress["App ingress<br/>Portless locally, Vercel in prod"]
+
+  subgraph apps["Carbon apps"]
+    erp["ERP<br/>React Router"]
+    mes["MES<br/>React Router"]
+    academy["Academy / Starter"]
+    api["REST, MCP, webhooks"]
+  end
+
+  ingress --> apps
+  apps --> auth["Better Auth<br/>sessions, API keys, org/RBAC"]
+  auth --> requestClient["Request-scoped DB client<br/>carbon_app + RLS context"]
+  apps --> serviceClient["Service boundary<br/>carbon_service for jobs and trusted webhooks"]
+
+  requestClient --> db["Postgres 18 + pgvector<br/>Drizzle schema and migrations"]
+  serviceClient --> db
+
+  apps --> storage["S3-compatible storage<br/>MinIO locally"]
+  apps --> redis["Redis cache"]
+  apps --> jobs["Inngest events and jobs"]
+  jobs --> serviceClient
+  jobs --> mail["Email and notifications<br/>Resend, Novu, Inbucket locally"]
+  serviceClient --> external["External integrations<br/>Stripe, Slack, Jira, Linear, Xero, Onshape, Paperless"]
+```
+
+The current platform topology is a greenfield Postgres deployment. Local development boots `pgvector/pgvector:pg18-trixie`, applies Drizzle migrations, validates schema types, and runs Carbon apps without a Supabase runtime dependency.
 
 Features:
 
@@ -65,7 +92,7 @@ Technical highlights:
 
 - [x] Unified auth and permissions across apps
 - [x] Full-stack type safety (Database → UI)
-- [x] Realtime database subscriptions
+- [x] Fast server-side data loading and polling-friendly APIs
 - [x] Attribute-based access control (ABAC)
 - [x] Role-based access control (Customer, Supplier, Employee)
 - [x] Row-level security (RLS)
@@ -79,8 +106,10 @@ Technical highlights:
 - [Typescript](https://www.typescriptlang.org/) – language
 - [Tailwind](https://tailwindcss.com) – styling
 - [Radix UI](https://radix-ui.com) - behavior
-- [Supabase](https://supabase.com) - database
-- [Supabase](https://supabase.com) – auth
+- [Postgres](https://www.postgresql.org/) - database
+- [Drizzle](https://orm.drizzle.team/) - schema and migrations
+- [Better Auth](https://www.better-auth.com/) – auth
+- S3-compatible object storage - files
 - [Redis](https://redis.io) - cache
 - [Inngest](https://inngest.com) - jobs
 - [Resend](https://resend.com) – email
@@ -106,7 +135,7 @@ The monorepo follows the Turborepo convention of grouping packages into one of t
 | `academy`    | Academy         | `pnpm dev:academy`                                  |
 | `starter`    | Starter         | `pnpm dev:starter`                                  |
 
-`pnpm dev` runs the per-worktree dev CLI (`crbn up`). ERP and MES are first-class — the CLI boots the docker stack, applies migrations, regenerates types/swagger, and spawns the selected apps behind portless. Academy and starter are standalone Turborepo entries.
+`pnpm dev` runs the per-worktree dev CLI (`crbn up`). ERP and MES are first-class — the CLI boots the docker stack, applies migrations, validates schema types, and spawns the selected apps behind portless. Academy and starter are standalone Turborepo entries.
 
 ### `/packages`
 
@@ -170,7 +199,7 @@ $ nvm use            # use node v22
 $ pnpm install       # install dependencies
 ```
 
-The dev stack (Postgres, GoTrue, Kong, Storage, Inngest, Inbucket, Studio, Realtime) is booted later by `crbn up` — see [Local dev CLI](#local-dev-cli-crbn) below. There is no separate "start the database" step.
+The dev stack (Postgres, MinIO, Inngest, and Inbucket) is booted later by `crbn up` — see [Local dev CLI](#local-dev-cli-crbn) below. There is no separate "start the database" step.
 
 ### Local dev CLI (`crbn`)
 
@@ -179,7 +208,7 @@ The dev stack (Postgres, GoTrue, Kong, Storage, Inngest, Inbucket, Studio, Realt
 `crbn` is a small CLI at `packages/dev/bin/crbn` that wraps two things:
 
 - **Git worktrees** — every feature branch can live in its own checkout dir, so you can switch branches without stashing.
-- **Per-worktree docker compose stack** — each worktree gets its own Postgres / Supabase services on dynamic ports, isolated under `carbon-<slug>` compose project. Routing is handled by [portless](https://github.com/portless-dev/portless) (a local HTTPS reverse proxy that serves `*.dev` hostnames on `:443` with locally-trusted certs — installed automatically on first `crbn up`).
+- **Per-worktree docker compose stack** — each worktree gets its own Postgres, MinIO, Inngest, and Inbucket services on dynamic ports, isolated under `carbon-<slug>` compose project. Routing is handled by [portless](https://github.com/portless-dev/portless) (a local HTTPS reverse proxy that serves `*.dev` hostnames on `:443` with locally-trusted certs — installed automatically on first `crbn up`).
 
 > **Windows users:** the dev CLI (`crbn`, `setup.sh`) is POSIX-only and expects **WSL or Git Bash**. Native cmd.exe / PowerShell shells are not supported. From a WSL/Git Bash prompt, the standard flow (`./setup.sh`, `pnpm dev`, `crbn checkout …`) works the same as on macOS/Linux.
 
@@ -207,8 +236,8 @@ $ crbn new | list | remove           # interactive worktree management
 
 `crbn up` flags:
 
-- `--no-migrate` — skip `supabase migration up` (use when schema is already current and you just want to re-boot containers fast)
-- `--no-regen` — skip regenerating `packages/database/src/types.ts` + `swagger-docs-schema.ts` (auto-skipped when `--no-migrate` is set, since no schema change implies no type drift)
+- `--no-migrate` — skip Drizzle migrations (use when schema is already current and you just want to re-boot containers fast)
+- `--no-regen` — skip schema type validation (auto-skipped when `--no-migrate` is set, since no schema change implies no schema drift)
 
 Files synced by `crbn copy` are listed under `package.json#crbn.copy` (defaults to `[".env"]`). To uninstall the rc block: `./setup.sh --uninstall`.
 
@@ -221,19 +250,18 @@ $ cp ./.env.example ./.env
 1. **Social Sign In**: Signing in requires you to setup one of two methods:
 
 - Email requires a Resend API key (you'll set this up later on)
-- Sign-in with Google requires a Google auth client with these variables. [See the Supabase docs for instructions on how to set this up](https://supabase.com/docs/guides/auth/social-login/auth-google):
-  - Set `Authorized JavaScript origins` to `https://api.carbon.dev`
-  - Set `Authorized redirect URIs` to `https://api.carbon.dev/auth/v1/callback`
-  - **About the two API URLs you'll see:** each worktree has its own scoped Supabase URL (`https://<worktree>.api.dev`) for app traffic, **and** there is one stable alias `https://api.carbon.dev` registered on whichever worktree is currently `up`. The stable alias exists only so OAuth callbacks have a single registered redirect URI — one Google Console entry covers every worktree. Day-to-day, your app talks to its worktree-scoped URL; only the OAuth callback hits the stable alias.
+- Sign-in with Google requires a Google auth client:
+  - Set `Authorized JavaScript origins` to your ERP origin, for example `https://erp.carbon.dev`
+  - Set `Authorized redirect URIs` to your ERP callback URL, for example `https://erp.carbon.dev/api/auth/callback/google`
 - You should set environment variables like the following.
-  - `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID="******.apps.googleusercontent.com"`
-  - `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET="GOCSPX-****************"`
+  - `GOOGLE_CLIENT_ID="******.apps.googleusercontent.com"`
+  - `GOOGLE_CLIENT_SECRET="GOCSPX-****************"`
 
-2. **Supabase**: Backend services run inside the per-worktree docker stack — `crbn up` boots them and writes everything you need into `.env.local` automatically:
+2. **Backend stack**: Backend services run inside the per-worktree docker stack — `crbn up` boots them and writes everything you need into `.env.local` automatically:
 
-- `SUPABASE_URL` — portless alias (e.g. `https://local-dev.api.dev`)
-- `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — keys minted per-worktree from a random `SUPABASE_JWT_SECRET`
-- `SUPABASE_DB_URL` — direct Postgres URL on a dynamic port
+- `DATABASE_MIGRATION_URL`, `DATABASE_URL`, `DATABASE_SERVICE_URL`, `JOBS_DATABASE_URL` — direct Postgres URLs on a dynamic port, split into owner/app/service roles
+- `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PRIVATE_BUCKET`, `S3_PUBLIC_BUCKET`, `S3_PUBLIC_BASE_URL` — MinIO/S3-compatible storage settings
+- `BETTER_AUTH_SECRET` and `AUTH_PROVIDER=better_auth` — local Better Auth settings
 
 `.env.local` is generated; do not commit it or hand-edit values that came from `crbn up` (they are re-derived on each boot). Put genuine secrets (OAuth client IDs, Stripe keys, Resend, Novu) in `.env` only.
 
@@ -283,11 +311,11 @@ $ pnpm dev                # equivalent to `crbn up` — picker lets you choose E
 | --------------- | -------------------------------------------------------------- |
 | ERP             | `https://<worktree>.erp.dev`                                   |
 | MES             | `https://<worktree>.mes.dev`                                   |
-| Supabase API    | `https://<worktree>.api.dev`                                   |
-| Supabase Studio | `https://<worktree>.studio.dev`                                |
+| Storage         | `https://<worktree>.storage.dev`                               |
+| Storage Console | `https://<worktree>.console.dev`                               |
 | Inngest         | `https://<worktree>.inngest.dev`                               |
 | Mail (Inbucket) | `https://<worktree>.mail.dev`                                  |
-| Postgres        | `postgresql://postgres:postgres@localhost:<PORT_DB>/postgres`  |
+| Postgres        | `postgresql://carbon:carbon@localhost:<PORT_DB>/carbon`        |
 
 `<worktree>` is derived from the branch name (e.g. `sid-local-dev` → `local-dev`). The main checkout drops the prefix and just uses `erp.dev`, `mes.dev`, etc. Ports for raw TCP services (Postgres, Inbucket, Inngest) are dynamic per-worktree — `crbn status` is the source of truth.
 
@@ -310,12 +338,6 @@ This project uses [Biome](https://biomejs.dev/) for code formatting and linting.
 ```
 
 ### Commands
-
-To add an edge function
-
-```bash
-$ pnpm run db:function:new <name>
-```
 
 To add a database migration
 
@@ -347,11 +369,10 @@ To wipe the stack and start clean (destroys Postgres volume + flushes the redis 
 $ crbn reset
 ```
 
-To regenerate types or swagger schema manually (normally `crbn up` does this for you after applying migrations):
+To validate schema types manually (normally `crbn up` does this for you after applying migrations):
 
 ```bash
-$ pnpm db:types          # → packages/database/src/types.ts + functions/lib/types.ts
-$ pnpm generate:swagger  # → packages/database/src/swagger-docs-schema.ts
+$ pnpm db:types          # validates Drizzle schema/type declarations
 ```
 
 To run a command against a single workspace, use `pnpm --filter`:
@@ -362,39 +383,31 @@ $ pnpm --filter @carbon/react test
 
 To restore a production database snapshot locally:
 
-1. Export a backup from your production Supabase project (`pg_dump` or Supabase Dashboard → Database → Backups).
+1. Export a backup from production with `pg_dump`.
 2. Boot the stack **without applying migrations** so they don't fight the dump's schema state:
    ```bash
    $ crbn up --no-migrate
    ```
 3. Find the live Postgres port (`crbn status` shows it; or read `PORT_DB` from `.env.local`).
-4. Pipe the backup into the local DB as the superuser (`supabase_admin` for plain-text dumps, or use `pg_restore` for `.dump` archives):
+4. Pipe the backup into the local DB as the app database user, or use `pg_restore` for `.dump` archives:
    ```bash
    $ source .env.local
-   $ PGPASSWORD=postgres psql -h localhost -p "$PORT_DB" -U supabase_admin -d postgres < /path/to/backup.sql
+   $ PGPASSWORD=carbon psql -h localhost -p "$PORT_DB" -U carbon -d carbon < /path/to/backup.sql
    # …or for .dump archives:
-   $ PGPASSWORD=postgres pg_restore -h localhost -p "$PORT_DB" -U supabase_admin -d postgres --no-owner /path/to/backup.dump
+   $ PGPASSWORD=carbon pg_restore -h localhost -p "$PORT_DB" -U carbon -d carbon --no-owner /path/to/backup.dump
    ```
-5. Regenerate types so app code reflects the restored schema:
+5. Validate the schema declarations against the restored schema:
    ```bash
    $ pnpm db:types
    ```
 
 ## API
 
-The API documentation is located in the ERP app at `${ERP}/x/api/js/intro`. It is auto-generated based on changes to the database.
+The API documentation is located in the ERP app at `${ERP}/x/api/js/intro`. Its table and column metadata is derived from the generated Drizzle schema declarations.
 
 There are two ways to use the API:
 
-1. From another codebase using a supabase client library:
-
-- [Javascript](https://supabase.com/docs/reference/javascript/introduction)
-- [Flutter](https://supabase.com/docs/reference/dart/introduction)
-- [Python](https://supabase.com/docs/reference/python/introduction)
-- [C#](https://supabase.com/docs/reference/csharp/introduction)
-- [Swift](https://supabase.com/docs/reference/swift/introduction)
-- [Kotlin](https://supabase.com/docs/reference/kotlin/introduction)
-
+1. From another codebase using HTTP requests with a Carbon API key.
 2. From within the codebase using our packages.
 
 ### From another Codebase
@@ -402,36 +415,32 @@ There are two ways to use the API:
 First, set up the necessary credentials in environment variables. For the example below:
 
 1. Navigate to settings in the ERP to generate an API key. Set this in `CARBON_API_KEY`
-2. Get the Supabase URL to call (this is `SUPABASE_URL` in your `.env` if hosting locally, e.g. http://localhost:54321). Set this as `CARBON_API_URL`.
-3. Get the `SUPABASE_ANON_KEY` e.g. from your .env file. Set this as `CARBON_PUBLIC_KEY`.
-
-If you're self-hosting you can also use the supabase service key instead of the public key for root access. In that case you don't need to include the `carbon-key` header.
+2. Set `CARBON_API_URL` to your ERP origin.
 
 ```ts
-import { Database } from "@carbon/database";
-import { createClient } from "@supabase/supabase-js";
-
 const apiKey = process.env.CARBON_API_KEY;
 const apiUrl = process.env.CARBON_API_URL;
-const publicKey = process.env.CARBON_PUBLIC_KEY;
-
-const carbon = createClient<Database>(apiUrl, publicKey, {
-  global: {
-    headers: {
-      "carbon-key": apiKey,
-    },
-  },
-});
 
 // returns items from the company associated with the api key
-const { data, error } = await carbon.from("item").select("*");
+const response = await fetch(`${apiUrl}/api/items`, {
+  headers: {
+    Authorization: `Bearer ${apiKey}`,
+  },
+});
+const data = await response.json();
 ```
 
 ### From the Monorepo
 
+Request handlers should use `requirePermissions(...)` so Better Auth session,
+company/org scope, API-key scope, and module permissions are resolved before
+any data access. `getCarbonServiceClient()` is the privileged service-role
+client for system jobs and post-authorization implementation details; it does
+not perform RBAC or org translation.
+
 ```tsx
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-const carbon = getCarbonServiceRole();
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+const carbon = getCarbonServiceClient();
 
 // returns all items across companies
 const { data, error } = await carbon.from("item").select("*");
@@ -473,11 +482,11 @@ Background jobs have been migrated from [Trigger.dev](https://trigger.dev) to [I
 
 The caching layer (`@carbon/kv`) no longer depends on Upstash. A standard Redis instance is used instead. The `REDIS_URL` environment variable still applies, but you can point it at any Redis-compatible server (including a local Docker container).
 
-### Supabase CLI to docker compose (`crbn`)
+### Direct Postgres and S3 docker compose (`crbn`)
 
-Local dev no longer relies on `supabase start` / `supabase stop`. The full backend stack (Postgres 15, GoTrue, Kong, Storage, Realtime, Studio, Inngest, Inbucket, edge-runtime) runs from `docker-compose.dev.yml` under a per-worktree compose project (`carbon-<slug>`), managed by `crbn up` / `down` / `reset`. Ports are allocated dynamically per worktree so multiple branches can run side-by-side. Key changes:
+The backend stack (Postgres, MinIO, Inngest, and Inbucket) runs from `docker-compose.dev.yml` under a per-worktree compose project (`carbon-<slug>`), managed by `crbn up` / `down` / `reset`. Ports are allocated dynamically per worktree so multiple branches can run side-by-side. Key changes:
 
 - `pnpm db:start` / `db:stop` / `db:kill` / `db:build` are removed — use `crbn up` / `down` / `reset`.
-- `.env.local` is generated by `crbn up` (worktree-specific URLs, ports, JWT secret, anon/service keys). Genuine secrets stay in `.env`.
-- `pnpm db:migrate` now drives `supabase migration up --db-url $SUPABASE_DB_URL`; it falls back to the CLI's linked-project mode when `SUPABASE_DB_URL` is unset.
-- `pnpm db:types` generates types directly from `$SUPABASE_DB_URL` (no `supabase gen types --local`).
+- `.env.local` is generated by `crbn up` with worktree-specific URLs, ports, database URLs, and S3-compatible storage settings. Genuine secrets stay in `.env`.
+- `pnpm db:migrate` runs Drizzle migrations against `DATABASE_MIGRATION_URL` when set, then falls back to the service/app database URLs.
+- `pnpm db:types` is retained as a compatibility command that validates the Drizzle schema/type declaration surface.

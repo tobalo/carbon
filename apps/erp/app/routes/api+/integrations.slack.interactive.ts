@@ -1,13 +1,18 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { ERP_URL } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type {
+  QueryDatabase,
+  TableRow
+} from "@carbon/database/schema";
 import {
   createIssueSlackThread,
   createSlackWebClient,
   getCarbonEmployeeFromSlackId,
-  getSlackIntegrationByTeamId
+  getSlackIntegrationByTeamId,
+  verifySlackRequest
 } from "@carbon/ee/slack.server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { z } from "zod";
@@ -54,8 +59,26 @@ const slackInteractivePayloadSchema = z.object({
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
-    const formData = await request.formData();
-    const payloadString = formData.get("payload") as string;
+    let payloadString: string | null;
+    try {
+      const rawBody = await verifySlackRequest(request);
+      payloadString = new URLSearchParams(rawBody).get("payload");
+    } catch (error) {
+      console.error("Slack request signature validation failed:", error);
+      const status =
+        error instanceof Error &&
+        error.message.includes("SLACK_SIGNING_SECRET")
+          ? 500
+          : 401;
+
+      return data(
+        {
+          response_type: "ephemeral",
+          text: "Invalid Slack request signature."
+        },
+        { status }
+      );
+    }
 
     if (!payloadString) {
       return data({ error: "Missing payload" }, { status: 400 });
@@ -79,7 +102,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const serviceRole = await getCarbonServiceRole();
+    const serviceClient = await getCarbonServiceClient();
 
     if (!payload.data.team?.id) {
       return {
@@ -89,7 +112,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const integration = await getSlackIntegrationByTeamId(
-      serviceRole,
+      serviceClient,
       payload.data.team.id
     );
 
@@ -114,7 +137,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     switch (payload.data.type) {
       case "shortcut":
-        return handleShortcut(payload.data, companyId, slackToken, serviceRole);
+        return handleShortcut(payload.data, companyId, slackToken, serviceClient);
 
       case "block_actions":
         return handleBlockActions(payload.data, companyId, slackToken);
@@ -124,7 +147,7 @@ export async function action({ request }: ActionFunctionArgs) {
           payload.data,
           companyId,
           slackToken,
-          serviceRole,
+          serviceClient,
           integration.data?.[0]
         );
 
@@ -176,7 +199,7 @@ async function handleShortcut(
   payload: z.infer<typeof slackInteractivePayloadSchema>,
   companyId: string,
   slackToken: string,
-  serviceRole: SupabaseClient<Database>
+  serviceClient: CarbonDatabaseClient<QueryDatabase>
 ) {
   const callbackId = payload.callback_id;
 
@@ -186,7 +209,7 @@ async function handleShortcut(
         payload,
         companyId,
         slackToken,
-        serviceRole
+        serviceClient
       );
 
     default:
@@ -198,7 +221,7 @@ async function handleCreateNcrShortcut(
   payload: z.infer<typeof slackInteractivePayloadSchema>,
   companyId: string,
   slackToken: string,
-  serviceRole: any
+  serviceClient: any
 ) {
   if (!payload.trigger_id) {
     return {
@@ -209,8 +232,8 @@ async function handleCreateNcrShortcut(
 
   try {
     const [types, workflows] = await Promise.all([
-      getIssueTypesList(serviceRole, companyId),
-      getIssueWorkflowsList(serviceRole, companyId)
+      getIssueTypesList(serviceClient, companyId),
+      getIssueWorkflowsList(serviceClient, companyId)
     ]);
 
     const slackClient = createSlackWebClient({ token: slackToken });
@@ -371,8 +394,8 @@ async function handleViewSubmission(
   payload: z.infer<typeof slackInteractivePayloadSchema>,
   companyId: string,
   slackToken: string,
-  serviceRole: SupabaseClient<Database>,
-  integration: Database["public"]["Tables"]["companyIntegration"]["Row"]
+  serviceClient: CarbonDatabaseClient<QueryDatabase>,
+  integration: TableRow<"companyIntegration">
 ) {
   const view = payload.view;
 
@@ -401,8 +424,8 @@ async function handleViewSubmission(
     }
 
     const [nextSequence, employee] = await Promise.all([
-      getNextSequence(serviceRole, "nonConformance", companyId),
-      getCarbonEmployeeFromSlackId(serviceRole, slackToken, user_id, companyId)
+      getNextSequence(serviceClient, "nonConformance", companyId),
+      getCarbonEmployeeFromSlackId(serviceClient, slackToken, user_id, companyId)
     ]);
 
     if (nextSequence.error || !nextSequence.data) {
@@ -414,7 +437,7 @@ async function handleViewSubmission(
       throw new Error("Failed to get employee");
     }
 
-    const createResult = await upsertIssue(serviceRole, {
+    const createResult = await upsertIssue(serviceClient, {
       nonConformanceId: nextSequence.data,
       approvalRequirements: [],
       companyId,
@@ -439,7 +462,7 @@ async function handleViewSubmission(
 
     const [threadResult, tasksResult] = await Promise.all([
       createIssueSlackThread(
-        serviceRole,
+        serviceClient,
         {
           carbonUrl: `${ERP_URL}${path.to.issue(ncrId)}`,
           companyId,
@@ -456,13 +479,13 @@ async function handleViewSubmission(
           channelId: configuredChannelId
         }
       ),
-      serviceRole.functions.invoke("create", {
+      invokeFunction("create", {
         body: {
           type: "nonConformanceTasks",
           id: ncrId,
           companyId,
           userId: employee.data?.id ?? "system"
-        }
+        },
       })
     ]);
 

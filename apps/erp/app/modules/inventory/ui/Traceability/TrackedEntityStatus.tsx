@@ -1,9 +1,12 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  trackedEntityStatusEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 import { Trans } from "@lingui/react/macro";
 
 type TrackedEntityStatusProps = {
-  status?: Database["public"]["Enums"]["trackedEntityStatus"] | null;
+  status?: EnumValue<typeof trackedEntityStatusEnum> | null;
 };
 
 function TrackedEntityStatus({ status }: TrackedEntityStatusProps) {

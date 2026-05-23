@@ -1,5 +1,6 @@
-import type { Database } from "@carbon/database";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import type { JSONContent } from "@carbon/react";
+import { listObjects, type StorageObject } from "@carbon/storage";
 import {
   type FlatTree,
   flattenTree,
@@ -7,10 +8,10 @@ import {
   type TrackedActivityAttributes
 } from "@carbon/utils";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { nanoid } from "nanoid";
 import type { z } from "zod";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "~/utils/query";
 import type {
   documentTypes,
   nonScrapQuantityValidator,
@@ -20,70 +21,22 @@ import type {
 } from "./models";
 import type { BaseOperationWithDetails, Job, StorageItem } from "./types";
 
-export async function getOpenJobs(
-  client: SupabaseClient<Database>,
-  args: { companyId: string; locationId: string }
-) {
-  return client
-    .from("jobs")
-    .select(
-      "id, jobId, status, itemReadableIdWithRevision, name, quantity, quantityComplete, dueDate, deadlineType, assignee, jobMakeMethodId"
-    )
-    .eq("companyId", args.companyId)
-    .eq("locationId", args.locationId)
-    .in("status", ["Ready", "In Progress", "Paused"])
-    .order("jobId", { ascending: true });
-}
-
-export async function getTrackedEntitiesByJobMakeMethodIds(
-  client: SupabaseClient<Database>,
-  jobMakeMethodIds: string[],
-  companyId: string
-) {
-  if (jobMakeMethodIds.length === 0) return {};
-  const result = await client
-    .from("trackedEntity")
-    .select("readableId, attributes")
-    .in("attributes->>Job Make Method", jobMakeMethodIds)
-    .eq("companyId", companyId);
-
-  if (!result.data) return {};
-
-  return result.data.reduce<Record<string, string>>((acc, curr) => {
-    if (
-      curr.attributes !== null &&
-      typeof curr.attributes === "object" &&
-      "Job Make Method" in curr.attributes &&
-      curr.readableId
-    ) {
-      acc[curr.attributes["Job Make Method"] as string] = curr.readableId;
-    }
-    return acc;
-  }, {});
-}
-
-export async function getJobOperations(
-  client: SupabaseClient<Database>,
-  jobId: string
-) {
-  return client
-    .from("jobOperation")
-    .select("*, jobMakeMethod(parentMaterialId, item(readableIdWithRevision))")
-    .eq("jobId", jobId);
-}
-
-export async function getJobOperationDependencies(
-  client: SupabaseClient<Database>,
-  jobId: string
-) {
-  return client
-    .from("jobOperationDependency")
-    .select("operationId, dependsOnId")
-    .eq("jobId", jobId);
+function toStorageItem(
+  object: StorageObject,
+  bucket: string,
+  itemId?: string
+): StorageItem {
+  return {
+    id: object.key,
+    name: object.name,
+    metadata: { size: object.size },
+    bucket,
+    itemId
+  };
 }
 
 export async function deleteAttributeRecord(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: { id: string; companyId: string; userId: string }
 ) {
   return client
@@ -95,7 +48,7 @@ export async function deleteAttributeRecord(
 }
 
 export async function finishJobOperation(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     jobOperationId: string;
     userId: string;
@@ -108,7 +61,8 @@ export async function finishJobOperation(
       status: "Done",
       updatedBy: args.userId
     })
-    .eq("id", args.jobOperationId);
+    .eq("id", args.jobOperationId)
+    .eq("companyId", args.companyId);
 
   if (!result.error) {
     client
@@ -117,11 +71,12 @@ export async function finishJobOperation(
       .eq("jobOperationId", args.jobOperationId)
       .not("endTime", "is", null)
       .eq("postedToGL", false)
+      .eq("companyId", args.companyId)
       .then((unpostedEvents) => {
         if (unpostedEvents.data?.length) {
           Promise.all(
             unpostedEvents.data.map((event) =>
-              client.functions.invoke("post-production-event", {
+              invokeFunction("post-production-event", {
                 body: {
                   productionEventId: event.id,
                   userId: args.userId,
@@ -138,7 +93,7 @@ export async function finishJobOperation(
 }
 
 export async function getActiveJobOperationsByEmployee(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -151,18 +106,19 @@ export async function getActiveJobOperationsByEmployee(
 }
 
 export async function getActiveJobOperationsByLocation(
-  client: SupabaseClient<Database>,
-  locationId: string,
+  client: DatabaseQueryClient,
+  args: { locationId: string; companyId: string },
   workCenterIds: string[] = []
 ) {
   return client.rpc("get_active_job_operations_by_location", {
-    location_id: locationId,
+    location_id: args.locationId,
+    company_id: args.companyId,
     work_center_ids: workCenterIds
   });
 }
 
 export async function getActiveJobCount(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -175,7 +131,7 @@ export async function getActiveJobCount(
 }
 
 export async function getCustomers(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   customerIds: string[]
 ) {
@@ -187,7 +143,7 @@ export async function getCustomers(
 }
 
 export async function getFailureModesList(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return client
@@ -238,67 +194,131 @@ export function getFileType(fileName: string): (typeof documentTypes)[number] {
   return "Other";
 }
 
+async function attachJobOperationStepRecords(
+  client: DatabaseQueryClient,
+  companyId: string,
+  steps: any[]
+) {
+  const stepIds = steps.map((step) => step.id).filter(Boolean);
+  if (stepIds.length === 0) return steps;
+
+  const records = await client
+    .from("jobOperationStepRecord")
+    .select("*")
+    .in("jobOperationStepId", stepIds)
+    .eq("companyId", companyId);
+
+  const recordsByStepId = new Map<string, any[]>();
+  records.data?.forEach((record: any) => {
+    const stepRecords = recordsByStepId.get(record.jobOperationStepId) ?? [];
+    stepRecords.push(record);
+    recordsByStepId.set(record.jobOperationStepId, stepRecords);
+  });
+
+  return steps.map((step) => ({
+    ...step,
+    jobOperationStepRecord: recordsByStepId.get(step.id) ?? []
+  }));
+}
+
 export async function getJobOperationProcedure(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: DatabaseQueryClient,
+  operationId: string,
+  companyId: string
 ) {
   const [attributes, parameters] = await Promise.all([
     client
       .from("jobOperationStep")
-      .select("*, jobOperationStepRecord(*)")
-      .eq("operationId", operationId),
+      .select("*")
+      .eq("operationId", operationId)
+      .eq("companyId", companyId),
     client
       .from("jobOperationParameter")
       .select("*")
       .eq("operationId", operationId)
+      .eq("companyId", companyId)
   ]);
 
   return {
-    attributes: attributes.data ?? [],
+    attributes: await attachJobOperationStepRecords(
+      client,
+      companyId,
+      attributes.data ?? []
+    ),
     parameters: parameters.data ?? []
   };
 }
 
 export async function getJobAttributesByOperationId(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: DatabaseQueryClient,
+  operationId: string,
+  companyId: string
 ) {
-  return client
+  const attributes = await client
     .from("jobOperationStep")
-    .select("*, jobOperationStepRecord(*)")
-    .eq("operationId", operationId);
+    .select("*")
+    .eq("operationId", operationId)
+    .eq("companyId", companyId);
+
+  return {
+    ...attributes,
+    data: await attachJobOperationStepRecords(
+      client,
+      companyId,
+      attributes.data ?? []
+    )
+  };
 }
 
 export async function getJobByOperationId(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: DatabaseQueryClient,
+  operationId: string,
+  companyId: string
 ) {
   const operation = await client
     .from("jobOperation")
     .select("jobId")
     .eq("id", operationId)
+    .eq("companyId", companyId)
     .single();
   if (operation.error) return operation;
-  return client
+  const job = await client
     .from("jobs")
-    .select("*, customer(name)")
+    .select("*")
     .eq("id", operation.data.jobId)
+    .eq("companyId", companyId)
     .single();
+
+  if (job.error || !job.data?.customerId) return job;
+
+  const customer = await client
+    .from("customer")
+    .select("name")
+    .eq("id", job.data.customerId)
+    .eq("companyId", companyId)
+    .single();
+
+  return {
+    ...job,
+    data: {
+      ...job.data,
+      customer: customer.data
+    }
+  };
 }
 
 const getItemFiles = async (
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   items: Array<{ itemId: string }>
 ) => {
   const getFile = async (id: string) => {
-    const res = await client.storage
-      .from("private")
-      .list(`${companyId}/parts/${id}`);
+    const files = await listObjects({
+      companyId,
+      prefix: `parts/${id}`
+    });
 
-    if (res.error || !res.data) return null;
-
-    return res.data.map((f) => ({ ...f, bucket: "parts", itemId: id }));
+    return files.map((file) => toStorageItem(file, "parts", id));
   };
 
   const elems = items.map((el) => getFile(el.itemId));
@@ -309,7 +329,7 @@ const getItemFiles = async (
 };
 
 export async function getJobFiles(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string,
   job: Job,
   items: Array<{ itemId: string }>
@@ -318,60 +338,69 @@ export async function getJobFiles(
     const opportunityLine = job.salesOrderLineId || job.quoteLineId;
 
     const [opportunityLineFiles, jobFiles, itemFiles] = await Promise.all([
-      client.storage
-        .from("private")
-        .list(`${companyId}/opportunity-line/${opportunityLine}`),
-      client.storage.from("private").list(`${companyId}/job/${job.id}`),
+      listObjects({
+        companyId,
+        prefix: `opportunity-line/${opportunityLine}`
+      }),
+      listObjects({ companyId, prefix: `job/${job.id}` }),
       getItemFiles(client, companyId, items)
     ]);
 
     // Combine and return both sets of files
     return [
-      ...(opportunityLineFiles.data?.map((f) => ({
-        ...f,
-        bucket: "opportunity-line"
-      })) || []),
-      ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
+      ...opportunityLineFiles.map((file) =>
+        toStorageItem(file, "opportunity-line")
+      ),
+      ...jobFiles.map((file) => toStorageItem(file, "job")),
       ...itemFiles
     ];
   } else {
     const [jobFiles, itemFiles] = await Promise.all([
-      client.storage.from("private").list(`${companyId}/job/${job.id}`),
+      listObjects({ companyId, prefix: `job/${job.id}` }),
       getItemFiles(client, companyId, items)
     ]);
 
     return [
-      ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
+      ...jobFiles.map((file) => toStorageItem(file, "job")),
       ...itemFiles
     ];
   }
 }
 
 export async function getJobMakeMethod(
-  client: SupabaseClient<Database>,
-  id: string
+  client: DatabaseQueryClient,
+  id: string,
+  companyId: string
 ) {
-  return client.from("jobMakeMethod").select("*").eq("id", id).single();
+  return client
+    .from("jobMakeMethod")
+    .select("*")
+    .eq("id", id)
+    .eq("companyId", companyId)
+    .single();
 }
 
 export async function getJobMaterialsByOperationId(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     operation: BaseOperationWithDetails;
     trackedEntityId: string | undefined;
     requiresSerialTracking: boolean;
+    companyId: string;
   }
 ) {
-  const { operation, trackedEntityId, requiresSerialTracking } = args;
+  const { operation, trackedEntityId, requiresSerialTracking, companyId } =
+    args;
 
   const [materials, trackedInputs] = await Promise.all([
     client
       .from("jobMaterialWithMakeMethodId")
       .select("*")
       .eq("jobMakeMethodId", operation.jobMakeMethodId)
+      .eq("companyId", companyId)
       .order("itemReadableId", { ascending: true })
       .order("id", { ascending: true }),
-    getTrackedInputs(client, trackedEntityId)
+    getTrackedInputs(client, trackedEntityId, companyId)
   ]);
 
   const kittedMakeMethodIds = new Set(
@@ -384,6 +413,7 @@ export async function getJobMaterialsByOperationId(
       .from("jobMaterialWithMakeMethodId")
       .select("*")
       .in("jobMakeMethodId", Array.from(kittedMakeMethodIds))
+      .eq("companyId", companyId)
       .neq("methodType", "Make to Order");
 
     // Create a map of parent kit materials by their make method ID
@@ -415,7 +445,11 @@ export async function getJobMaterialsByOperationId(
   // consumption (food-safety scenario: rice flour shouldn't outlive its
   // already-stale rice).
   const consumedEntityIds = Array.from(
-    new Set((trackedInputs.data ?? []).map((i) => i.id).filter(Boolean))
+    new Set(
+      (trackedInputs.data ?? [])
+        .map((input: { id?: string | null }) => input.id)
+        .filter(Boolean)
+    )
   );
   const todayStr = today(getLocalTimeZone()).toString();
   const expiredConsumed =
@@ -424,6 +458,7 @@ export async function getJobMaterialsByOperationId(
           .from("trackedEntity")
           .select("id")
           .in("id", consumedEntityIds)
+          .eq("companyId", companyId)
           .not("expirationDate", "is", null)
           .lt("expirationDate", todayStr)
       : { data: [] as { id: string }[] };
@@ -432,7 +467,7 @@ export async function getJobMaterialsByOperationId(
   );
   const consumedExpiredFor = (materialId: string | null) =>
     (trackedInputs.data ?? []).some(
-      (input) =>
+      (input: { id: string; activityAttributes?: unknown }) =>
         (input.activityAttributes as TrackedActivityAttributes)?.[
           "Job Material"
         ] === materialId && expiredConsumedIds.has(input.id)
@@ -451,12 +486,12 @@ export async function getJobMaterialsByOperationId(
           const issuedForTrackedParent =
             trackedInputs.data
               ?.filter(
-                (input) =>
+                (input: any) =>
                   (input.activityAttributes as TrackedActivityAttributes)?.[
                     "Job Material"
                   ] === material.id
               )
-              .reduce((acc, input) => {
+              .reduce((acc: number, input: any) => {
                 return acc + input.quantity;
               }, 0) ?? 0;
 
@@ -480,7 +515,7 @@ export async function getJobMaterialsByOperationId(
 }
 
 export async function getJobOperationsAssignedToEmployee(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   employeeId: string,
   companyId: string
 ) {
@@ -490,27 +525,111 @@ export async function getJobOperationsAssignedToEmployee(
   });
 }
 
+export async function getJobOperations(
+  client: DatabaseQueryClient,
+  jobId: string,
+  companyId: string
+) {
+  return client
+    .from("jobOperation")
+    .select("*")
+    .eq("jobId", jobId)
+    .eq("companyId", companyId)
+    .order("order", { ascending: true })
+    .order("createdAt", { ascending: true });
+}
+
+export async function getJobOperationDependencies(
+  client: DatabaseQueryClient,
+  jobId: string,
+  companyId: string
+) {
+  return client
+    .from("jobOperationDependency")
+    .select("operationId, dependsOnId")
+    .eq("jobId", jobId)
+    .eq("companyId", companyId);
+}
+
+export async function getOpenJobs(
+  client: DatabaseQueryClient,
+  args: { companyId: string; locationId?: string | null }
+) {
+  let query = client
+    .from("jobs")
+    .select("*")
+    .eq("companyId", args.companyId)
+    .in("status", ["Ready", "In Progress", "Paused"])
+    .order("dueDate", { ascending: true });
+
+  if (args.locationId) {
+    query = query.eq("locationId", args.locationId);
+  }
+
+  return query;
+}
+
+export async function getTrackedEntitiesByJobMakeMethodIds(
+  client: DatabaseQueryClient,
+  jobMakeMethodIds: string[],
+  companyId: string
+): Promise<Record<string, string | null>> {
+  if (jobMakeMethodIds.length === 0) return {};
+
+  const result = await client
+    .from("trackedEntity")
+    .select("id, attributes")
+    .eq("companyId", companyId)
+    .in("attributes->>Job Make Method", jobMakeMethodIds);
+
+  if (result.error) {
+    console.error("getTrackedEntitiesByJobMakeMethodIds error:", result.error);
+    return {};
+  }
+
+  return (result.data ?? []).reduce<Record<string, string | null>>(
+    (
+      acc,
+      trackedEntity: { id: string; attributes?: Record<string, unknown> }
+    ) => {
+      const jobMakeMethodId = trackedEntity.attributes?.["Job Make Method"];
+      if (typeof jobMakeMethodId === "string" && !acc[jobMakeMethodId]) {
+        acc[jobMakeMethodId] = trackedEntity.id;
+      }
+      return acc;
+    },
+    {}
+  );
+}
+
 export async function getJobOperationById(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: DatabaseQueryClient,
+  operationId: string,
+  companyId: string
 ) {
   return client.rpc("get_job_operation_by_id", {
-    operation_id: operationId
+    operation_id: operationId,
+    company_id: companyId
   });
 }
 
 export async function getJobOperationsByWorkCenter(
-  client: SupabaseClient<Database>,
-  { locationId, workCenterId }: { locationId: string; workCenterId: string }
+  client: DatabaseQueryClient,
+  {
+    locationId,
+    workCenterId,
+    companyId
+  }: { locationId: string; workCenterId: string; companyId: string }
 ) {
   return client.rpc("get_job_operations_by_work_center", {
     location_id: locationId,
-    work_center_id: workCenterId
+    work_center_id: workCenterId,
+    company_id: companyId
   });
 }
 
 export async function getJobParametersByOperationId(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   operationId: string
 ) {
   return client
@@ -520,7 +639,7 @@ export async function getJobParametersByOperationId(
 }
 
 export async function getKanbanByJobId(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   jobId: string | null
 ) {
   if (!jobId) return { data: null, error: null };
@@ -528,7 +647,7 @@ export async function getKanbanByJobId(
 }
 
 export async function getLocationsByCompany(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return client
@@ -539,7 +658,7 @@ export async function getLocationsByCompany(
 }
 
 export async function getNonConformanceActions(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     itemId: string;
     processId: string;
@@ -562,7 +681,7 @@ export async function getNonConformanceActions(
 }
 
 export async function getProcessesList(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return client
@@ -573,30 +692,34 @@ export async function getProcessesList(
 }
 
 export async function getProductionEventsForJobOperation(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     operationId: string;
     userId: string;
+    companyId: string;
   }
 ) {
   return client
     .from("productionEvent")
     .select("*")
-    .eq("jobOperationId", args.operationId);
+    .eq("jobOperationId", args.operationId)
+    .eq("companyId", args.companyId);
 }
 
 export async function getProductionQuantitiesForJobOperation(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: DatabaseQueryClient,
+  operationId: string,
+  companyId: string
 ) {
   return client
     .from("productionQuantity")
     .select("*")
-    .eq("jobOperationId", operationId);
+    .eq("jobOperationId", operationId)
+    .eq("companyId", companyId);
 }
 
 export async function getRecentJobOperationsByEmployee(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -609,7 +732,7 @@ export async function getRecentJobOperationsByEmployee(
 }
 
 export async function getScrapReasonsList(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return client
@@ -620,31 +743,35 @@ export async function getScrapReasonsList(
 }
 
 export async function getTrackedEntitiesByMakeMethodId(
-  client: SupabaseClient<Database>,
-  jobMakeMethodId: string
+  client: DatabaseQueryClient,
+  jobMakeMethodId: string,
+  companyId: string
 ) {
   return client
     .from("trackedEntity")
     .select("*")
+    .eq("companyId", companyId)
     .eq("attributes->>Job Make Method", jobMakeMethodId)
     .order("createdAt", { ascending: true });
 }
 
 export async function getTrackedEntity(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   id: string
 ) {
   return client.from("trackedEntity").select("*").eq("id", id).single();
 }
 
 export async function getTrackedEntitiesByOperationId(
-  client: SupabaseClient<Database>,
-  operationId: string
+  client: DatabaseQueryClient,
+  operationId: string,
+  companyId: string
 ) {
   const jobOperation = await client
     .from("jobOperation")
     .select("jobMakeMethodId")
     .eq("id", operationId)
+    .eq("companyId", companyId)
     .single();
 
   if (jobOperation.error || !jobOperation.data.jobMakeMethodId)
@@ -655,21 +782,25 @@ export async function getTrackedEntitiesByOperationId(
 
   return getTrackedEntitiesByMakeMethodId(
     client,
-    jobOperation.data.jobMakeMethodId
+    jobOperation.data.jobMakeMethodId,
+    companyId
   );
 }
 
 export async function getTrackedInputs(
-  client: SupabaseClient<Database>,
-  trackedEntityId?: string
+  client: DatabaseQueryClient,
+  trackedEntityId: string | undefined,
+  companyId: string
 ) {
   if (!trackedEntityId) return { data: [] };
   const [inputs, outputs] = await Promise.all([
     client.rpc("get_direct_descendants_of_tracked_entity_strict", {
-      p_tracked_entity_id: trackedEntityId
+      p_tracked_entity_id: trackedEntityId,
+      p_company_id: companyId
     }),
     client.rpc("get_direct_ancestors_of_tracked_entity_strict", {
-      p_tracked_entity_id: trackedEntityId
+      p_tracked_entity_id: trackedEntityId,
+      p_company_id: companyId
     })
   ]);
 
@@ -680,19 +811,19 @@ export async function getTrackedInputs(
   const outputCounts = new Map<string, number>();
 
   // Count occurrences in inputs
-  inputs.data?.forEach((input) => {
+  inputs.data?.forEach((input: any) => {
     inputCounts.set(input.id, (inputCounts.get(input.id) || 0) + 1);
   });
 
   // Count occurrences in outputs
-  outputs.data?.forEach((output) => {
+  outputs.data?.forEach((output: any) => {
     outputCounts.set(output.id, (outputCounts.get(output.id) || 0) + 1);
   });
 
   // Track which IDs we've already included to avoid duplicates
   const includedIds = new Set<string>();
 
-  const inputsWithoutCircularReferences = inputs.data?.filter((input) => {
+  const inputsWithoutCircularReferences = inputs.data?.filter((input: any) => {
     const inputCount = inputCounts.get(input.id) || 0;
     const outputCount = outputCounts.get(input.id) || 0;
 
@@ -711,13 +842,15 @@ export async function getTrackedInputs(
 }
 
 export async function getThumbnailPathByItemId(
-  client: SupabaseClient<Database>,
-  itemId: string
+  client: DatabaseQueryClient,
+  itemId: string,
+  companyId: string
 ) {
   const { data: item } = await client
     .from("item")
     .select("thumbnailPath, modelUploadId")
     .eq("id", itemId)
+    .eq("companyId", companyId)
     .single();
 
   if (!item) return null;
@@ -730,6 +863,7 @@ export async function getThumbnailPathByItemId(
     .from("modelUpload")
     .select("thumbnailPath")
     .eq("id", modelUploadId)
+    .eq("companyId", companyId)
     .single();
 
   const modelUploadThumbnailPath = modelUpload?.thumbnailPath;
@@ -741,8 +875,9 @@ export async function getThumbnailPathByItemId(
 }
 
 export async function getWorkCenter(
-  client: SupabaseClient<Database>,
-  workCenterId: string
+  client: DatabaseQueryClient,
+  workCenterId: string,
+  companyId: string
 ) {
   return client
     .from("workCentersWithBlockingStatus")
@@ -750,12 +885,14 @@ export async function getWorkCenter(
       "id, name, isBlocked, blockingDispatchId, blockingDispatchReadableId"
     )
     .eq("id", workCenterId)
+    .eq("companyId", companyId)
     .single();
 }
 
 export async function getWorkCentersByLocation(
-  client: SupabaseClient<Database>,
-  locationId: string
+  client: DatabaseQueryClient,
+  locationId: string,
+  companyId: string
 ) {
   // Query both views and merge - workCenters has processes, workCentersWithBlockingStatus has blocking info
   const [workCentersResult, blockingStatusResult] = await Promise.all([
@@ -763,12 +900,14 @@ export async function getWorkCentersByLocation(
       .from("workCenters")
       .select("*")
       .eq("locationId", locationId)
+      .eq("companyId", companyId)
       .eq("active", true)
       .order("name", { ascending: true }),
     client
       .from("workCentersWithBlockingStatus")
       .select("id, isBlocked, blockingDispatchId, blockingDispatchReadableId")
       .eq("locationId", locationId)
+      .eq("companyId", companyId)
       .eq("active", true)
   ]);
 
@@ -797,7 +936,7 @@ export async function getWorkCentersByLocation(
 }
 
 export async function getWorkCentersByCompany(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return client
@@ -808,7 +947,7 @@ export async function getWorkCentersByCompany(
 }
 
 export async function insertAttributeRecord(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   data: z.infer<typeof stepRecordValidator> & {
     companyId: string;
     createdBy: string;
@@ -821,7 +960,7 @@ export async function insertAttributeRecord(
 }
 
 export async function insertReworkQuantity(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   data: z.infer<typeof nonScrapQuantityValidator> & {
     companyId: string;
     createdBy: string;
@@ -839,7 +978,7 @@ export async function insertReworkQuantity(
 }
 
 export async function insertProductionQuantity(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   data: z.infer<typeof nonScrapQuantityValidator> & {
     companyId: string;
     createdBy: string;
@@ -857,7 +996,7 @@ export async function insertProductionQuantity(
 }
 
 export async function insertScrapQuantity(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   data: z.infer<typeof scrapQuantityValidator> & {
     companyId: string;
     createdBy: string;
@@ -875,7 +1014,7 @@ export async function insertScrapQuantity(
 }
 
 export async function endProductionEvent(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   data: {
     id: string;
     endTime: string;
@@ -890,7 +1029,7 @@ export async function endProductionEvent(
 }
 
 export async function endProductionEventsForJobOperation(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     jobOperationId: string;
     employeeId: string;
@@ -907,7 +1046,7 @@ export async function endProductionEventsForJobOperation(
 }
 
 export async function endProductionEvents(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: { companyId: string; employeeId: string; endTime: string }
 ) {
   return client
@@ -921,7 +1060,7 @@ export async function endProductionEvents(
 }
 
 export async function endProductionEventsByWorkCenter(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: { workCenterId: string; companyId: string; endTime: string }
 ) {
   return client
@@ -935,7 +1074,7 @@ export async function endProductionEventsByWorkCenter(
 }
 
 export async function startProductionEvent(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   data: Omit<
     z.infer<typeof productionEventValidator>,
     "id" | "action" | "timezone" | "hasActiveEvents"
@@ -956,6 +1095,7 @@ export async function startProductionEvent(
         .from("jobOperation")
         .select("*")
         .eq("id", data.jobOperationId)
+        .eq("companyId", data.companyId)
         .single()
     ]);
 
@@ -1056,10 +1196,14 @@ function arrayToTree(items: JobMethod[]): JobMethodTreeItem[] {
  * Returns a map of methodMaterialId to hierarchical BOM ID (e.g., "1.2.3").
  */
 export async function getJobMethodBomIdMap(
-  client: SupabaseClient<Database>,
-  jobId: string
+  client: DatabaseQueryClient,
+  jobId: string,
+  companyId: string
 ): Promise<Map<string, string>> {
-  const result = await client.rpc("get_job_method", { jid: jobId });
+  const result = await client.rpc("get_job_method", {
+    jid: jobId,
+    company_id: companyId
+  });
 
   if (result.error || !result.data?.length) {
     return new Map();

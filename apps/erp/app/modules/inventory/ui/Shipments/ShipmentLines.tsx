@@ -89,7 +89,6 @@ const ShipmentLines = () => {
   }>(path.to.shipment(shipmentId));
 
   const shipmentsById = new Map<string, ShipmentLine>(
-    // @ts-expect-error
     (routeData?.shipmentLines ?? []).map((line) => [line.id, line])
   );
   const pendingShipmentLines = usePendingShipmentLines();
@@ -202,7 +201,7 @@ const ShipmentLines = () => {
       const formData = new FormData();
 
       formData.append("ids", lineId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value.toString());
       fetcher.submit(formData, {
         method: "post",

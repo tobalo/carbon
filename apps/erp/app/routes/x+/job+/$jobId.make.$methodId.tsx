@@ -1,5 +1,8 @@
 import { error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type { JSONContent } from "@carbon/react";
 import { Spinner, useMount, VStack } from "@carbon/react";
@@ -29,10 +32,11 @@ import { getModelByItemId, getTagsList } from "~/modules/shared";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "production",
     bypassRls: true
   });
+  const { client, companyId } = auth;
 
   const { jobId, methodId } = params;
   if (!jobId) throw new Error("Could not find jobId");
@@ -41,7 +45,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const [job, makeMethod, materials, operations, tags] = await Promise.all([
     getJob(client, jobId),
     getJobMakeMethodById(client, methodId, companyId),
-    getJobMaterialsByMethodId(client, methodId),
+    getJobMaterialsByMethodId(client, methodId, companyId),
     getJobOperationsByMethodId(client, methodId),
     getTagsList(client, companyId, "operation")
   ]);
@@ -52,6 +56,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       await flash(request, error(materials.error, "Failed to load job"))
     );
   }
+  assertCustomerAccountScope(auth, job.data?.customerId);
 
   if (makeMethod.error) {
     throw redirect(
@@ -146,16 +151,13 @@ export default function JobMakeMethodRoute() {
       <JobBillOfMaterial
         key={`bom:${methodId}`}
         jobMakeMethodId={methodId}
-        // @ts-expect-error TS2322 - TODO: fix type
         materials={materials}
-        // @ts-expect-error
         operations={operations}
       />
       <JobBillOfProcess
         key={`bop:${methodId}`}
         jobMakeMethodId={methodId}
         materials={materials}
-        // @ts-expect-error
         operations={operations}
         locationId={routeData?.job?.locationId ?? ""}
         tags={tags}
@@ -174,7 +176,6 @@ export default function JobMakeMethodRoute() {
           {(resolvedProductionData) => (
             <JobEstimatesVsActuals
               materials={materials ?? []}
-              // @ts-expect-error
               operations={operations}
               productionEvents={resolvedProductionData.events}
               productionQuantities={resolvedProductionData.quantities}

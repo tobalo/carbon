@@ -5,7 +5,10 @@ import {
   notFound,
   success
 } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -25,15 +28,21 @@ import { path } from "~/utils/path";
 import { customerLocationsQuery } from "~/utils/react-query";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "sales"
   });
+  const { client } = auth;
 
   const { customerId, customerLocationId } = params;
   if (!customerId) throw notFound("customerId not found");
   if (!customerLocationId) throw notFound("customerLocationId not found");
+  assertCustomerAccountScope(auth, customerId);
 
-  const location = await getCustomerLocation(client, customerLocationId);
+  const location = await getCustomerLocation(
+    client,
+    customerLocationId,
+    customerId
+  );
   if (location.error) {
     throw redirect(
       path.to.customerLocations(customerId),
@@ -51,13 +60,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "sales"
   });
+  const { client } = auth;
 
   const { customerId, customerLocationId } = params;
   if (!customerId) throw notFound("customerId not found");
   if (!customerLocationId) throw notFound("customerLocationId not found");
+  assertCustomerAccountScope(auth, customerId);
 
   const formData = await request.formData();
   const validation = await validator(customerLocationValidator).validate(
@@ -74,8 +85,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (addressId === undefined)
     throw badRequest("addressId is undefined in form data");
 
+  const existingLocation = await getCustomerLocation(
+    client,
+    customerLocationId,
+    customerId
+  );
+  const existingAddressId = existingLocation.data?.address?.id;
+  if (existingLocation.error || !existingAddressId) {
+    throw redirect(
+      path.to.customerLocations(customerId),
+      await flash(
+        request,
+        error(existingLocation.error, "Failed to verify customer location")
+      )
+    );
+  }
+  if (addressId !== existingAddressId) {
+    throw badRequest("addressId does not match scoped customer location");
+  }
+
   const update = await updateCustomerLocation(client, {
-    addressId,
+    addressId: existingAddressId,
     name,
     address,
     customFields: setCustomFields(formData)

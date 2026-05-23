@@ -69,7 +69,7 @@ const PurchasingRFQsTable = memo(
               <div className="flex items-center gap-1">
                 {row.original.supplierIds
                   ?.slice(0, 2)
-                  .map((supplierId, index) => (
+                  .map((supplierId: any, index: any) => (
                     <span key={index} className="text-sm">
                       {suppliers.find((s) => s.id === supplierId)?.name ?? ""}
                       {index <

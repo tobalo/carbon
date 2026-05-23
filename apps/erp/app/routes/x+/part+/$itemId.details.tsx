@@ -5,7 +5,7 @@ import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import { Menubar, VStack } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense } from "react";
 import type {
   ActionFunctionArgs,
@@ -76,8 +76,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const [methodMaterials, methodOperations, tags, partManufacturing] =
     await Promise.all([
-      getMethodMaterialsByMakeMethod(client, fullMethod.data.id),
-      getMethodOperationsByMakeMethodId(client, fullMethod.data.id),
+      getMethodMaterialsByMakeMethod(client, fullMethod.data.id, companyId),
+      getMethodOperationsByMakeMethodId(client, fullMethod.data.id, companyId),
       getTagsList(client, companyId, "operation"),
       getItemManufacturing(client, itemId, companyId)
     ]);
@@ -217,7 +217,7 @@ export default function PartDetailsRoute() {
   const partData = useRouteData<{
     partSummary: PartSummary;
     files: Promise<ItemFile[]>;
-    makeMethods: Promise<PostgrestResponse<MakeMethod>>;
+    makeMethods: Promise<QueryResponse<MakeMethod>>;
   }>(path.to.part(itemId));
 
   if (!partData) throw new Error("Could not find part data");

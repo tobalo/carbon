@@ -6,14 +6,14 @@ import {
 } from "@carbon/react";
 
 import { useDateFormatter } from "./useDateFormatter";
-import { useRealtime } from "./useRealtime";
+import { usePollingRevalidation } from "./usePollingRevalidation";
 import { useUser } from "./useUser";
 
 export {
   useDateFormatter,
   useNanoStore,
   useOptimisticLocation,
-  useRealtime,
+  usePollingRevalidation,
   useRouteData,
   useUrlParams,
   useUser

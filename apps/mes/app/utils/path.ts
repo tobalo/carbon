@@ -1,4 +1,4 @@
-import { getAppUrl, getMESUrl, SUPABASE_URL } from "@carbon/auth";
+import { getAppUrl, getMESUrl, getPublicStorageUrl } from "@carbon/auth";
 import { generatePath } from "react-router";
 
 export const ERP_URL = getAppUrl();
@@ -170,7 +170,7 @@ export const getPrivateUrl = (path: string) => {
 };
 
 export const getStoragePath = (bucket: string, path: string) => {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return getPublicStorageUrl(path, bucket);
 };
 
 export const requestReferrer = (request: Request) => {

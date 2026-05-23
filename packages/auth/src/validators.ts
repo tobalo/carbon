@@ -47,12 +47,6 @@ export const resetPasswordValidator = z.object({
   password: z.string().min(6, { message: "Password is too short" })
 });
 
-export const callbackValidator = z.object({
-  refreshToken: z.string(),
-  userId: z.string(),
-  redirectTo: zfd.text(z.string().optional())
-});
-
 export const selfSignupValidator = z.object({
   email: z
     .string()

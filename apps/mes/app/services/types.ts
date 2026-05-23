@@ -1,4 +1,3 @@
-import type { FileObject } from "@supabase/storage-js";
 import type {
   getJobByOperationId,
   getJobMakeMethod,
@@ -81,7 +80,12 @@ export type ProductionQuantity = NonNullable<
   Awaited<ReturnType<typeof getProductionQuantitiesForJobOperation>>["data"]
 >[number];
 
-export type StorageItem = FileObject & {
+export type StorageItem = {
+  id: string;
+  name: string;
+  metadata?: {
+    size?: number;
+  };
   bucket: string;
   itemId?: string;
 };

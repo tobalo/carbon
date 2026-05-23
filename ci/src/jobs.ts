@@ -1,6 +1,6 @@
 import { $ } from "execa";
 
-import { client } from "./client";
+import { fetchWorkspaces } from "./client";
 
 type Workspace = {
   id: number;
@@ -10,18 +10,11 @@ type Workspace = {
 async function jobs(): Promise<void> {
   console.log("✅ 🌱 Starting background jobs sync");
 
-  const { data: workspaces, error } = await client
-    .from("workspaces")
-    .select("id, url_erp");
-
-  if (error) {
-    console.error("🔴 🍳 Failed to fetch workspaces", error);
-    process.exit(1);
-  }
+  const workspaces = await fetchWorkspaces<Workspace>("id, url_erp");
 
   let hasErrors = false;
 
-  for (const workspace of workspaces as Workspace[]) {
+  for (const workspace of workspaces) {
     const { id, url_erp } = workspace;
 
     if (!url_erp) {

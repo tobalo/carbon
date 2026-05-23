@@ -10,7 +10,7 @@ import {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     delete: "parts"
   });
 
@@ -23,13 +23,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .from("methodOperationStep")
     .select("operationId")
     .eq("id", id)
+    .eq("companyId", companyId)
     .single();
 
   if (step.error || !step.data) {
     throw new Error("Step not found");
   }
 
-  await assertMethodOperationIsDraft(client, step.data.operationId);
+  await assertMethodOperationIsDraft(client, step.data.operationId, companyId);
 
   const deleteOperationStep = await deleteMethodOperationStep(client, id);
   if (deleteOperationStep.error) {

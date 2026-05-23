@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import {
   getCompanyEmployees,
   getLinearClient,
@@ -19,15 +19,21 @@ export const linearSyncFunction = inngest.createFunction(
     console.info(`Linear webhook received: ${payload}`);
     console.info(`Payload:`, payload);
 
-    const carbon = getCarbonServiceRole();
+    const carbon = getCarbonServiceClient();
 
     const [company, integration] = await Promise.all([
-      carbon.from("company").select("*").eq("id", payload.companyId).single(),
+      carbon
+        .from("company")
+        .select("id, active")
+        .eq("id", payload.companyId)
+        .eq("active", true)
+        .single(),
       carbon
         .from("companyIntegration")
-        .select("*")
+        .select("id, active")
         .eq("companyId", payload.companyId)
         .eq("id", "linear")
+        .eq("active", true)
         .single()
     ]);
 

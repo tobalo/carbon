@@ -7,7 +7,6 @@
     "includes": [
       "!.vscode",
       "!sst.env.d.ts",
-      "!packages/database/src/types.ts",
       "!packages/database/src/swagger-docs-schema.ts",
       "!**/mcp*/lib/tools/**",
       "!**/mcp*/lib/server.ts",

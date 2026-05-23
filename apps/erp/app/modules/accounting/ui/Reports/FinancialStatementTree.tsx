@@ -8,7 +8,7 @@ import {
 } from "react-icons/lu";
 import type { FlatTree, FlatTreeItem } from "~/components/TreeView";
 import { LevelLine, TreeView, useTree } from "~/components/TreeView";
-import { useRealtime } from "~/hooks";
+import { usePollingRevalidation } from "~/hooks";
 import type { Chart } from "../../types";
 
 type TranslatedChart = Chart & {
@@ -75,7 +75,7 @@ const FinancialStatementTree = memo(
     showTranslated = false,
     parentCurrency
   }: FinancialStatementTreeProps) => {
-    useRealtime("journal");
+    usePollingRevalidation("journal");
     const parentRef = useRef<HTMLDivElement>(null);
 
     const tree = useMemo(() => accountsToFlatTree(data), [data]);

@@ -12,7 +12,7 @@ import { loadEnv } from "vite";
  * In non-production modes, file values **overwrite** existing `process.env`
  * keys — `react-router dev` can invoke the vite config with modes other than
  * `"development"` during startup, which previously left stale shell values
- * (e.g. `SUPABASE_URL=127.0.0.1:54321`) in place.
+ * in place.
  */
 export function applyDotenvToProcessEnv(mode, appDir) {
   const repoRoot = path.resolve(appDir, "../..");

@@ -11,6 +11,7 @@ import { getBatchProperties } from "~/modules/inventory";
 import BatchPropertiesConfig from "~/modules/inventory/ui/Batches/BatchPropertiesConfig";
 import type { SupplierPart } from "~/modules/items";
 import {
+  assertSupplierItemScope,
   getItemReplenishment,
   itemPurchasingValidator,
   upsertItemPurchasing
@@ -19,12 +20,21 @@ import { ItemPurchasingForm, SupplierParts } from "~/modules/items/ui/Item";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "parts"
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   const consumablePurchasingResult = await getItemReplenishment(
     client,
@@ -53,12 +63,21 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "parts"
   });
+  const { client, companyId, role, supplierId, userId } = auth;
 
   const { itemId } = params;
   if (!itemId) throw new Error("Could not find itemId");
+
+  await assertSupplierItemScope(client, {
+    itemId,
+    companyId,
+    role,
+    supplierId,
+    userId
+  });
 
   // validate with consumablesValidator
   const validation = await validator(itemPurchasingValidator).validate(

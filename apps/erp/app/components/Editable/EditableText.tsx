@@ -1,5 +1,5 @@
 import { Input } from "@carbon/react";
-import type { PostgrestSingleResponse } from "@supabase/supabase-js";
+import type { QuerySingleResponse } from "@carbon/database/query-client";
 import type { FocusEvent, KeyboardEvent } from "react";
 import type { EditableTableCellComponentProps } from "~/components/Editable";
 
@@ -9,7 +9,7 @@ const EditableText =
       accessorKey: string,
       newValue: string,
       row: T
-    ) => Promise<PostgrestSingleResponse<null>>
+    ) => Promise<QuerySingleResponse<null>>
   ) =>
   ({
     value,

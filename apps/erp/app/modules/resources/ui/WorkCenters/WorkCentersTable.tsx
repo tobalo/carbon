@@ -387,10 +387,9 @@ function DeleteWorkCenterModal({
 
   const getActiveOperations = async () => {
     if (!carbon) return;
-    const { data, error } = await carbon
+    const { data: operations, error } = await carbon
       .from("jobOperation")
-      .select("job(jobId, id, status)")
-      .in("job.status", ["Ready", "In Progress", "Paused"])
+      .select("jobId")
       .neq("status", "Done")
       .eq("workCenterId", workCenter.id!)
       .eq("companyId", company?.id);
@@ -398,11 +397,19 @@ function DeleteWorkCenterModal({
       console.error(error);
     }
 
-    if (data) {
-      setJobsWithActiveOperations(
-        data.map((job) => job.job).filter((job) => Boolean(job))
-      );
-      setHasNoActiveOperations(data.length === 0);
+    if (operations) {
+      const jobIds = [...new Set(operations.map((operation) => operation.jobId))];
+      const { data: jobs } =
+        jobIds.length > 0
+          ? await carbon
+              .from("job")
+              .select("jobId, id, status")
+              .in("id", jobIds)
+              .in("status", ["Ready", "In Progress", "Paused"])
+              .eq("companyId", company?.id)
+          : { data: [] };
+      setJobsWithActiveOperations(jobs ?? []);
+      setHasNoActiveOperations((jobs ?? []).length === 0);
     } else {
       toast.error("Failed to check active operations");
     }

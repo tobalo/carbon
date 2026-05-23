@@ -8,7 +8,7 @@ import {
 } from "react-icons/lu";
 import type { FlatTree, FlatTreeItem } from "~/components/TreeView";
 import { LevelLine, TreeView, useTree } from "~/components/TreeView";
-import { useRealtime } from "~/hooks";
+import { usePollingRevalidation } from "~/hooks";
 import type { Chart } from "../../types";
 
 type TrialBalanceChart = Chart & {
@@ -104,7 +104,7 @@ function getDebitCredit(
 
 const TrialBalanceTree = memo(
   ({ data, showTranslated = false, parentCurrency }: TrialBalanceTreeProps) => {
-    useRealtime("journal");
+    usePollingRevalidation("journal");
     const parentRef = useRef<HTMLDivElement>(null);
 
     const tree = useMemo(() => accountsToFlatTree(data), [data]);

@@ -1,4 +1,11 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  itemCostingMethodEnum,
+  itemReorderingPolicyEnum,
+  itemReplenishmentSystemEnum,
+  itemTrackingTypeEnum,
+  serviceTypeEnum
+} from "@carbon/database/schema";
 import type {
   getConfigurationParameters,
   getConfigurationRules,
@@ -72,7 +79,7 @@ export type Form = NonNullable<
   Awaited<ReturnType<typeof getMaterialForms>>["data"]
 >[number];
 
-export type InventoryItemType = Database["public"]["Enums"]["itemTrackingType"];
+export type InventoryItemType = EnumValue<typeof itemTrackingTypeEnum>;
 
 export type ItemCost = NonNullable<
   Awaited<ReturnType<typeof getItemCost>>
@@ -83,7 +90,7 @@ export type ItemCostHistory = NonNullable<
 >["data"];
 
 export type ItemCostingMethod =
-  Database["public"]["Enums"]["itemCostingMethod"];
+  EnumValue<typeof itemCostingMethodEnum>;
 
 export type ItemFile = NonNullable<
   Awaited<ReturnType<typeof getItemFiles>>
@@ -106,10 +113,10 @@ export type ItemStorageUnitQuantities = NonNullable<
 >[number];
 
 export type ItemReorderingPolicy =
-  Database["public"]["Enums"]["itemReorderingPolicy"];
+  EnumValue<typeof itemReorderingPolicyEnum>;
 
 export type ItemReplenishmentSystem =
-  Database["public"]["Enums"]["itemReplenishmentSystem"];
+  EnumValue<typeof itemReplenishmentSystemEnum>;
 
 export type MakeMethod = NonNullable<
   Awaited<ReturnType<typeof getMakeMethods>>["data"]
@@ -171,7 +178,7 @@ export type Service = NonNullable<
   Awaited<ReturnType<typeof getServices>>["data"]
 >[number];
 
-export type ServiceType = Database["public"]["Enums"]["serviceType"];
+export type ServiceType = EnumValue<typeof serviceTypeEnum>;
 
 export type Substance = NonNullable<
   Awaited<ReturnType<typeof getMaterialSubstances>>["data"]

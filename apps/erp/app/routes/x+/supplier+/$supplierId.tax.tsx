@@ -1,5 +1,8 @@
-import { assertIsPost, error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import { assertIsPost, badRequest, error, success } from "@carbon/auth";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -13,12 +16,14 @@ import { SupplierTaxForm } from "~/modules/purchasing/ui/Supplier";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     view: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId } = params;
   if (!supplierId) throw new Error("Could not find supplierId");
+  assertSupplierAccountScope(auth, supplierId);
 
   const supplierTax = await getSupplierTax(client, supplierId);
 
@@ -40,18 +45,23 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "purchasing"
   });
+  const { client, companyId, userId } = auth;
 
   const { supplierId } = params;
   if (!supplierId) throw new Error("Could not find supplierId");
+  assertSupplierAccountScope(auth, supplierId);
 
   const formData = await request.formData();
   const validation = await validator(supplierTaxValidator).validate(formData);
 
   if (validation.error) {
     return validationError(validation.error);
+  }
+  if (validation.data.supplierId !== supplierId) {
+    throw badRequest("supplierId does not match route parameter");
   }
 
   const taxExemptionCertificatePath =

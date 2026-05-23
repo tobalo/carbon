@@ -1,5 +1,6 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { Ratelimit, redis } from "@carbon/kv";
+import { assertCompanyPath, downloadObject } from "@carbon/storage";
 import { supportedModelTypes } from "@carbon/utils";
 import type { LoaderFunctionArgs } from "react-router";
 import { getJobByOperationId } from "~/modules/production";
@@ -35,6 +36,10 @@ const supportedFileTypes: Record<string, string> = {
   step: "application/step"
 };
 
+function isExpired(date: string | null | undefined) {
+  return Boolean(date && new Date(date) < new Date());
+}
+
 export let loader = async ({ params, request }: LoaderFunctionArgs) => {
   const { id } = params;
   if (!id) {
@@ -53,33 +58,40 @@ export let loader = async ({ params, request }: LoaderFunctionArgs) => {
     return new Response(null, { status: 429 });
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const customer = await getCustomerPortal(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const customer = await getCustomerPortal(serviceClient, id);
 
   if (customer.error) {
     console.error(customer.error);
     throw new Error("Customer not found");
   }
 
-  if (!customer.data.customerId) {
+  if (!customer.data?.customerId) {
     console.error(customer.error);
     throw new Error("Customer not found");
   }
+  const customerData = customer.data;
+
+  if (isExpired(customerData.expiresAt)) {
+    return new Response(null, { status: 403 });
+  }
 
   let path = params["*"];
-  let bucket = "private"; // TODO: refactor to use companyId when we separate the storage buckets
-
   if (!path) throw new Error("Path not found");
 
-  path = decodeURIComponent(path);
+  try {
+    path = assertCompanyPath(customerData.companyId, decodeURIComponent(path));
+  } catch {
+    return new Response(null, { status: 403 });
+  }
 
-  const pathMatch = params["*"]?.match(/^([^/]+)\/job\/([^/]+)\/[^/]+$/);
+  const pathMatch = path.match(/^([^/]+)\/job\/([^/]+)\/[^/]+$/);
   const companyId = pathMatch?.[1];
   const operationId = pathMatch?.[2];
 
   const fileType = path.split(".").pop()?.toLowerCase();
 
-  if (companyId !== customer.data.companyId) {
+  if (companyId !== customerData.companyId) {
     return new Response(null, { status: 403 });
   }
 
@@ -87,18 +99,20 @@ export let loader = async ({ params, request }: LoaderFunctionArgs) => {
     return new Response(null, { status: 403 });
   }
 
-  const job = await getJobByOperationId(serviceRole, operationId);
+  const job = await getJobByOperationId(serviceClient, operationId, {
+    companyId: customerData.companyId
+  });
 
   if (job.error) {
     console.error(job.error);
     return new Response(null, { status: 403 });
   }
 
-  if (job.data.companyId !== customer.data.companyId) {
+  if (job.data.companyId !== customerData.companyId) {
     return new Response(null, { status: 403 });
   }
 
-  if (job.data.customerId !== customer.data.customerId) {
+  if (job.data.customerId !== customerData.customerId) {
     return new Response(null, { status: 403 });
   }
 
@@ -110,17 +124,11 @@ export let loader = async ({ params, request }: LoaderFunctionArgs) => {
     throw new Error(`File type ${fileType} not supported`);
   const contentType = supportedFileTypes[fileType];
 
-  if (!path.includes(customer.data.companyId)) {
-    return new Response(null, { status: 403 });
-  }
+  const storageCompanyId = customerData.companyId;
+  const storageKey = path;
 
   async function downloadFile() {
-    const result = await serviceRole.storage.from(bucket!).download(`${path}`);
-    if (result.error) {
-      console.error(result.error);
-      return null;
-    }
-    return result.data;
+    return downloadObject({ companyId: storageCompanyId, key: storageKey });
   }
 
   let fileData = await downloadFile();

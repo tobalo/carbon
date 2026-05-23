@@ -1,10 +1,9 @@
 import { cn } from "@carbon/react";
 import { Trans } from "@lingui/react/macro";
 import { LuTable2 } from "react-icons/lu";
-import { useSwaggerDocs } from "~/hooks/useSwaggerDocs";
+import { useApiDocsSchema } from "~/hooks/useApiDocsSchema";
 import type { ValidLang } from "~/modules/api";
 import { CodeSnippet, Snippets } from "~/modules/api";
-import { snakeToCamel } from "~/utils/string";
 
 type TableDocsProps = {
   endpoint: string;
@@ -13,51 +12,17 @@ type TableDocsProps = {
   apiKey?: string;
 };
 
-const functionPath = "rpc/";
 const TableDocs = ({
   endpoint,
   selectedLang,
   resourceId,
   apiKey
 }: TableDocsProps) => {
-  const swaggerDocsSchema = useSwaggerDocs();
-  const { resources } = Object.entries(swaggerDocsSchema?.paths || {}).reduce<{
-    resources: Record<
-      string,
-      { id: string; displayName: string; camelCase: string }
-    >;
-  }>(
-    (a, [name]) => {
-      const trimmedName = name.slice(1);
-      const id = trimmedName.replace(functionPath, "");
-
-      const displayName = id.replace(/_/g, " ");
-      const camelCase = snakeToCamel(id);
-      const enriched = { id, displayName, camelCase };
-
-      if (!trimmedName.length) {
-        return a;
-      }
-
-      return {
-        resources: {
-          ...a.resources,
-          ...(!trimmedName.includes(functionPath)
-            ? {
-                [id]: enriched
-              }
-            : {})
-        }
-      };
-    },
-    { resources: {} }
-  );
-
-  const resourcePaths = swaggerDocsSchema?.paths?.[`/${resourceId}`];
-  const resourceDefinition = swaggerDocsSchema?.definitions?.[resourceId];
-  // @ts-ignore
-  const resourceMeta = resources?.[resourceId];
-  const realtimeEnabled = true; // TODO: realtime is not available for a lot of tables (unless we enable it)
+  const apiDocsSchema = useApiDocsSchema();
+  const resourcePaths = apiDocsSchema?.paths?.[`/${resourceId}`];
+  const resourceDefinition = apiDocsSchema?.definitions?.[resourceId] as
+    | { properties?: Record<string, any>; required?: string[] }
+    | undefined;
 
   const methods = Object.keys(resourcePaths ?? {}).map((x) => x.toUpperCase());
   const properties = Object.entries(resourceDefinition?.properties ?? []).map(
@@ -69,9 +34,9 @@ const TableDocs = ({
   );
 
   if (
-    !swaggerDocsSchema?.paths ||
-    !swaggerDocsSchema?.definitions ||
-    !swaggerDocsSchema
+    !apiDocsSchema?.paths ||
+    !apiDocsSchema?.definitions ||
+    !apiDocsSchema
   )
     return null;
 
@@ -133,15 +98,6 @@ const TableDocs = ({
                   <code>select</code> method.
                 </Trans>
               </p>
-              <p>
-                <a
-                  href="https://supabase.com/docs/reference/javascript/select"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Trans>Learn more</Trans>
-                </a>
-              </p>
             </article>
             <article className="code">
               <CodeSnippet
@@ -176,16 +132,7 @@ const TableDocs = ({
                 <Trans>Filtering</Trans>
               </h4>
               <p>
-                <Trans>Supabase provides a wide range of filters.</Trans>
-              </p>
-              <p>
-                <a
-                  href="https://supabase.com/docs/reference/javascript/using-filters"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Trans>Learn more</Trans>
-                </a>
+                <Trans>Carbon provides a wide range of filters.</Trans>
               </p>
             </article>
             <article className="code">
@@ -215,15 +162,6 @@ const TableDocs = ({
                   <code>insert</code> will also return the replaced values for
                   UPSERT.
                 </Trans>
-              </p>
-              <p>
-                <a
-                  href="https://supabase.com/docs/reference/javascript/insert"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Trans>Learn more</Trans>
-                </a>
               </p>
             </article>
             <article className="code">
@@ -264,15 +202,6 @@ const TableDocs = ({
                   UPDATE.
                 </Trans>
               </p>
-              <p>
-                <a
-                  href="https://supabase.com/docs/reference/javascript/update"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Trans>Learn more</Trans>
-                </a>
-              </p>
             </article>
             <article className="code">
               <CodeSnippet
@@ -297,15 +226,6 @@ const TableDocs = ({
                   filters!
                 </Trans>
               </p>
-              <p>
-                <a
-                  href="https://supabase.com/docs/reference/javascript/delete"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Trans>Learn more</Trans>
-                </a>
-              </p>
             </article>
             <article className="code">
               <CodeSnippet
@@ -316,75 +236,6 @@ const TableDocs = ({
           </div>
         </>
       )}
-      {realtimeEnabled &&
-        (methods.includes("DELETE") ||
-          methods.includes("POST") ||
-          methods.includes("PATCH")) && (
-          <>
-            <h3 className="text-foreground mt-4 px-6">
-              <Trans>Subscribe to changes</Trans>
-            </h3>
-            <div className="doc-section">
-              <article className="code-column text-foreground">
-                <p>
-                  <Trans>
-                    Supabase provides realtime functionality and broadcasts
-                    database changes to authorized users depending on Row Level
-                    Security (RLS) policies.
-                  </Trans>
-                </p>
-                <p>
-                  <a
-                    href="https://supabase.com/docs/reference/javascript/subscribe"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Trans>Learn more</Trans>
-                  </a>
-                </p>
-              </article>
-              <article className="code">
-                <CodeSnippet
-                  selectedLang={selectedLang}
-                  snippet={Snippets.subscribeAll(
-                    resourceMeta.camelCase,
-                    resourceId
-                  )}
-                />
-                <CodeSnippet
-                  selectedLang={selectedLang}
-                  snippet={Snippets.subscribeInserts(
-                    resourceMeta.camelCase,
-                    resourceId
-                  )}
-                />
-                <CodeSnippet
-                  selectedLang={selectedLang}
-                  snippet={Snippets.subscribeUpdates(
-                    resourceMeta.camelCase,
-                    resourceId
-                  )}
-                />
-                <CodeSnippet
-                  selectedLang={selectedLang}
-                  snippet={Snippets.subscribeDeletes(
-                    resourceMeta.camelCase,
-                    resourceId
-                  )}
-                />
-                <CodeSnippet
-                  selectedLang={selectedLang}
-                  snippet={Snippets.subscribeEq(
-                    resourceMeta.camelCase,
-                    resourceId,
-                    "column_name",
-                    "someValue"
-                  )}
-                />
-              </article>
-            </div>
-          </>
-        )}
     </>
   );
 };

@@ -1,5 +1,10 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import { SUPABASE_ANON_KEY, SUPABASE_URL, VERCEL_URL } from "@carbon/env";
+import {
+  THUMBNAIL_SERVICE_TOKEN,
+  THUMBNAIL_SERVICE_URL,
+  VERCEL_URL
+} from "@carbon/auth";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import { uploadObject } from "@carbon/storage";
 import { inngest } from "../../client";
 
 export const modelThumbnailFunction = inngest.createFunction(
@@ -12,11 +17,14 @@ export const modelThumbnailFunction = inngest.createFunction(
       VERCEL_URL === undefined || VERCEL_URL.includes("localhost");
 
     const getModelUrl = (id: string) => {
-      if (isLocal) return `http://localhost:3000/file/model/${id}`;
+      const token = THUMBNAIL_SERVICE_TOKEN
+        ? `?token=${encodeURIComponent(THUMBNAIL_SERVICE_TOKEN)}`
+        : "";
+      if (isLocal) return `http://localhost:3000/file/model/${id}${token}`;
       const domain = VERCEL_URL?.startsWith("https://")
         ? VERCEL_URL
         : `https://${VERCEL_URL}`;
-      return `${domain}/file/model/${id}`;
+      return `${domain}/file/model/${id}${token}`;
     };
 
     if (isLocal) {
@@ -28,17 +36,41 @@ export const modelThumbnailFunction = inngest.createFunction(
 
     await step.run("generate-and-upload-thumbnail", async () => {
       console.log("Starting model-thumbnail task", { payload: event.data });
-      const client = getCarbonServiceRole();
+      const client = getCarbonServiceClient();
+
+      if (!THUMBNAIL_SERVICE_URL) {
+        throw new Error("THUMBNAIL_SERVICE_URL is not set");
+      }
+
+      const model = await client
+        .from("modelUpload")
+        .select("id")
+        .eq("id", modelId)
+        .eq("companyId", companyId)
+        .single();
+
+      if (model.error || !model.data) {
+        console.warn("Skipping model-thumbnail task for missing model", {
+          modelId,
+          companyId,
+          error: model.error
+        });
+        return;
+      }
 
       const url = getModelUrl(modelId);
-      const imageUrl = `${SUPABASE_URL}/functions/v1/thumbnail`;
 
-      const response = await fetch(imageUrl, {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json"
+      };
+
+      if (THUMBNAIL_SERVICE_TOKEN) {
+        headers.Authorization = `Bearer ${THUMBNAIL_SERVICE_TOKEN}`;
+      }
+
+      const response = await fetch(THUMBNAIL_SERVICE_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`
-        },
+        headers,
         body: JSON.stringify({ url })
       });
 
@@ -47,37 +79,25 @@ export const modelThumbnailFunction = inngest.createFunction(
         throw new Error("Failed to generate thumbnail");
       }
 
-      const blob = new Blob([await response.arrayBuffer()], {
-        type: "image/png"
-      });
-
       const fileName = `${modelId}.png`;
-      const thumbnailFile = new File([blob], fileName, {
-        type: "image/png"
-      });
+      const thumbnailPath = `${companyId}/thumbnails/${modelId}/${fileName}`;
 
       console.log("Uploading thumbnail", { fileName });
 
-      const { data, error } = await client.storage
-        .from("private")
-        .upload(
-          `${companyId}/thumbnails/${modelId}/${fileName}`,
-          thumbnailFile,
-          {
-            upsert: true
-          }
-        );
-
-      if (error) {
-        console.error("Failed to upload thumbnail", { error });
-      }
+      await uploadObject({
+        companyId,
+        key: thumbnailPath,
+        body: new Uint8Array(await response.arrayBuffer()),
+        contentType: "image/png"
+      });
 
       const result = await client
         .from("modelUpload")
         .update({
-          thumbnailPath: data?.path
+          thumbnailPath
         })
-        .eq("id", modelId);
+        .eq("id", modelId)
+        .eq("companyId", companyId);
 
       if (result.error) {
         console.error("Failed to update thumbnail path", {

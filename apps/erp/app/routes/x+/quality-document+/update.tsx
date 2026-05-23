@@ -1,9 +1,8 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { ActionFunctionArgs } from "react-router";
 import { qualityDocumentStatus } from "~/modules/quality/quality.models";
 import {
@@ -26,8 +25,7 @@ type DocRow = { id: string; status: string | null };
  * Otherwise: update to Active immediately.
  */
 async function processToActive(
-  client: SupabaseClient<Database>,
-  serviceRole: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   userId: string,
   docList: DocRow[],
@@ -40,14 +38,14 @@ async function processToActive(
   for (const doc of docList) {
     if (!canTransitionToActive(doc.status)) continue;
     const approvalRequired = await isApprovalRequired(
-      serviceRole,
+      client,
       "qualityDocument",
       companyId,
       undefined
     );
     if (!approvalRequired) continue;
     const hasPending = await hasPendingApproval(
-      serviceRole,
+      client,
       "qualityDocument",
       doc.id
     );
@@ -55,7 +53,7 @@ async function processToActive(
       idsToSkipActive.push(doc.id);
       continue;
     }
-    await createApprovalRequest(serviceRole, {
+    await createApprovalRequest(client, {
       documentType: "qualityDocument",
       documentId: doc.id,
       companyId,
@@ -65,13 +63,13 @@ async function processToActive(
     });
 
     const rule = await getApprovalRuleByAmount(
-      serviceRole,
+      client,
       "qualityDocument",
       companyId,
       undefined
     );
     const approverIds = rule.data
-      ? await getApproverUserIdsForRule(serviceRole, rule.data)
+      ? await getApproverUserIdsForRule(client, rule.data)
       : [];
 
     if (approverIds.length > 0) {
@@ -102,7 +100,8 @@ async function processToActive(
         updatedBy: userId,
         updatedAt: new Date().toISOString()
       })
-      .eq("id", docId);
+      .eq("id", docId)
+      .eq("companyId", companyId);
   }
   const idsToUpdateToActive = ids.filter((id) => !idsToSkipActive.includes(id));
   if (idsToUpdateToActive.length === 0) {
@@ -115,7 +114,8 @@ async function processToActive(
       updatedBy: userId,
       updatedAt: new Date().toISOString()
     })
-    .in("id", idsToUpdateToActive);
+    .in("id", idsToUpdateToActive)
+    .eq("companyId", companyId);
 }
 
 /**
@@ -124,15 +124,15 @@ async function processToActive(
  * - Draft: only the requester or an approver may change to Draft (withdraw); others get an error.
  */
 async function cancelPendingApprovalsForArchiveOrDraft(
-  serviceRole: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   userId: string,
   docList: DocRow[],
   allowAnyUpdater: boolean
 ): Promise<{ message: string } | null> {
-  const toCancel: { id: string }[] = [];
+  const toCancel: { id: string; companyId: string }[] = [];
   for (const doc of docList) {
     const latest = await getLatestApprovalRequestForDocument(
-      serviceRole,
+      client,
       "qualityDocument",
       doc.id
     );
@@ -141,7 +141,7 @@ async function cancelPendingApprovalsForArchiveOrDraft(
     if (!allowAnyUpdater) {
       const isRequester = req.requestedBy === userId;
       const isApprover = await canApproveRequest(
-        serviceRole,
+        client,
         {
           amount: req.amount,
           documentType: req.documentType,
@@ -156,17 +156,18 @@ async function cancelPendingApprovalsForArchiveOrDraft(
         };
       }
     }
-    if (req.id) toCancel.push({ id: req.id });
+    if (req.id) toCancel.push({ id: req.id, companyId: req.companyId });
   }
-  for (const { id: reqId } of toCancel) {
-    await serviceRole
+  for (const { id: reqId, companyId } of toCancel) {
+    await client
       .from("approvalRequest")
       .update({
         status: "Cancelled",
         updatedBy: userId,
         updatedAt: new Date().toISOString()
       })
-      .eq("id", reqId);
+      .eq("id", reqId)
+      .eq("companyId", companyId);
   }
   return null;
 }
@@ -176,7 +177,6 @@ export async function action({ request }: ActionFunctionArgs) {
     update: "quality"
   });
 
-  const serviceRole = getCarbonServiceRole();
   const formData = await request.formData();
   const ids = formData.getAll("ids");
   const field = formData.get("field");
@@ -196,7 +196,8 @@ export async function action({ request }: ActionFunctionArgs) {
           updatedBy: userId,
           updatedAt: new Date().toISOString()
         })
-        .in("id", ids as string[]);
+        .in("id", ids as string[])
+        .eq("companyId", companyId);
     case "status": {
       const statusValue = value as (typeof qualityDocumentStatus)[number];
       if (!qualityDocumentStatus.includes(statusValue)) {
@@ -206,7 +207,8 @@ export async function action({ request }: ActionFunctionArgs) {
       const currentDocs = await client
         .from("qualityDocument")
         .select("id, status")
-        .in("id", ids as string[]);
+        .in("id", ids as string[])
+        .eq("companyId", companyId);
 
       if (currentDocs.error) {
         return { error: currentDocs.error, data: null };
@@ -218,7 +220,6 @@ export async function action({ request }: ActionFunctionArgs) {
       if (statusValue === "Active") {
         return processToActive(
           client,
-          serviceRole,
           companyId,
           userId,
           docList,
@@ -229,7 +230,7 @@ export async function action({ request }: ActionFunctionArgs) {
       if (statusValue === "Archived" || statusValue === "Draft") {
         const allowAnyUpdater = statusValue === "Archived";
         const err = await cancelPendingApprovalsForArchiveOrDraft(
-          serviceRole,
+          client,
           userId,
           docList,
           allowAnyUpdater
@@ -244,7 +245,8 @@ export async function action({ request }: ActionFunctionArgs) {
           updatedBy: userId,
           updatedAt: new Date().toISOString()
         })
-        .in("id", idList);
+        .in("id", idList)
+        .eq("companyId", companyId);
     }
     case "tags":
       return await client
@@ -254,7 +256,8 @@ export async function action({ request }: ActionFunctionArgs) {
           updatedBy: userId,
           updatedAt: new Date().toISOString()
         })
-        .in("id", ids as string[]);
+        .in("id", ids as string[])
+        .eq("companyId", companyId);
 
     default:
       return { error: { message: "Invalid field" }, data: null };

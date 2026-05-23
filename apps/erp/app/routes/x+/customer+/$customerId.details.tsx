@@ -1,5 +1,8 @@
 import { assertIsPost, error, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -13,9 +16,10 @@ import { path } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     update: "sales"
   });
+  const { client, userId } = auth;
 
   const formData = await request.formData();
   const validation = await validator(customerValidator).validate(formData);
@@ -32,6 +36,7 @@ export async function action({ request }: ActionFunctionArgs) {
       await flash(request, error(null, "Failed to update customer"))
     );
   }
+  assertCustomerAccountScope(auth, id);
 
   const update = await upsertCustomer(client, {
     id,

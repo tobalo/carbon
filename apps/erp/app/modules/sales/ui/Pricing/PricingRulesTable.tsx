@@ -124,7 +124,7 @@ const PricingRulesTable = memo(({ data, count }: PricingRulesTableProps) => {
           if (!row.original.customerIds?.length) return null;
           return (
             <div className="flex flex-col items-start gap-1">
-              {row.original.customerIds.map((id) => (
+              {row.original.customerIds.map((id: any) => (
                 <CustomerAvatar key={id} customerId={id} />
               ))}
             </div>
@@ -149,7 +149,7 @@ const PricingRulesTable = memo(({ data, count }: PricingRulesTableProps) => {
           if (!row.original.customerTypeIds?.length) return null;
           return (
             <div className="flex flex-col items-start gap-1">
-              {row.original.customerTypeIds.map((id) => {
+              {row.original.customerTypeIds.map((id: any) => {
                 const label =
                   customerTypes?.find((ct) => ct.value === id)?.label ?? "Type";
                 return <Enumerable key={id} value={label} />;
@@ -176,7 +176,7 @@ const PricingRulesTable = memo(({ data, count }: PricingRulesTableProps) => {
           if (!row.original.itemIds?.length) return null;
           return (
             <div className="flex flex-col items-start gap-1">
-              {row.original.itemIds.map((id) => {
+              {row.original.itemIds.map((id: any) => {
                 const item = items?.find((i) => i.id === id);
                 return (
                   <Badge key={id} variant="outline">
@@ -230,12 +230,12 @@ const PricingRulesTable = memo(({ data, count }: PricingRulesTableProps) => {
           const parts: React.ReactNode[] = [];
 
           if (rule.customerIds?.length) {
-            rule.customerIds.forEach((id) => {
+            rule.customerIds.forEach((id: any) => {
               parts.push(<CustomerAvatar key={`c-${id}`} customerId={id} />);
             });
           }
           if (rule.customerTypeIds?.length) {
-            rule.customerTypeIds.forEach((id) => {
+            rule.customerTypeIds.forEach((id: any) => {
               const label =
                 customerTypes?.find((ct) => ct.value === id)?.label ?? "Type";
               parts.push(<Enumerable key={`ct-${id}`} value={label} />);
@@ -292,7 +292,7 @@ const PricingRulesTable = memo(({ data, count }: PricingRulesTableProps) => {
                   </HoverCardTrigger>
                   <HoverCardContent className="w-[260px]">
                     <div className="flex flex-col items-start gap-1 text-sm">
-                      {remainingItems.map((id) => {
+                      {remainingItems.map((id: any) => {
                         const item = items?.find((i) => i.id === id);
                         return (
                           <Badge key={`i-${id}`} variant="outline">

@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  itemReorderingPolicyEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import { Trans } from "@lingui/react/macro";
@@ -18,7 +21,7 @@ export function ItemReorderPolicy({
   reorderingPolicy,
   className
 }: {
-  reorderingPolicy: Database["public"]["Enums"]["itemReorderingPolicy"];
+  reorderingPolicy: EnumValue<typeof itemReorderingPolicyEnum>;
   className?: string;
 }) {
   switch (reorderingPolicy) {

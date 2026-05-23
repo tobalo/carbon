@@ -1,5 +1,8 @@
-import { assertIsPost, error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import { assertIsPost, badRequest, error } from "@carbon/auth";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -18,12 +21,14 @@ import { supplierProcessesQuery } from "~/utils/react-query";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, companyId, userId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     create: "purchasing"
   });
+  const { client, companyId, userId } = auth;
 
   const { supplierId } = params;
   if (!supplierId) throw new Error("Could not find supplierId");
+  assertSupplierAccountScope(auth, supplierId);
 
   const formData = await request.formData();
   const modal = formData.get("type") === "modal";
@@ -38,6 +43,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
   const { id, ...d } = validation.data;
+  if (d.supplierId !== supplierId) {
+    throw badRequest("supplierId does not match route parameter");
+  }
 
   const createSupplierProcess = await upsertSupplierProcess(client, {
     ...d,

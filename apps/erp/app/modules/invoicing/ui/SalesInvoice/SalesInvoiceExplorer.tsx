@@ -319,7 +319,6 @@ function SalesInvoiceLineItem({
                   <DropdownMenuIcon icon={<LuTrash />} />
                   <Trans>Delete Line</Trans>
                 </DropdownMenuItem>
-                {/* @ts-expect-error */}
                 {methodItemType.includes(line.invoiceLineType ?? "") && (
                   <DropdownMenuItem
                     asChild

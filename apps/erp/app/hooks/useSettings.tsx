@@ -1,10 +1,10 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { useRouteData } from "@carbon/react";
 import { path } from "~/utils/path";
 
-export function useSettings(): Database["public"]["Tables"]["companySettings"]["Row"] {
+export function useSettings(): TableRow<"companySettings"> {
   const routeData = useRouteData<{
-    companySettings: Database["public"]["Tables"]["companySettings"]["Row"];
+    companySettings: TableRow<"companySettings">;
   }>(path.to.authenticatedRoot);
 
   if (!routeData?.companySettings) {

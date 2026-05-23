@@ -212,7 +212,7 @@ function OperationCard({
             {operation.assignee && (
               <EmployeeAvatar size="xs" employeeId={operation.assignee} />
             )}
-            {operation.tags?.map((tag) => (
+            {operation.tags?.map((tag: string) => (
               <Badge
                 key={tag}
                 variant="secondary"

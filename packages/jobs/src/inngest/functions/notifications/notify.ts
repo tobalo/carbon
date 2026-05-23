@@ -1,5 +1,8 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type {
+  approvalDocumentTypeEnum,
+  EnumValue
+} from "@carbon/database/schema";
 import {
   type CompanyIntegration,
   notifyTaskAssigned
@@ -21,11 +24,12 @@ import {
 import { Novu } from "@novu/node";
 import { inngest } from "../../client";
 
-type ApprovalDocumentType = Database["public"]["Enums"]["approvalDocumentType"];
+type ApprovalDocumentType = EnumValue<typeof approvalDocumentTypeEnum>;
+type CarbonServiceClient = ReturnType<typeof getCarbonServiceClient>;
 
 // Helper function to get company integrations
 async function getCompanyIntegrations(
-  client: ReturnType<typeof getCarbonServiceRole>,
+  client: CarbonServiceClient,
   companyId: string
 ) {
   return client
@@ -72,10 +76,115 @@ function getWorkflow(type: NotificationEvent) {
   }
 }
 
+async function getWorkCenterName(
+  client: CarbonServiceClient,
+  workCenterId: string | null | undefined,
+  companyId: string
+) {
+  if (!workCenterId) return null;
+
+  const workCenter = await client
+    .from("workCenter")
+    .select("name")
+    .eq("id", workCenterId)
+    .eq("companyId", companyId)
+    .maybeSingle();
+
+  if (workCenter.error) {
+    console.error("Failed to get workCenter", workCenter.error);
+    throw workCenter.error;
+  }
+
+  return workCenter.data?.name ?? null;
+}
+
+async function getJobReadableId(
+  client: CarbonServiceClient,
+  jobId: string | null | undefined,
+  companyId: string
+) {
+  if (!jobId) return null;
+
+  const job = await client
+    .from("job")
+    .select("jobId")
+    .eq("id", jobId)
+    .eq("companyId", companyId)
+    .maybeSingle();
+
+  if (job.error) {
+    console.error("Failed to get job", job.error);
+    throw job.error;
+  }
+
+  return job.data?.jobId ?? null;
+}
+
+async function getTrainingName(
+  client: CarbonServiceClient,
+  trainingId: string | null | undefined,
+  companyId: string
+) {
+  if (!trainingId) return null;
+
+  const training = await client
+    .from("training")
+    .select("name")
+    .eq("id", trainingId)
+    .eq("companyId", companyId)
+    .maybeSingle();
+
+  if (training.error) {
+    console.error("Failed to get training", training.error);
+    throw training.error;
+  }
+
+  return training.data?.name ?? null;
+}
+
+async function getCompanyUserFullName(
+  client: CarbonServiceClient,
+  userId: string | null | undefined,
+  companyId: string
+) {
+  if (!userId) return null;
+
+  const membership = await client
+    .from("userToCompany")
+    .select("userId")
+    .eq("userId", userId)
+    .eq("companyId", companyId)
+    .maybeSingle();
+
+  if (membership.error) {
+    console.error(
+      "Failed to verify suggestion user membership",
+      membership.error
+    );
+    throw membership.error;
+  }
+
+  if (!membership.data) return null;
+
+  const user = await client
+    .from("user")
+    .select("fullName")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (user.error) {
+    console.error("Failed to get suggestion user", user.error);
+    throw user.error;
+  }
+
+  return user.data?.fullName ?? null;
+}
+
 async function getDescription(
-  client: ReturnType<typeof getCarbonServiceRole>,
+  client: CarbonServiceClient,
   type: NotificationEvent,
   documentId: string,
+  companyId: string,
   documentType?: ApprovalDocumentType
 ): Promise<string | null> {
   switch (type) {
@@ -85,6 +194,7 @@ async function getDescription(
         .from("salesRfq")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (salesRfq.error) {
@@ -105,6 +215,7 @@ async function getDescription(
         .from("quote")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
       if (quote.error) {
         console.error("Failed to get quote", quote.error);
@@ -118,6 +229,7 @@ async function getDescription(
         .from("salesOrder")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (salesOrder.error) {
@@ -133,6 +245,7 @@ async function getDescription(
         .from("maintenanceDispatch")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (maintenanceDispatchCreated.error) {
@@ -149,8 +262,9 @@ async function getDescription(
     case NotificationEvent.MaintenanceDispatchAssignment: {
       const maintenanceDispatch = await client
         .from("maintenanceDispatch")
-        .select("*, workCenter(id, name)")
+        .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (maintenanceDispatch.error) {
@@ -162,7 +276,11 @@ async function getDescription(
       }
 
       const workCenterName =
-        maintenanceDispatch.data?.workCenter?.name ?? "Unknown";
+        (await getWorkCenterName(
+          client,
+          maintenanceDispatch.data?.workCenterId,
+          companyId
+        )) ?? "Unknown";
       const dispatchId =
         maintenanceDispatch.data?.maintenanceDispatchId ?? documentId;
       return `Maintenance dispatch ${dispatchId} for ${workCenterName} assigned to you`;
@@ -173,6 +291,7 @@ async function getDescription(
         .from("nonConformance")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (nonConformance.error) {
@@ -188,6 +307,7 @@ async function getDescription(
         .from("job")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (job.error) {
@@ -203,6 +323,7 @@ async function getDescription(
         .from("job")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (completedJob.error) {
@@ -218,8 +339,9 @@ async function getDescription(
       const [, operationId] = documentId.split(":");
       const jobOperation = await client
         .from("jobOperation")
-        .select("*, job(id, jobId)")
+        .select("*")
         .eq("id", operationId!)
+        .eq("companyId", companyId)
         .single();
 
       if (jobOperation.error) {
@@ -227,10 +349,14 @@ async function getDescription(
         throw jobOperation.error;
       }
 
+      const jobId =
+        (await getJobReadableId(client, jobOperation.data?.jobId, companyId)) ??
+        documentId;
+
       if (type === NotificationEvent.JobOperationAssignment) {
-        return `New job operation assigned to you on ${jobOperation?.data?.job?.jobId}`;
+        return `New job operation assigned to you on ${jobId}`;
       } else if (type === NotificationEvent.JobOperationMessage) {
-        return `New message on ${jobOperation?.data?.job?.jobId} operation: ${jobOperation?.data?.description}`;
+        return `New message on ${jobId} operation: ${jobOperation?.data?.description}`;
       }
       return null;
     }
@@ -240,6 +366,7 @@ async function getDescription(
         .from("procedure")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (procedure.error) {
@@ -255,6 +382,7 @@ async function getDescription(
         .from("quote")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (digitalQuote.error) {
@@ -278,6 +406,7 @@ async function getDescription(
         .from("gaugeCalibrationRecord")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (gaugeCalibration.error) {
@@ -293,6 +422,7 @@ async function getDescription(
         .from("stockTransfer")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (stockTransfer.error) {
@@ -306,8 +436,9 @@ async function getDescription(
     case NotificationEvent.TrainingAssignment: {
       const trainingAssignment = await client
         .from("trainingAssignment")
-        .select("*, training(id, name)")
+        .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (trainingAssignment.error) {
@@ -318,14 +449,22 @@ async function getDescription(
         throw trainingAssignment.error;
       }
 
-      return `Training "${trainingAssignment?.data?.training?.name}" assigned to you`;
+      const trainingName =
+        (await getTrainingName(
+          client,
+          trainingAssignment.data?.trainingId,
+          companyId
+        )) ?? "Unknown";
+
+      return `Training "${trainingName}" assigned to you`;
     }
 
     case NotificationEvent.SuggestionResponse: {
       const suggestion = await client
         .from("suggestion")
-        .select("*, user(id, fullName)")
+        .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (suggestion.error) {
@@ -333,7 +472,12 @@ async function getDescription(
         throw suggestion.error;
       }
 
-      const submittedBy = suggestion.data.user?.fullName || "Anonymous";
+      const submittedBy =
+        (await getCompanyUserFullName(
+          client,
+          suggestion.data?.userId,
+          companyId
+        )) ?? "Anonymous";
       return `New suggestion submitted by ${submittedBy}`;
     }
 
@@ -342,6 +486,7 @@ async function getDescription(
         .from("riskRegister")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (risk.error) {
@@ -357,6 +502,7 @@ async function getDescription(
         .from("supplierQuote")
         .select("*")
         .eq("id", documentId)
+        .eq("companyId", companyId)
         .single();
 
       if (supplierQuote.error) {
@@ -379,6 +525,7 @@ async function getDescription(
           .from("purchaseOrder")
           .select("purchaseOrderId")
           .eq("id", documentId)
+          .eq("companyId", companyId)
           .single();
 
         if (purchaseOrderResult.error || !purchaseOrderResult.data) {
@@ -397,6 +544,7 @@ async function getDescription(
           .from("qualityDocument")
           .select("name")
           .eq("id", documentId)
+          .eq("companyId", companyId)
           .single();
 
         if (qualityDocumentResult.error || !qualityDocumentResult.data) {
@@ -420,6 +568,7 @@ async function getDescription(
           .from("purchaseOrder")
           .select("purchaseOrderId")
           .eq("id", documentId)
+          .eq("companyId", companyId)
           .single();
         if (poApproved.error || !poApproved.data) {
           return "Your purchase order was approved";
@@ -431,6 +580,7 @@ async function getDescription(
           .from("qualityDocument")
           .select("name")
           .eq("id", documentId)
+          .eq("companyId", companyId)
           .single();
         if (qdApproved.error || !qdApproved.data) {
           return "Your quality document was approved";
@@ -446,6 +596,7 @@ async function getDescription(
           .from("purchaseOrder")
           .select("purchaseOrderId")
           .eq("id", documentId)
+          .eq("companyId", companyId)
           .single();
         if (poRejected.error || !poRejected.data) {
           return "Your purchase order was rejected";
@@ -457,6 +608,7 @@ async function getDescription(
           .from("qualityDocument")
           .select("name")
           .eq("id", documentId)
+          .eq("companyId", companyId)
           .single();
         if (qdRejected.error || !qdRejected.data) {
           return "Your quality document was rejected";
@@ -491,7 +643,7 @@ export const notifyFunction = inngest.createFunction(
       return;
     }
 
-    const client = getCarbonServiceRole();
+    const client = getCarbonServiceClient();
 
     const workflow = getWorkflow(payload.event);
 
@@ -507,6 +659,7 @@ export const notifyFunction = inngest.createFunction(
         client,
         payload.event,
         payload.documentId,
+        payload.companyId,
         payload.documentType
       );
     });
@@ -663,21 +816,43 @@ export const notifyFunction = inngest.createFunction(
           ? (userIds.data as string[]).filter((id) => id !== payload.from)
           : (userIds.data as string[]);
 
-        if (filteredUserIds.length === 0) {
+        const companyUsers =
+          filteredUserIds.length > 0
+            ? await client
+                .from("userToCompany")
+                .select("userId")
+                .eq("companyId", payload.companyId)
+                .in("userId", filteredUserIds)
+            : { data: [] as { userId: string }[], error: null };
+
+        if (companyUsers.error) {
+          console.error(
+            "Failed to verify notification recipients against company scope",
+            companyUsers.error
+          );
+          throw companyUsers.error;
+        }
+
+        const scopedUserIds = (companyUsers.data ?? []).map(
+          ({ userId }) => userId
+        );
+
+        if (scopedUserIds.length === 0) {
           console.log(
             `No recipients after filtering sender - skipping Novu notification`,
             {
               event: payload.event,
               originalUserCount: userIds.data.length,
               from: payload.from,
-              reason: "All users filtered out (sender was only recipient)"
+              reason:
+                "All users filtered out (sender was only recipient or outside company scope)"
             }
           );
           return;
         }
 
         const notificationPayloads: TriggerPayload[] =
-          [...new Set(filteredUserIds)].map((userId) => ({
+          [...new Set(scopedUserIds)].map((userId) => ({
             workflow,
             payload: baseNotificationPayload,
             user: {

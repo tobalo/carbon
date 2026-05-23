@@ -1,5 +1,5 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { isIssueLocked } from "~/modules/quality";
 import { requireUnlockedBulk } from "~/utils/lockedGuard.server";
@@ -25,6 +25,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const issues = await client
     .from("nonConformance")
     .select("id, status")
+    .eq("companyId", companyId)
     .in("id", ids as string[]);
 
   const lockedError = requireUnlockedBulk({
@@ -45,6 +46,7 @@ export async function action({ request }: ActionFunctionArgs) {
           updatedBy: userId,
           updatedAt: new Date().toISOString()
         })
+        .eq("companyId", companyId)
         .in("id", ids as string[]);
 
       if (update.error) {
@@ -55,16 +57,15 @@ export async function action({ request }: ActionFunctionArgs) {
         };
       }
 
-      const serviceRole = await getCarbonServiceRole();
       await Promise.all(
         ids.map(async (id) => {
-          await serviceRole.functions.invoke("create", {
+          await invokeFunction("create", {
             body: {
               type: "nonConformanceTasks",
               id,
               companyId,
               userId
-            }
+            },
           });
         })
       );
@@ -89,6 +90,7 @@ export async function action({ request }: ActionFunctionArgs) {
           updatedBy: userId,
           updatedAt: new Date().toISOString()
         })
+        .eq("companyId", companyId)
         .in("id", ids as string[]);
     default:
       return {

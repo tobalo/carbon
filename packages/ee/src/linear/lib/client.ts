@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import axios, { type AxiosInstance } from "axios";
 import { getLinearIntegration } from "./service";
 import type { LinearIssue, LinearTeam, LinearUser } from "./types";
@@ -16,9 +16,9 @@ export class LinearClient {
   }
 
   async getAuthHeaders(companyId: string) {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
 
-    const { data } = await getLinearIntegration(serviceRole, companyId);
+    const { data } = await getLinearIntegration(serviceClient, companyId);
 
     const integration = data?.[0];
 

@@ -1,7 +1,7 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 
 export function getLineDescription(
-  line: Database["public"]["Views"]["purchaseOrderLines"]["Row"]
+  line: TableRow<"purchaseOrderLines">
 ) {
   switch (line?.purchaseOrderLineType) {
     case "Fixed Asset":
@@ -19,7 +19,7 @@ export function getLineDescription(
 }
 
 export function getLineDescriptionDetails(
-  line: Database["public"]["Views"]["purchaseOrderLines"]["Row"]
+  line: TableRow<"purchaseOrderLines">
 ) {
   switch (line?.purchaseOrderLineType) {
     case "Fixed Asset":
@@ -38,7 +38,7 @@ export function getLineDescriptionDetails(
 }
 
 export function getLineTotal(
-  line: Database["public"]["Views"]["purchaseOrderLines"]["Row"]
+  line: TableRow<"purchaseOrderLines">
 ) {
   if (line?.purchaseQuantity && line?.supplierUnitPrice) {
     return (
@@ -52,7 +52,7 @@ export function getLineTotal(
 }
 
 export function getTotal(
-  lines: Database["public"]["Views"]["purchaseOrderLines"]["Row"][]
+  lines: TableRow<"purchaseOrderLines">[]
 ) {
   let total = 0;
 

@@ -1,13 +1,13 @@
 # Storage Unit Refactor — Test Plan
 
 Branch: `sid/inventory-storage-revamp`
-Scope: renames `shelf` → `storageUnit` across DB, edge functions, ERP, MES; adds hierarchy (`parentId`) and `storageType` (M2M via `storageTypeIds TEXT[]`).
+Scope: renames `shelf` → `storageUnit` across DB, Node function routes, ERP, MES; adds hierarchy (`parentId`) and `storageType` (M2M via `storageTypeIds TEXT[]`).
 
 ## 0. Pre-test setup
 
 - [ ] Reset DB from `main`, apply all 4 migrations in order (000000 → 000300); confirm no errors.
 - [ ] Seed company with: 2 locations, 2 warehouses, ≥ 1 item each of part/material/consumable/tool, 1 make item + method, 1 buy item + supplier, 1 kanban (make), 1 kanban (buy), 1 gauge.
-- [ ] Verify `supabase/functions/lib/types.ts` and `packages/database/src/types.ts` regenerated (PR includes both).
+- [ ] Verify `packages/database/src/schema/index.ts` and direct query types are current (PR includes both).
 - [ ] `pnpm i && pnpm typecheck` (per-package; **do not** run repo-wide `tsc --noEmit`).
 - [ ] `pnpm build` on `apps/erp` and `apps/mes`.
 
@@ -77,7 +77,7 @@ With a snapshot of production-like data (if available) or fresh seed:
 
 ---
 
-## 2. Supabase edge functions
+## 2. Node function routes
 
 Test by calling each function (directly or via the ERP action that invokes it):
 - [ ] `lib/storage-units.ts#getStorageUnitId()` — returns pickMethod default when line has none.

@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
 import { data, redirect } from "react-router";
@@ -11,14 +10,13 @@ import {
 import { path, requestReferrer } from "~/utils/path";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     update: "production"
   });
 
   const formData = await request.formData();
   const type = formData.get("type") as string;
 
-  const serviceRole = getCarbonServiceRole();
   const validation = await validator(getJobMethodValidator).validate(formData);
 
   if (validation.error) {
@@ -26,7 +24,27 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (type === "job") {
-    const jobMethod = await upsertMakeMethodFromJob(serviceRole, {
+    const sourceJob = await client
+      .from("job")
+      .select("id")
+      .eq("id", validation.data.sourceId)
+      .eq("companyId", companyId)
+      .single();
+    if (sourceJob.error) {
+      return data({ error: "Source job not found" }, { status: 404 });
+    }
+
+    const targetMethod = await client
+      .from("makeMethod")
+      .select("id")
+      .eq("id", validation.data.targetId)
+      .eq("companyId", companyId)
+      .single();
+    if (targetMethod.error) {
+      return data({ error: "Target method not found" }, { status: 404 });
+    }
+
+    const jobMethod = await upsertMakeMethodFromJob(client, {
       ...validation.data,
       companyId,
       userId,
@@ -46,7 +64,27 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (type === "method") {
-    const makeMethod = await upsertMakeMethodFromJobMethod(serviceRole, {
+    const sourceMethod = await client
+      .from("jobMakeMethod")
+      .select("id")
+      .eq("id", validation.data.sourceId)
+      .eq("companyId", companyId)
+      .single();
+    if (sourceMethod.error) {
+      return data({ error: "Source job method not found" }, { status: 404 });
+    }
+
+    const targetMethod = await client
+      .from("makeMethod")
+      .select("id")
+      .eq("id", validation.data.targetId)
+      .eq("companyId", companyId)
+      .single();
+    if (targetMethod.error) {
+      return data({ error: "Target method not found" }, { status: 404 });
+    }
+
+    const makeMethod = await upsertMakeMethodFromJobMethod(client, {
       ...validation.data,
       companyId,
       userId,

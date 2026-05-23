@@ -1,6 +1,7 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { onShapeDataValidator } from "@carbon/ee/onshape";
+import { nanoid } from "nanoid";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 
@@ -17,7 +18,13 @@ export async function action({ request }: ActionFunctionArgs) {
   const makeMethodId = formData.get("makeMethodId");
   const rows = formData.get("rows");
 
-  if (!makeMethodId || !rows) {
+  if (
+    typeof documentId !== "string" ||
+    typeof versionId !== "string" ||
+    typeof elementId !== "string" ||
+    typeof makeMethodId !== "string" ||
+    typeof rows !== "string"
+  ) {
     return data(
       { success: false, message: "Missing required fields" },
       { status: 400 }
@@ -27,7 +34,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const record = await client
     .from("makeMethod")
     .select("itemId, companyId")
-    .eq("id", makeMethodId as string)
+    .eq("id", makeMethodId)
     .single();
 
   if (record.data?.companyId !== companyId) {
@@ -38,17 +45,16 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
-    const parsed = onShapeDataValidator.parse(JSON.parse(rows as string));
-    const serviceRole = await getCarbonServiceRole();
+    const parsed = onShapeDataValidator.parse(JSON.parse(rows));
 
-    const sync = await serviceRole.functions.invoke("sync", {
+    const sync = await invokeFunction("sync", {
       body: {
         type: "onshape",
         makeMethodId,
         data: parsed,
         companyId,
         userId
-      }
+      },
     });
 
     if (sync.error) {
@@ -61,26 +67,48 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const itemId = record.data?.itemId as string;
 
-    // Upsert the OnShape mapping in externalIntegrationMapping
-    await serviceRole
+    const deleteMapping = await client
       .from("externalIntegrationMapping")
       .delete()
       .eq("entityType", "item")
       .eq("entityId", itemId)
-      .eq("integration", "onshape");
+      .eq("integration", "onshape")
+      .eq("companyId", companyId);
 
-    await client.from("externalIntegrationMapping").insert({
+    if (deleteMapping.error) {
+      console.error("Failed to clear Onshape mapping", deleteMapping.error);
+      return data(
+        { success: false, message: "Failed to save Onshape mapping" },
+        { status: 500 }
+      );
+    }
+
+    const now = new Date().toISOString();
+    const saveMapping = await client.from("externalIntegrationMapping").insert({
+      id: nanoid(),
       entityType: "item",
       entityId: itemId,
       integration: "onshape",
       metadata: {
-        documentId: documentId as string,
-        versionId: versionId as string,
-        elementId: elementId as string
+        documentId,
+        versionId,
+        elementId
       },
-      lastSyncedAt: new Date().toISOString(),
-      companyId
+      lastSyncedAt: now,
+      companyId,
+      allowDuplicateExternalId: false,
+      createdAt: now,
+      createdBy: userId,
+      updatedAt: now
     });
+
+    if (saveMapping.error) {
+      console.error("Failed to save Onshape mapping", saveMapping.error);
+      return data(
+        { success: false, message: "Failed to save Onshape mapping" },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error("Failed to sync onshape data", error);
     return data(

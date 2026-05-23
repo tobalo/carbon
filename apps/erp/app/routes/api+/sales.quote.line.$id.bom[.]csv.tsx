@@ -1,5 +1,5 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { LoaderFunctionArgs } from "react-router";
 import { flattenTree } from "~/components/TreeView";
 import { getQuoteMethodTrees } from "~/modules/sales";
@@ -59,6 +59,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     .from("quoteLines")
     .select("quoteId, quantity, itemReadableId")
     .eq("id", id)
+    .eq("companyId", companyId)
     .single();
   const fileName = `${quote.data?.itemReadableId}-bom.csv`;
   if (quote.error) {
@@ -73,7 +74,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (!quote.data?.quoteId) {
     throw new Error("Failed to fetch quote");
   }
-  const methodTrees = await getQuoteMethodTrees(client, quote.data?.quoteId);
+  const methodTrees = await getQuoteMethodTrees(
+    client,
+    quote.data?.quoteId,
+    companyId
+  );
 
   if (methodTrees.error) {
     return new Response(bomHeaders.join(",") + "\n", {
@@ -84,7 +89,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     });
   }
 
-  const methodTree = methodTrees.data.find((m) => m.data.quoteLineId === id);
+  const methodTree = methodTrees.data.find((m: any) => m.data.quoteLineId === id);
   const flattenedMethods = methodTree ? flattenTree(methodTree) : [];
 
   const makeMethodIds = [
@@ -102,7 +107,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let operationsByMakeMethodId: Record<
     string,
     Array<
-      Database["public"]["Tables"]["quoteOperation"]["Row"] & {
+      TableRow<"quoteOperation"> & {
         processName: string;
         workCenterName: string | null;
       }
@@ -150,9 +155,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const computedCosts = calculateMadePartCosts(
-    flattenedMethods,
+    flattenedMethods as any[],
     bomOperationsByKey,
-    (node) => node.data.quoteMaterialMakeMethodId,
+    (node: any) => node.data.quoteMaterialMakeMethodId,
     batchSizesByItemId
   );
 
@@ -164,7 +169,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     headers += "," + operationHeaders.join(",");
     // Add duration column for each quantity
     if (quote.data?.quantity) {
-      quote.data.quantity.forEach((qty) => {
+      quote.data.quantity.forEach((qty: any) => {
         headers += `,Total Duration x ${qty} (ms)`;
       });
     }
@@ -192,7 +197,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       if (operations) {
         operations.forEach((operation) => {
           const durations: Record<string, number> = (quote.data?.quantity ?? [])
-            .map((quantity) => {
+            .map((quantity: any) => {
               const duration = makeDurations({
                 ...operation,
                 operationQuantity: quantity
@@ -200,7 +205,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               return [quantity, duration.duration];
             })
             .reduce(
-              (acc, [quantity, duration]) => {
+              (acc: any, [quantity, duration]: any) => {
                 acc[`totalDuration${quantity}`] = duration;
                 return acc;
               },
@@ -218,7 +223,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
           // Add duration values for each quantity
           if (quote.data?.quantity) {
-            quote.data.quantity.forEach((qty) => {
+            quote.data.quantity.forEach((qty: any) => {
               csv += `,${durations[`totalDuration${qty}`] || 0}`;
             });
           }

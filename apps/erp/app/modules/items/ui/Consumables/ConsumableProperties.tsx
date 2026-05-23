@@ -1,4 +1,4 @@
-import type { Json } from "@carbon/database";
+import type { Json } from "@carbon/database/schema";
 import { InputControlled, Select, ValidatedForm } from "@carbon/form";
 import {
   Badge,
@@ -103,7 +103,7 @@ const ConsumableProperties = () => {
       const formData = new FormData();
 
       formData.append("items", itemId);
-      formData.append("field", field);
+      formData.append("field", String(field));
       formData.append("value", value?.toString() ?? "");
       fetcher.submit(formData, {
         method: "post",

@@ -1,13 +1,13 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { createContext, useContext } from "react";
 import type { StoreApi } from "zustand";
 import { useStore } from "zustand";
 
+export type CarbonClientLike = DatabaseQueryClient;
+
 export interface ICarbonStore {
-  carbon: SupabaseClient<Database>;
+  carbon: CarbonClientLike;
   accessToken: string;
-  isRealtimeAuthSet: boolean;
   setAuthToken: (accessToken: string) => Promise<void>;
 }
 

@@ -1,3 +1,8 @@
+import {
+  signConsolePinPayload,
+  type ConsolePinPayload,
+  verifyConsolePinPayload
+} from "@carbon/auth/console.server";
 import * as cookie from "cookie";
 
 const CONSOLE_PIN_PREFIX = "console-pin-";
@@ -6,12 +11,7 @@ const CONSOLE_PIN_MAX_AGE_MS = CONSOLE_PIN_MAX_AGE * 1000;
 
 // --- Console Pin-In State ---
 
-export interface ConsolePinIn {
-  userId: string;
-  name: string;
-  avatarUrl: string | null;
-  pinnedAt: number; // unix timestamp ms
-}
+export type ConsolePinIn = ConsolePinPayload;
 
 export function getConsolePinIn(
   request: Request,
@@ -24,7 +24,8 @@ export function getConsolePinIn(
   if (!raw) return null;
 
   try {
-    const parsed: ConsolePinIn = JSON.parse(raw);
+    const parsed = verifyConsolePinPayload(raw);
+    if (!parsed) return null;
     // Check manual expiry (defense-in-depth alongside cookie maxAge)
     const elapsed = Date.now() - parsed.pinnedAt;
     if (elapsed > CONSOLE_PIN_MAX_AGE_MS) return null;
@@ -37,7 +38,7 @@ export function getConsolePinIn(
 export function setConsolePinIn(companyId: string, data: ConsolePinIn): string {
   return cookie.serialize(
     `${CONSOLE_PIN_PREFIX}${companyId}`,
-    JSON.stringify(data),
+    signConsolePinPayload(data),
     {
       path: "/",
       maxAge: CONSOLE_PIN_MAX_AGE

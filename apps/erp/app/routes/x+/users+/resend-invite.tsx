@@ -1,6 +1,5 @@
 import { error, getAppUrl, RESEND_DOMAIN, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { InviteEmail } from "@carbon/documents/email";
 import { validationError, validator } from "@carbon/form";
@@ -13,7 +12,7 @@ import { data } from "react-router";
 import { resendInviteValidator } from "~/modules/users";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     create: "users"
   });
 
@@ -27,14 +26,13 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const { users } = validation.data;
 
-  const serviceRole = getCarbonServiceRole();
   if (users.length === 1) {
     const [userId] = users;
     const location = request.headers.get("x-vercel-ip-city") ?? "Unknown";
     const ip = request.headers.get("x-forwarded-for") ?? "127.0.0.1";
     const [company, user] = await Promise.all([
-      serviceRole.from("company").select("name").eq("id", companyId).single(),
-      serviceRole
+      client.from("company").select("name").eq("id", companyId).single(),
+      client
         .from("user")
         .select("email, fullName")
         .eq("id", userId)
@@ -45,11 +43,13 @@ export async function action({ request }: ActionFunctionArgs) {
       throw new Error("Failed to load company or user");
     }
 
-    const existingInvite = await serviceRole
+    const existingInvite = await client
       .from("invite")
       .select("createdBy")
       .eq("email", user.data.email)
       .eq("companyId", companyId)
+      .is("acceptedAt", null)
+      .is("revokedAt", null)
       .maybeSingle();
 
     if (existingInvite.error || !existingInvite.data) {
@@ -63,11 +63,13 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const newCode = nanoid();
-    const refreshed = await serviceRole
+    const refreshed = await client
       .from("invite")
-      .update({ code: newCode, acceptedAt: null, revokedAt: null })
+      .update({ code: newCode })
       .eq("email", user.data.email)
       .eq("companyId", companyId)
+      .is("acceptedAt", null)
+      .is("revokedAt", null)
       .select("code")
       .single();
 
@@ -78,7 +80,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const inviter = await serviceRole
+    const inviter = await client
       .from("user")
       .select("email, fullName")
       .eq("id", existingInvite.data.createdBy)

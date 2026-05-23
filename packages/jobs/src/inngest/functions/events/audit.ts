@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import type { TableConfig } from "@carbon/database/audit.config";
 import {
   auditConfig,
@@ -146,7 +146,7 @@ export const auditFunction = inngest.createFunction(
       failed: 0
     };
 
-    const client = getCarbonServiceRole();
+    const client = getCarbonServiceClient();
 
     type AuditRecord = (typeof payload.records)[number];
     const byCompany = groupBy(payload.records, (r) => r.companyId);
@@ -167,15 +167,18 @@ export const auditFunction = inngest.createFunction(
         // Check if company has audit logs enabled
         const { data: company } = await client
           .from("company")
-          .select("auditLogEnabled")
+          .select("auditLogEnabled, active")
           .eq("id", companyId)
           .single();
 
-        if (
-          !(company as { auditLogEnabled: boolean } | null)?.auditLogEnabled
-        ) {
+        const companySettings = company as {
+          active: boolean;
+          auditLogEnabled: boolean;
+        } | null;
+
+        if (!companySettings?.active || !companySettings.auditLogEnabled) {
           console.log(
-            `Skipping ${records.length} records: audit logging disabled for company ${companyId}`
+            `Skipping ${records.length} records: audit logging disabled or company inactive for ${companyId}`
           );
           stepResults.skipped += records.length;
           return stepResults;
@@ -322,6 +325,7 @@ export const auditFunction = inngest.createFunction(
                   .from(junction as any)
                   .select(entityIdColumn)
                   .eq(fk, record.event.recordId)
+                  .eq("companyId", companyId)
                   .limit(1)
                   .maybeSingle();
 
@@ -407,7 +411,7 @@ export const auditFunction = inngest.createFunction(
  * proportional to distinct FK targets, not to entries.
  */
 async function applyFkSnapshots(
-  client: ReturnType<typeof getCarbonServiceRole>,
+  client: ReturnType<typeof getCarbonServiceClient>,
   companyId: string,
   entries: CreateAuditLogEntry[]
 ): Promise<void> {

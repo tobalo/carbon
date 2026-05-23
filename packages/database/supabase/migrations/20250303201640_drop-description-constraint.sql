@@ -1,1 +1,0 @@
-ALTER TABLE "methodOperation" DROP CONSTRAINT "methodOperation_makeMethodId_description_unique";

@@ -51,7 +51,6 @@ const TrainingHeader = () => {
           />
           <Heading size="h4" className="flex items-center gap-2">
             <span>{routeData?.training?.name}</span>
-            {/* @ts-expect-error TS2322 */}
             <TrainingStatus status={routeData?.training?.status} />
           </Heading>
           <Copy text={routeData?.training?.name ?? ""} />

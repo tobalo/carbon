@@ -29,7 +29,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (!journalEntryId) throw new Error("Could not find journalEntryId");
 
   const [journalEntry, companies, dimensions] = await Promise.all([
-    getJournalEntry(client, journalEntryId),
+    getJournalEntry(client, journalEntryId, companyId),
     getCompaniesInGroup(client, companyGroupId),
     getActiveDimensionsWithValues(client, companyGroupId, companyId)
   ]);
@@ -48,7 +48,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw redirect(path.to.accountingJournals);
   }
 
-  const journalLineIds = (journalEntry.data.journalLine ?? []).map((l) => l.id);
+  const journalLineIds = (journalEntry.data.journalLine ?? []).map((l: any) => l.id);
   const lineDimensions = await getJournalLineDimensions(client, journalLineIds);
 
   return {

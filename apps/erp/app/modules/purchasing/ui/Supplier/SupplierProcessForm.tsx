@@ -13,7 +13,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect, useState } from "react";
 import { useFetcher, useNavigate, useParams } from "react-router";
 import type { z } from "zod";
@@ -45,7 +45,7 @@ const SupplierProcessForm = ({
 }: SupplierProcessFormProps) => {
   const { t } = useLingui();
   const permissions = usePermissions();
-  const fetcher = useFetcher<PostgrestResponse<SupplierProcess>>();
+  const fetcher = useFetcher<QueryResponse<SupplierProcess>>();
   const { supplierId } = useParams();
   const [supplier, setSupplier] = useState<string | undefined>(supplierId);
   const navigate = useNavigate();

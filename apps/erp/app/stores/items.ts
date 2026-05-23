@@ -1,4 +1,9 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  itemReplenishmentSystemEnum,
+  itemTrackingTypeEnum,
+  itemTypeEnum
+} from "@carbon/database/schema";
 import { useStore as useValue } from "@nanostores/react";
 import { atom, computed } from "nanostores";
 import { useNanoStore } from "~/hooks";
@@ -6,10 +11,10 @@ import type { ListItem } from "~/types";
 
 export type Item = ListItem & {
   readableIdWithRevision: string;
-  replenishmentSystem: Database["public"]["Enums"]["itemReplenishmentSystem"];
-  itemTrackingType: Database["public"]["Enums"]["itemTrackingType"];
+  replenishmentSystem: EnumValue<typeof itemReplenishmentSystemEnum>;
+  itemTrackingType: EnumValue<typeof itemTrackingTypeEnum>;
   unitOfMeasureCode: string;
-  type: Database["public"]["Enums"]["itemType"];
+  type: EnumValue<typeof itemTypeEnum>;
   active: boolean;
   quantityOnHand?: number;
   quantityByLocation?: Record<string, number>;

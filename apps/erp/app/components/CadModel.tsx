@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   CardHeader,
   CardTitle,
@@ -21,6 +20,7 @@ import { LuCloudUpload } from "react-icons/lu";
 import { useFetcher } from "react-router";
 import { useUser } from "~/hooks";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 
 const SIZE_LIMIT = getFileSizeLimit("CAD_MODEL_UPLOAD");
 
@@ -52,7 +52,6 @@ const CadModel = ({
     company: { id: companyId }
   } = useUser();
   const mode = useMode();
-  const { carbon } = useCarbon();
 
   const fetcher = useFetcher<{}>();
   const [file, setFile] = useState<File | null>(null);
@@ -63,29 +62,25 @@ const CadModel = ({
     setFile(file);
 
     if (file) {
-      if (!carbon) {
-        toast.error("Failed to initialize carbon client");
-        return;
-      } else {
-        toast.info(`Uploading ${file.name}`);
-      }
+      toast.info(`Uploading ${file.name}`);
       const fileExtension = file.name.split(".").pop();
       const fileName = `${companyId}/models/${modelId}.${fileExtension}`;
 
-      const modelUpload = await carbon.storage
-        .from("private")
-        .upload(fileName, file, {
-          upsert: true
-        });
+      const modelUpload = await uploadStorageObject({
+        bucket: "private",
+        path: fileName,
+        file
+      });
 
-      if (modelUpload.error) {
+      if (modelUpload.error || !modelUpload.data) {
         toast.error("Failed to upload file to storage");
+        return;
       }
 
       const formData = new FormData();
       formData.append("name", file.name);
       formData.append("modelId", modelId);
-      formData.append("modelPath", modelUpload.data!.path);
+      formData.append("modelPath", modelUpload.data.path);
       formData.append("size", file.size.toString());
       if (metadata) {
         if (metadata.itemId) {

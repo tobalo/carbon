@@ -13,6 +13,7 @@ import { Analytics } from "@vercel/analytics/react";
 import type React from "react";
 import type {
   ActionFunctionArgs,
+  LinksFunction,
   LoaderFunctionArgs,
   MetaFunction
 } from "react-router";
@@ -30,13 +31,12 @@ import { getMode, setMode } from "~/services/mode.server";
 import Background from "~/styles/background.css?url";
 import NProgress from "~/styles/nprogress.css?url";
 import Tailwind from "~/styles/tailwind.css?url";
-import type { Route } from "./+types/root";
 import { getTheme } from "./services/theme.server";
 
 export const middleware = [flashMiddleware];
 export const clientMiddleware = [flashClientMiddleware];
 
-export const links: Route.LinksFunction = () => [
+export const links: LinksFunction = () => [
   { rel: "stylesheet", href: Tailwind },
   { rel: "stylesheet", href: Background },
   { rel: "stylesheet", href: NProgress }
@@ -54,9 +54,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const {
     CARBON_EDITION,
     POSTHOG_API_HOST,
-    POSTHOG_PROJECT_PUBLIC_KEY,
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
+    POSTHOG_PROJECT_PUBLIC_KEY
   } = getBrowserEnv();
 
   return data(
@@ -64,9 +62,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       env: {
         CARBON_EDITION,
         POSTHOG_API_HOST,
-        POSTHOG_PROJECT_PUBLIC_KEY,
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY
+        POSTHOG_PROJECT_PUBLIC_KEY
       },
       mode: getMode(request),
       theme: getTheme(request),

@@ -14,7 +14,7 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import type { ComponentPropsWithoutRef } from "react";
 import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 import { IoMdAdd } from "react-icons/io";
@@ -53,7 +53,7 @@ const Filter = forwardRef<HTMLButtonElement, FilterProps>(
     }, [open]);
 
     const fetcher =
-      useFetcher<PostgrestResponse<{ id: string; name: string }>>();
+      useFetcher<QueryResponse<{ id: string; name: string }>>();
 
     useEffect(() => {
       if (

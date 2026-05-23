@@ -1,10 +1,10 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { getTrackedEntity } from "~/modules/inventory";
 import { getCompanySettings } from "~/modules/settings/settings.service";
 
 export async function getEntityLabelData(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   trackedEntityId: string
 ) {

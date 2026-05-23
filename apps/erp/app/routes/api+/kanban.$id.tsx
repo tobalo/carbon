@@ -1,11 +1,11 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import { trigger } from "@carbon/jobs";
 import { Loading } from "@carbon/react";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { Suspense } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { Await, useLoaderData } from "react-router";
@@ -34,7 +34,7 @@ async function handleKanban({
   userId,
   id
 }: {
-  client: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   companyId: string;
   companyGroupId: string;
   userId: string;
@@ -136,17 +136,15 @@ async function handleKanban({
       };
     }
 
-    const serviceRole = getCarbonServiceRole();
-
     const [upsertMethod, associateKanban] = await Promise.all([
-      upsertJobMethod(serviceRole, "itemToJob", {
+      upsertJobMethod(client, "itemToJob", {
         sourceId: kanban.data.itemId!,
         targetId: id,
         companyId,
         userId,
         configuration: undefined
       }),
-      updateKanbanJob(serviceRole, {
+      updateKanbanJob(client, {
         id: kanban.data.id!,
         jobId: id,
         companyId,
@@ -170,27 +168,28 @@ async function handleKanban({
           companyId,
           userId
         }),
-        runMRP(serviceRole, {
+        runMRP(client, {
           type: "job",
           id,
           companyId,
           userId
         }),
-        serviceRole.functions.invoke("schedule", {
+        invokeFunction("schedule", {
           body: {
             jobId: id,
             companyId,
             userId,
             mode: "initial",
             direction: "backward"
-          }
+          },
         }),
-        serviceRole
+        client
           .from("job")
           .update({
             status: "Ready" as const
           })
-          .eq("id", jobReadableId)
+          .eq("id", id)
+          .eq("companyId", companyId)
       ]);
     } else if (upsertMethod.error) {
       console.error(upsertMethod.error);
@@ -317,7 +316,6 @@ async function handleKanban({
 
     const createPurchaseOrderLine = await upsertPurchaseOrderLine(client, {
       purchaseOrderId: purchaseOrderId!,
-      // @ts-expect-error
       purchaseOrderLineType: item.data?.type,
       itemId: kanban.data.itemId!,
       purchaseQuantity: kanban.data.quantity!,
@@ -326,7 +324,6 @@ async function handleKanban({
       supplierShippingCost: 0,
       supplierTaxAmount: 0,
       exchangeRate: 1,
-      setupPrice: 0,
       purchaseUnitOfMeasureCode: kanban.data.purchaseUnitOfMeasureCode!,
       inventoryUnitOfMeasureCode:
         item.data?.unitOfMeasureCode || kanban.data.purchaseUnitOfMeasureCode!,

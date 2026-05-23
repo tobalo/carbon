@@ -26,8 +26,8 @@ const DepartmentsTable = memo(({ data, count }: DepartmentsTableProps) => {
     ...row,
     parentDepartment:
       (Array.isArray(row.department)
-        ? row.department.map((d) => d.name).join(", ")
-        : // @ts-expect-error TS2339 - TODO: fix type
+        ? row.department.map((d: any) => d.name).join(", ")
+        :
           row.department?.name) ?? ""
   }));
 

@@ -94,7 +94,7 @@ const QuotationFinalizeModal = ({
     .filter((line) => {
       if (!line.quantity || !Array.isArray(line.quantity)) return false;
       return line.quantity.some(
-        (qty) =>
+        (qty: any) =>
           !prices.some(
             (price) => price.quoteLineId === line.id && price.quantity === qty
           )

@@ -883,7 +883,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getOpportunity(ctx.client, params.opportunityId);
+      const result = await getOpportunity(ctx.client, ctx.companyId, params.opportunityId);
       return toMcpResult(result);
     }, "Failed: sales_getOpportunity"),
   );
@@ -1049,7 +1049,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getQuoteLinesList(ctx.client, params.quoteId);
+      const result = await getQuoteLinesList(ctx.client, params.quoteId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: sales_getQuoteLinesList"),
   );
@@ -1064,7 +1064,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getQuoteMakeMethod(ctx.client, params.quoteMakeMethodId);
+      const result = await getQuoteMakeMethod(ctx.client, params.quoteMakeMethodId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: sales_getQuoteMakeMethod"),
   );
@@ -1079,7 +1079,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getRootQuoteMakeMethod(ctx.client, params.quoteLineId);
+      const result = await getRootQuoteMakeMethod(ctx.client, params.quoteLineId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: sales_getRootQuoteMakeMethod"),
   );
@@ -1094,7 +1094,11 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getQuoteMethodTrees(ctx.client, params.quoteId);
+      const result = await getQuoteMethodTrees(
+        ctx.client,
+        params.quoteId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: sales_getQuoteMethodTrees"),
   );
@@ -1109,7 +1113,11 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getQuoteMethodTreeArray(ctx.client, params.quoteId);
+      const result = await getQuoteMethodTreeArray(
+        ctx.client,
+        params.quoteId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: sales_getQuoteMethodTreeArray"),
   );
@@ -1261,7 +1269,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getQuoteMaterialsByMethodId(ctx.client, params.quoteMakeMethodId);
+      const result = await getQuoteMaterialsByMethodId(ctx.client, params.quoteMakeMethodId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: sales_getQuoteMaterialsByMethodId"),
   );
@@ -1382,7 +1390,12 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getRelatedPricesForQuoteLine(ctx.client, params.itemId, params.quoteId);
+      const result = await getRelatedPricesForQuoteLine(
+        ctx.client,
+        params.itemId,
+        params.quoteId,
+        ctx.companyId
+      );
       return toMcpResult(result);
     }, "Failed: sales_getRelatedPricesForQuoteLine"),
   );
@@ -1454,7 +1467,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getSalesOrderRelatedItems(ctx.client, params.salesOrderId, params.opportunityId);
+      const result = await getSalesOrderRelatedItems(ctx.client, params.salesOrderId, params.opportunityId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: sales_getSalesOrderRelatedItems"),
   );
@@ -1649,7 +1662,7 @@ export const registerSalesTools: RegisterTools = (server, ctx) => {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getSalesOrderLineShipments(ctx.client, params.salesOrderLineId);
+      const result = await getSalesOrderLineShipments(ctx.client, params.salesOrderLineId, ctx.companyId);
       return toMcpResult(result);
     }, "Failed: sales_getSalesOrderLineShipments"),
   );

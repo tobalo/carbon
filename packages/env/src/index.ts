@@ -12,14 +12,15 @@ declare global {
       ERP_URL: string;
       NODE_ENV: string;
       JIRA_CLIENT_ID: string;
+      IMAGE_RESIZER_URL: string;
       MES_URL: string;
       NOVU_APPLICATION_ID: string;
       NOVU_API_URL: string;
       ONSHAPE_CLIENT_ID: string;
       POSTHOG_API_HOST: string;
       POSTHOG_PROJECT_PUBLIC_KEY: string;
-      SUPABASE_URL: string;
-      SUPABASE_ANON_KEY: string;
+      S3_PUBLIC_BASE_URL: string;
+      TRANSCRIPTION_SERVICE_URL: string;
       VERCEL_URL: string;
       VERCEL_ENV: string;
       QUICKBOOKS_CLIENT_ID: string;
@@ -69,12 +70,26 @@ declare global {
       STRIPE_BYPASS_USER_IDS: string;
       GTM_URL: string;
       GTM_EVENTS_API_SECRET_KEY: string;
-      SUPABASE_ANON_KEY: string;
-      SUPABASE_URL: string;
-      SUPABASE_DB_URL: string;
-      SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID: string;
-      SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: string;
-      SUPABASE_SERVICE_ROLE_KEY: string;
+      AUTH_PROVIDER: string;
+      BETTER_AUTH_SECRET: string;
+      DATABASE_URL: string;
+      DATABASE_SERVICE_URL: string;
+      JOBS_DATABASE_URL: string;
+      S3_REGION: string;
+      S3_ENDPOINT: string;
+      S3_ACCESS_KEY_ID: string;
+      S3_SECRET_ACCESS_KEY: string;
+      S3_PRIVATE_BUCKET: string;
+      S3_PUBLIC_BUCKET: string;
+      S3_PUBLIC_BASE_URL: string;
+      THUMBNAIL_SERVICE_URL: string;
+      THUMBNAIL_SERVICE_TOKEN: string;
+      IMAGE_RESIZER_URL: string;
+      TRANSCRIPTION_SERVICE_URL: string;
+      GOOGLE_CLIENT_ID: string;
+      GOOGLE_CLIENT_SECRET: string;
+      AZURE_CLIENT_ID: string;
+      AZURE_CLIENT_SECRET: string;
       REDIS_URL: string;
       VERCEL_URL: string;
       VERCEL_ENV: string;
@@ -143,7 +158,12 @@ export const CARBON_API_URL =
   getEnv("CARBON_API_URL", {
     isRequired: false,
     isSecret: false
-  }) ?? getEnv("SUPABASE_URL", { isSecret: false });
+  }) ??
+  getEnv("ERP_URL", {
+    isRequired: false,
+    isSecret: false
+  }) ??
+  "http://localhost:3000";
 
 export const CLOUDFLARE_TURNSTILE_SITE_KEY = getEnv(
   "CLOUDFLARE_TURNSTILE_SITE_KEY",
@@ -256,25 +276,87 @@ export const SLACK_STATE_SECRET = getEnv("SLACK_STATE_SECRET", {
   isSecret: true
 });
 
-export const SUPABASE_SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY");
-export const SUPABASE_DB_URL = getEnv("SUPABASE_DB_URL", {
-  isSecret: true,
-  isRequired: true
+export const AUTH_PROVIDER =
+  getEnv("AUTH_PROVIDER", {
+    isRequired: false,
+    isSecret: false
+  }) ?? "better_auth";
+export const BETTER_AUTH_SECRET = getEnv("BETTER_AUTH_SECRET", {
+  isRequired: AUTH_PROVIDER === "better_auth",
+  isSecret: true
 });
-export const SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID = getEnv(
-  "SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID",
-  {
-    isRequired: false,
-    isSecret: true
-  }
-);
-export const SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID = getEnv(
-  "SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
-  {
-    isRequired: false,
-    isSecret: true
-  }
-);
+export const DATABASE_URL = getEnv("DATABASE_URL", {
+  isRequired: false,
+  isSecret: true
+});
+export const DATABASE_SERVICE_URL = getEnv("DATABASE_SERVICE_URL", {
+  isRequired: false,
+  isSecret: true
+});
+export const JOBS_DATABASE_URL = getEnv("JOBS_DATABASE_URL", {
+  isRequired: false,
+  isSecret: true
+});
+export const S3_REGION = getEnv("S3_REGION", {
+  isRequired: false,
+  isSecret: false
+});
+export const S3_ENDPOINT = getEnv("S3_ENDPOINT", {
+  isRequired: false,
+  isSecret: false
+});
+export const S3_ACCESS_KEY_ID = getEnv("S3_ACCESS_KEY_ID", {
+  isRequired: false,
+  isSecret: true
+});
+export const S3_SECRET_ACCESS_KEY = getEnv("S3_SECRET_ACCESS_KEY", {
+  isRequired: false,
+  isSecret: true
+});
+export const S3_PRIVATE_BUCKET = getEnv("S3_PRIVATE_BUCKET", {
+  isRequired: false,
+  isSecret: false
+});
+export const S3_PUBLIC_BUCKET = getEnv("S3_PUBLIC_BUCKET", {
+  isRequired: false,
+  isSecret: false
+});
+export const S3_PUBLIC_BASE_URL = getEnv("S3_PUBLIC_BASE_URL", {
+  isRequired: false,
+  isSecret: false
+});
+export const THUMBNAIL_SERVICE_URL = getEnv("THUMBNAIL_SERVICE_URL", {
+  isRequired: false,
+  isSecret: false
+});
+export const THUMBNAIL_SERVICE_TOKEN = getEnv("THUMBNAIL_SERVICE_TOKEN", {
+  isRequired: false,
+  isSecret: true
+});
+export const IMAGE_RESIZER_URL = getEnv("IMAGE_RESIZER_URL", {
+  isRequired: false,
+  isSecret: false
+});
+export const TRANSCRIPTION_SERVICE_URL = getEnv("TRANSCRIPTION_SERVICE_URL", {
+  isRequired: false,
+  isSecret: false
+});
+export const GOOGLE_CLIENT_ID = getEnv("GOOGLE_CLIENT_ID", {
+  isRequired: false,
+  isSecret: false
+});
+export const GOOGLE_CLIENT_SECRET = getEnv("GOOGLE_CLIENT_SECRET", {
+  isRequired: false,
+  isSecret: true
+});
+export const AZURE_CLIENT_ID = getEnv("AZURE_CLIENT_ID", {
+  isRequired: false,
+  isSecret: false
+});
+export const AZURE_CLIENT_SECRET = getEnv("AZURE_CLIENT_SECRET", {
+  isRequired: false,
+  isSecret: true
+});
 
 export const SESSION_SECRET = getEnv("SESSION_SECRET");
 export const SESSION_KEY = "auth";
@@ -355,11 +437,6 @@ export const POSTHOG_API_HOST = getEnv("POSTHOG_API_HOST", {
 export const POSTHOG_PROJECT_PUBLIC_KEY = getEnv("POSTHOG_PROJECT_PUBLIC_KEY", {
   isSecret: false
 });
-export const SUPABASE_URL = getEnv("SUPABASE_URL", { isSecret: false });
-export const SUPABASE_ANON_KEY = getEnv("SUPABASE_ANON_KEY", {
-  isSecret: false
-});
-
 export const DEFAULT_LANGUAGE =
   getEnv("DEFAULT_LANGUAGE", {
     isSecret: false,
@@ -417,6 +494,7 @@ export function getBrowserEnv() {
     CONTROLLED_ENVIRONMENT,
     ERP_URL,
     GOOGLE_PLACES_API_KEY,
+    IMAGE_RESIZER_URL,
     JIRA_CLIENT_ID,
     MES_URL,
     NODE_ENV,
@@ -426,8 +504,8 @@ export function getBrowserEnv() {
     POSTHOG_API_HOST,
     POSTHOG_PROJECT_PUBLIC_KEY,
     QUICKBOOKS_CLIENT_ID,
-    SUPABASE_ANON_KEY,
-    SUPABASE_URL,
+    S3_PUBLIC_BASE_URL,
+    TRANSCRIPTION_SERVICE_URL,
     VERCEL_ENV,
     VERCEL_URL,
     XERO_CLIENT_ID,

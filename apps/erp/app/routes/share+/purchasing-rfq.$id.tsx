@@ -32,7 +32,7 @@ import {
 import type { PurchasingRFQLine } from "~/modules/purchasing/types";
 import type { Company } from "~/modules/settings";
 import { getCompany } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export const meta = () => {
   return [{ title: "RFQ Preview" }];
@@ -70,7 +70,6 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     Record<string, string | null>
   >((acc, line) => {
     if (line.thumbnailPath) {
-      // @ts-expect-error TS2538 - TODO: fix type
       acc[line.id] = line.thumbnailPath;
     }
     return acc;
@@ -81,7 +80,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       ? await Promise.all(
           Object.entries(thumbnailPaths).map(([lineId, path]) => {
             if (!path) return null;
-            return getBase64ImageFromSupabase(client, path).then((data) => ({
+            return getBase64ImageFromStorage(client, path).then((data) => ({
               id: lineId,
               data
             }));
@@ -155,7 +154,6 @@ const LineItems = ({
   lines: PurchasingRFQLine[];
   thumbnails: Record<string, string | null>;
 }) => {
-  // @ts-expect-error TS2345 - TODO: fix type
   const [openItems, setOpenItems] = useState<string[]>(() =>
     lines.map((line) => line.id).filter(Boolean)
   );
@@ -195,7 +193,6 @@ const LineItems = ({
               <VStack spacing={0} className="w-full">
                 <div
                   className="flex flex-col cursor-pointer w-full"
-                  // @ts-expect-error TS2345 - TODO: fix type
                   onClick={() => toggleOpen(line.id)}
                 >
                   <div className="flex items-center gap-x-4 justify-between flex-grow">
@@ -259,7 +256,7 @@ const LinePricing = ({ line }: { line: PurchasingRFQLine }) => {
           </Tr>
         </Thead>
         <Tbody>
-          {quantities.map((qty, index) => (
+          {quantities.map((qty: any, index: any) => (
             <Tr key={index}>
               <Td className="w-[50px]">
                 <div className="w-4 h-4 border rounded" />
@@ -351,6 +348,5 @@ export default function PurchasingRFQPreview() {
     );
   }
 
-  // @ts-expect-error TS2322 - TODO: fix type
   return <RFQPreview data={data} />;
 }

@@ -26,15 +26,35 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     if (table === "jobOperation") {
-      const job = await client
+      const jobOperation = await client
         .from("jobOperation")
-        .select("*, job(id, assignee), jobMakeMethod(id, parentMaterialId)")
+        .select("id, jobId, jobMakeMethodId")
         .eq("id", id)
+        .eq("companyId", companyId)
         .single();
 
-      const jobId = job.data?.job?.id;
-      const makeMethodId = job.data?.jobMakeMethod?.id;
-      const materialId = job.data?.jobMakeMethod?.parentMaterialId;
+      const [job, jobMakeMethod] = await Promise.all([
+        jobOperation.data?.jobId
+          ? client
+              .from("job")
+              .select("id")
+              .eq("id", jobOperation.data.jobId)
+              .eq("companyId", companyId)
+              .single()
+          : { data: null },
+        jobOperation.data?.jobMakeMethodId
+          ? client
+              .from("jobMakeMethod")
+              .select("id, parentMaterialId")
+              .eq("id", jobOperation.data.jobMakeMethodId)
+              .eq("companyId", companyId)
+              .single()
+          : { data: null }
+      ]);
+
+      const jobId = job.data?.id;
+      const makeMethodId = jobMakeMethod.data?.id;
+      const materialId = jobMakeMethod.data?.parentMaterialId;
 
       id = `${jobId}:${id}:${makeMethodId}:${materialId ?? ""}`;
     }

@@ -1,7 +1,8 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, ERP_URL, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { notifyIssueCreated } from "@carbon/ee/notifications";
 import { validationError, validator } from "@carbon/form";
 import { getLocalTimeZone, today } from "@internationalized/date";
@@ -53,8 +54,6 @@ export async function action({ request }: ActionFunctionArgs) {
     create: "quality"
   });
 
-  const serviceRole = await getCarbonServiceRole();
-
   const formData = await request.formData();
   const validation = await validator(issueValidator).validate(formData);
 
@@ -63,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const nextSequence = await getNextSequence(
-    serviceRole,
+    client,
     "nonConformance",
     companyId
   );
@@ -80,7 +79,7 @@ export async function action({ request }: ActionFunctionArgs) {
   // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
   const { id, ...nonConformance } = validation.data;
 
-  const createIssue = await upsertIssue(serviceRole, {
+  const createIssue = await upsertIssue(client, {
     ...nonConformance,
     nonConformanceId: nextSequence.data,
     companyId,
@@ -103,47 +102,17 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  // Pre-associate tracked entities passed via query string (used by the
-  // "Create Issue from Inspection" button on inbound inspection lots).
-  const url = new URL(request.url);
-  const trackedEntityIdsParam = url.searchParams.get("trackedEntityIds");
-  const trackedEntityIds = trackedEntityIdsParam
-    ? trackedEntityIdsParam.split(",").filter(Boolean)
-    : [];
-  if (trackedEntityIds.length > 0) {
-    await serviceRole.from("nonConformanceTrackedEntity").insert(
-      trackedEntityIds.map((trackedEntityId) => ({
-        nonConformanceId: ncrId,
-        trackedEntityId,
-        companyId,
-        createdBy: userId
-      }))
-    );
-  }
-
-  // When the NCR is filed against a specific job operation, surface the
-  // tracked entity produced by that operation's make method onto a
-  // disposition row so the MRB can immediately scrap/rework/use-as-is it.
-  if (validation.data.jobOperationId) {
-    await autoLinkJobOperationDisposition(serviceRole, {
-      nonConformanceId: ncrId,
-      companyId,
-      userId,
-      jobOperationId: validation.data.jobOperationId
-    });
-  }
-
-  const tasks = await serviceRole.functions.invoke("create", {
+  const tasks = await invokeFunction("create", {
     body: {
       type: "nonConformanceTasks",
       id: ncrId,
       companyId,
       userId
-    }
+    },
   });
 
   if (tasks.error) {
-    await deleteIssue(serviceRole, ncrId);
+    await deleteIssue(client, ncrId);
     throw redirect(
       path.to.issue(ncrId!),
       await flash(request, error("Failed to create tasks"))
@@ -152,7 +121,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const integrations = await getCompanyIntegrations(client, companyId);
-    await notifyIssueCreated({ client, serviceRole }, integrations, {
+    await notifyIssueCreated({ client }, integrations, {
       companyId,
       userId,
       carbonUrl: `${ERP_URL}${path.to.issue(ncrId)}`,
@@ -231,7 +200,7 @@ export default function IssueNewRoute() {
 }
 
 async function autoLinkJobOperationDisposition(
-  client: Awaited<ReturnType<typeof getCarbonServiceRole>>,
+  client: DatabaseQueryClient,
   args: {
     nonConformanceId: string;
     companyId: string;
@@ -278,7 +247,9 @@ async function autoLinkJobOperationDisposition(
     .eq("nonConformanceId", nonConformanceId)
     .in("trackedEntityId", entityIds);
   const alreadyOnNcr = new Set(
-    (existingNcrLinks.data ?? []).map((r) => r.trackedEntityId as string)
+    ((existingNcrLinks.data ?? []) as { trackedEntityId: string }[]).map(
+      (r) => r.trackedEntityId
+    )
   );
   const ncrLinkRows = entityIds
     .filter((id) => !alreadyOnNcr.has(id))

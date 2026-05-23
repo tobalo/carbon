@@ -1,8 +1,11 @@
 /// <reference types="node" />
-import type { Database } from "@carbon/database";
+import type {
+  approvalDocumentTypeEnum,
+  EnumValue
+} from "@carbon/database/schema";
 import { nanoid } from "nanoid";
 
-type ApprovalDocumentType = Database["public"]["Enums"]["approvalDocumentType"];
+type ApprovalDocumentType = EnumValue<typeof approvalDocumentTypeEnum>;
 
 const API_ENDPOINT = "https://api.novu.co/v1";
 

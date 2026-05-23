@@ -6,7 +6,7 @@ import {
 } from "~/modules/inventory/lineage.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "inventory",
     bypassRls: true
   });
@@ -33,6 +33,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     client,
     trackedEntityId,
     depth,
+    companyId,
     direction
   );
   return Response.json(payload);

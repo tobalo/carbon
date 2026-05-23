@@ -8,14 +8,14 @@ import DocumentView from "~/modules/documents/ui/Documents/DocumentView";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const { client, userId } = await requirePermissions(request, {
     view: "documents"
   });
 
   const { documentId } = params;
   if (!documentId) throw notFound("documentId not found");
 
-  const document = await getDocument(client, documentId);
+  const document = await getDocument(client, documentId, userId);
 
   if (document.error) {
     throw redirect(

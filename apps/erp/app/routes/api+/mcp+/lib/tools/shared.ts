@@ -10,7 +10,6 @@ import {
   withErrorHandling,
 } from "../types";
 import {
-  approveRequest,
   canApproveRequest,
   canApproveRequestInWindow,
   cancelApprovalRequest,
@@ -28,7 +27,7 @@ import {
   getApprovalRules,
   getApprovalRulesForApprover,
   getApprovalsForUser,
-  getBase64ImageFromSupabase,
+  getBase64ImageFromStorage,
   getCountries,
   getLatestApprovalRequestForDocument,
   getModelByItemId,
@@ -50,11 +49,14 @@ import {
   updateModelThumbnail,
   upsertModelUpload,
   updateNote,
-  rejectRequest,
   upsertApprovalRule,
   upsertSavedView,
   updateSavedViewOrder,
 } from "~/modules/shared/shared.service";
+import {
+  approveRequest,
+  rejectRequest,
+} from "~/modules/shared/shared.server";
 
 export const registerSharedTools: RegisterTools = (server, ctx) => {
   server.registerTool(
@@ -62,14 +64,13 @@ export const registerSharedTools: RegisterTools = (server, ctx) => {
     {
       description: "approve request",
       inputSchema: z.object({
-      db: z.any(),
       id: z.string(),
       notes: z.string().optional(),
     }),
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await approveRequest(ctx.client, params.db, params.id, ctx.userId, params.notes);
+      const result = await approveRequest(params.id, ctx.userId, params.notes);
       return toMcpResult(result);
     }, "Failed: shared_approveRequest"),
   );
@@ -333,18 +334,18 @@ export const registerSharedTools: RegisterTools = (server, ctx) => {
   );
 
   server.registerTool(
-    "shared_getBase64ImageFromSupabase",
+    "shared_getBase64ImageFromStorage",
     {
-      description: "get base64 image from supabase",
+      description: "get base64 image from storage",
       inputSchema: z.object({
       path: z.string(),
     }),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await getBase64ImageFromSupabase(ctx.client, params.path);
+      const result = await getBase64ImageFromStorage(ctx.client, params.path);
       return toMcpResult(result);
-    }, "Failed: shared_getBase64ImageFromSupabase"),
+    }, "Failed: shared_getBase64ImageFromStorage"),
   );
 
   server.registerTool(
@@ -681,14 +682,13 @@ export const registerSharedTools: RegisterTools = (server, ctx) => {
     {
       description: "reject request",
       inputSchema: z.object({
-      db: z.any(),
       id: z.string(),
       notes: z.string().optional(),
     }),
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (params) => {
-      const result = await rejectRequest(ctx.client, params.db, params.id, ctx.userId, params.notes);
+      const result = await rejectRequest(params.id, ctx.userId, params.notes);
       return toMcpResult(result);
     }, "Failed: shared_rejectRequest"),
   );

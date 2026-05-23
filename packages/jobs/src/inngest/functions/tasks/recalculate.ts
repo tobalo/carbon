@@ -1,6 +1,8 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { FunctionsResponse } from "@supabase/functions-js";
 import { inngest } from "../../client";
+import {
+  invokeFunction,
+  type FunctionInvocationResult
+} from "../../../lib/functions";
 
 export const recalculateFunction = inngest.createFunction(
   { id: "recalculate", retries: 3 },
@@ -11,13 +13,12 @@ export const recalculateFunction = inngest.createFunction(
     const result = await step.run("recalculate", async () => {
       console.info(`Type: ${payload.type}, id: ${payload.id}`);
 
-      const serviceRole = getCarbonServiceRole();
-      let calculateQuantities: FunctionsResponse<{ success: boolean }>;
+      let calculateQuantities: FunctionInvocationResult<{ success: boolean }>;
 
       switch (payload.type) {
         case "jobRequirements":
           console.info(`Recalculating job requirements for ${payload.id}`);
-          calculateQuantities = await recalculateJobRequirements(serviceRole, {
+          calculateQuantities = await recalculateJobRequirements({
             id: payload.id,
             companyId: payload.companyId,
             userId: payload.userId
@@ -33,7 +34,6 @@ export const recalculateFunction = inngest.createFunction(
             `Recalculating job make method requirements for ${payload.id}`
           );
           calculateQuantities = await recalculateJobMakeMethodRequirements(
-            serviceRole,
             {
               id: payload.id,
               companyId: payload.companyId,
@@ -67,14 +67,13 @@ export const recalculateFunction = inngest.createFunction(
 );
 
 async function recalculateJobRequirements(
-  client: ReturnType<typeof getCarbonServiceRole>,
   params: {
     id: string;
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke("recalculate", {
+  return invokeFunction<{ success: boolean }>("recalculate", {
     body: {
       type: "jobRequirements",
       ...params
@@ -83,14 +82,13 @@ async function recalculateJobRequirements(
 }
 
 async function recalculateJobMakeMethodRequirements(
-  client: ReturnType<typeof getCarbonServiceRole>,
   params: {
     id: string;
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke("schedule", {
+  return invokeFunction<{ success: boolean }>("schedule", {
     body: {
       mode: "initial",
       direction: "backward",

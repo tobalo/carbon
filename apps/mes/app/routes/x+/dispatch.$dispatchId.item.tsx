@@ -1,14 +1,14 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
+import { invokeFunction } from "@carbon/auth/functions.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { addMaintenanceDispatchItem } from "~/services/maintenance.service";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
   const { dispatchId } = params;
 
   if (!dispatchId) {
@@ -17,8 +17,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const formData = await request.formData();
   const action = formData.get("action") as "add" | "delete";
-
-  const serviceRole = await getCarbonServiceRole();
 
   if (action === "add") {
     const itemId = formData.get("itemId") as string;
@@ -36,7 +34,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    const result = await addMaintenanceDispatchItem(serviceRole, {
+    const result = await addMaintenanceDispatchItem(client, {
       maintenanceDispatchId: dispatchId,
       itemId,
       quantity,
@@ -65,7 +63,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return data({}, await flash(request, error("Item ID is required")));
     }
 
-    const result = await serviceRole.functions.invoke("issue", {
+    const result = await invokeFunction("issue", {
       body: {
         type: "maintenanceDispatchUnissue",
         maintenanceDispatchItemId: itemId,

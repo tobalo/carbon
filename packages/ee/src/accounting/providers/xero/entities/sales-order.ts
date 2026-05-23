@@ -1,4 +1,4 @@
-import type { KyselyTx } from "@carbon/database/client";
+import { sql, type DrizzleDb } from "@carbon/database/drizzle";
 import {
   type Accounting,
   BaseEntitySyncer,
@@ -118,53 +118,49 @@ export class SalesOrderSyncer extends BaseEntitySyncer<
     if (ids.length === 0) return new Map();
 
     // Fetch order headers
-    const orderRows = await this.database
-      .selectFrom("salesOrder")
-      .select([
-        "salesOrder.id",
-        "salesOrder.salesOrderId",
-        "salesOrder.companyId",
-        "salesOrder.customerId",
-        "salesOrder.status",
-        "salesOrder.orderDate",
-        "salesOrder.currencyCode",
-        "salesOrder.exchangeRate",
-        "salesOrder.customerReference",
-        "salesOrder.updatedAt"
-      ])
-      .where("salesOrder.id", "in", ids)
-      .where("salesOrder.companyId", "=", this.companyId)
-      .execute();
+    const { rows: orderRows } = await this.database.execute<SalesOrderRow>(sql`
+      select
+        so.id,
+        so."salesOrderId",
+        so."companyId",
+        so."customerId",
+        so.status,
+        so."orderDate",
+        so."currencyCode",
+        so."exchangeRate",
+        so."customerReference",
+        so."updatedAt"
+      from "salesOrder" so
+      where so.id = any(${ids}::text[])
+        and so."companyId" = ${this.companyId}
+    `);
 
     if (orderRows.length === 0) return new Map();
 
     // Fetch order lines with item codes
-    const lineRows = await this.database
-      .selectFrom("salesOrderLine")
-      .leftJoin("item", "item.id", "salesOrderLine.itemId")
-      .leftJoin("account", "account.id", "salesOrderLine.accountId")
-      .select([
-        "salesOrderLine.id",
-        "salesOrderLine.salesOrderId",
-        "salesOrderLine.salesOrderLineType",
-        "salesOrderLine.itemId",
-        "salesOrderLine.description",
-        "salesOrderLine.saleQuantity",
-        "salesOrderLine.unitPrice",
-        "salesOrderLine.setupPrice",
-        "item.readableIdWithRevision as itemReadableIdWithRevision",
-        "account.number as accountNumber"
-      ])
-      .where(
-        "salesOrderLine.salesOrderId",
-        "in",
-        orderRows.map((r) => r.id)
-      )
-      .execute();
+    const orderIds = orderRows.map((r) => r.id);
+    const { rows: lineRows } =
+      await this.database.execute<SalesOrderLineRow>(sql`
+        select
+          sol.id,
+          sol."salesOrderId",
+          sol."salesOrderLineType",
+          sol."itemId",
+          sol.description,
+          sol."saleQuantity",
+          sol."unitPrice",
+          sol."setupPrice",
+          i."readableIdWithRevision" as "itemReadableIdWithRevision",
+          a.number as "accountNumber"
+        from "salesOrderLine" sol
+        left join item i on i.id = sol."itemId"
+        left join account a on a.id = sol."accountId"
+        where sol."salesOrderId" = any(${orderIds}::text[])
+      `);
 
     // Group lines by order ID
     const linesByOrderId = new Map<string, SalesOrderLineRow[]>();
-    for (const line of lineRows as unknown as SalesOrderLineRow[]) {
+    for (const line of lineRows) {
       const existing = linesByOrderId.get(line.salesOrderId) ?? [];
       existing.push(line);
       linesByOrderId.set(line.salesOrderId, existing);
@@ -172,7 +168,7 @@ export class SalesOrderSyncer extends BaseEntitySyncer<
 
     // Transform to Accounting.SalesOrder
     const result = new Map<string, Accounting.SalesOrder>();
-    for (const row of orderRows as unknown as SalesOrderRow[]) {
+    for (const row of orderRows) {
       const lines = linesByOrderId.get(row.id) ?? [];
 
       result.set(row.id, {
@@ -323,7 +319,7 @@ export class SalesOrderSyncer extends BaseEntitySyncer<
   // =================================================================
 
   protected async upsertLocal(
-    _tx: KyselyTx,
+    _tx: DrizzleDb,
     _data: Partial<Accounting.SalesOrder>,
     _remoteId: string
   ): Promise<string> {

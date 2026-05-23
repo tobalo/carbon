@@ -1,5 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import {
   type DocumentType,
   formatAssignmentUpdate,
@@ -13,8 +12,8 @@ import {
 } from "@carbon/ee/slack/messages";
 import { VERCEL_URL } from "@carbon/env";
 import { WebClient } from "@slack/web-api";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "../../client";
+import type { JobQueryClient } from "../../../lib/query-client";
 
 export const slackDocumentCreatedFunction = inngest.createFunction(
   { id: "slack-document-created", retries: 1 },
@@ -30,10 +29,10 @@ export const slackDocumentCreatedFunction = inngest.createFunction(
       };
 
     try {
-      const serviceRole = await getCarbonServiceRole();
+      const serviceClient = await getCarbonServiceClient();
 
       const documentData = await getDocumentData(
-        serviceRole,
+        serviceClient,
         documentType,
         documentId,
         companyId
@@ -43,18 +42,7 @@ export const slackDocumentCreatedFunction = inngest.createFunction(
         throw new Error(`${documentType} ${documentId} not found`);
       }
 
-      const { data: integration } = await serviceRole
-        .from("companyIntegration")
-        .select("metadata")
-        .eq("id", "slack")
-        .eq("companyId", companyId)
-        .single();
-
-      if (!integration?.metadata) {
-        throw new Error("Slack integration not found");
-      }
-
-      const slackToken = (integration.metadata as any)?.access_token as string;
+      const slackToken = await getActiveSlackToken(serviceClient, companyId);
       const baseUrl = VERCEL_URL || "http://localhost:3000";
 
       await postToSlackThread({
@@ -95,9 +83,9 @@ export const slackDocumentStatusUpdateFunction = inngest.createFunction(
     };
 
     try {
-      const serviceRole = await getCarbonServiceRole();
+      const serviceClient = await getCarbonServiceClient();
 
-      const { data: thread } = await serviceRole
+      const { data: thread } = await serviceClient
         .from("slackDocumentThread")
         .select("channelId, threadTs")
         .eq("documentType", documentType)
@@ -109,21 +97,10 @@ export const slackDocumentStatusUpdateFunction = inngest.createFunction(
         return { success: true, message: "No Slack thread found" };
       }
 
-      const { data: integration } = await serviceRole
-        .from("companyIntegration")
-        .select("metadata")
-        .eq("id", "slack")
-        .eq("companyId", companyId)
-        .single();
-
-      if (!integration?.metadata) {
-        throw new Error("Slack integration not found");
-      }
-
-      const slackToken = (integration.metadata as any).access_token as string;
+      const slackToken = await getActiveSlackToken(serviceClient, companyId);
 
       const documentData = await getDocumentData(
-        serviceRole,
+        serviceClient,
         documentType,
         documentId,
         companyId
@@ -187,9 +164,9 @@ export const slackDocumentTaskUpdateFunction = inngest.createFunction(
     };
 
     try {
-      const serviceRole = await getCarbonServiceRole();
+      const serviceClient = await getCarbonServiceClient();
 
-      const { data: thread } = await serviceRole
+      const { data: thread } = await serviceClient
         .from("slackDocumentThread")
         .select("channelId, threadTs")
         .eq("documentType", documentType)
@@ -201,21 +178,10 @@ export const slackDocumentTaskUpdateFunction = inngest.createFunction(
         return { success: true, message: "No Slack thread found" };
       }
 
-      const { data: integration } = await serviceRole
-        .from("companyIntegration")
-        .select("metadata")
-        .eq("id", "slack")
-        .eq("companyId", companyId)
-        .single();
-
-      if (!integration?.metadata) {
-        throw new Error("Slack integration not found");
-      }
-
-      const slackToken = (integration.metadata as any).access_token as string;
+      const slackToken = await getActiveSlackToken(serviceClient, companyId);
 
       const documentData = await getDocumentData(
-        serviceRole,
+        serviceClient,
         documentType,
         documentId,
         companyId
@@ -276,9 +242,9 @@ export const slackDocumentAssignmentUpdateFunction = inngest.createFunction(
     };
 
     try {
-      const serviceRole = await getCarbonServiceRole();
+      const serviceClient = await getCarbonServiceClient();
 
-      const { data: thread } = await serviceRole
+      const { data: thread } = await serviceClient
         .from("slackDocumentThread")
         .select("channelId, threadTs")
         .eq("documentType", documentType)
@@ -290,21 +256,10 @@ export const slackDocumentAssignmentUpdateFunction = inngest.createFunction(
         return { success: true, message: "No Slack thread found" };
       }
 
-      const { data: integration } = await serviceRole
-        .from("companyIntegration")
-        .select("metadata")
-        .eq("id", "slack")
-        .eq("companyId", companyId)
-        .single();
-
-      if (!integration?.metadata) {
-        throw new Error("Slack integration not found");
-      }
-
-      const slackToken = (integration.metadata as any).access_token as string;
+      const slackToken = await getActiveSlackToken(serviceClient, companyId);
 
       const documentData = await getDocumentData(
-        serviceRole,
+        serviceClient,
         documentType,
         documentId,
         companyId
@@ -342,15 +297,46 @@ export const slackDocumentAssignmentUpdateFunction = inngest.createFunction(
   }
 );
 
+async function getActiveSlackToken(
+  serviceClient: JobQueryClient,
+  companyId: string
+) {
+  const [company, integration] = await Promise.all([
+    serviceClient
+      .from("company")
+      .select("id, active")
+      .eq("id", companyId)
+      .eq("active", true)
+      .single(),
+    serviceClient
+      .from("companyIntegration")
+      .select("metadata")
+      .eq("id", "slack")
+      .eq("companyId", companyId)
+      .eq("active", true)
+      .single()
+  ]);
+
+  if (company.error || !company.data) {
+    throw new Error("Active company not found");
+  }
+
+  if (integration.error || !integration.data?.metadata) {
+    throw new Error("Active Slack integration not found");
+  }
+
+  return (integration.data.metadata as any).access_token as string;
+}
+
 async function getDocumentData(
-  serviceRole: SupabaseClient<Database>,
+  serviceClient: JobQueryClient,
   documentType: DocumentType,
   documentId: string,
   companyId: string
 ): Promise<any | null> {
   switch (documentType) {
     case "nonConformance": {
-      const { data } = await serviceRole
+      const { data } = await serviceClient
         .from("nonConformance")
         .select("*")
         .eq("id", documentId)
@@ -373,7 +359,7 @@ async function getDocumentData(
     }
 
     case "quote": {
-      const { data } = await serviceRole
+      const { data } = await serviceClient
         .from("quote")
         .select("id, quoteId, customerReference, status, createdBy, createdAt")
         .eq("id", documentId)
@@ -395,7 +381,7 @@ async function getDocumentData(
     }
 
     case "salesOrder": {
-      const { data } = await serviceRole
+      const { data } = await serviceClient
         .from("salesOrder")
         .select(
           "id, salesOrderId, customerReference, status, createdBy, createdAt"
@@ -419,7 +405,7 @@ async function getDocumentData(
     }
 
     case "job": {
-      const { data } = await serviceRole
+      const { data } = await serviceClient
         .from("job")
         .select("id, jobId, status, createdBy, createdAt")
         .eq("id", documentId)

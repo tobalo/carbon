@@ -31,7 +31,7 @@ import {
 import { getItemReadableId } from "@carbon/utils";
 import { getLocalTimeZone, today } from "@internationalized/date";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect, useMemo, useState } from "react";
 import { LuBox, LuReceipt } from "react-icons/lu";
 import { useFetcher, useParams } from "react-router";
@@ -891,7 +891,7 @@ function JobOperationSelect(initialValues: { jobId?: string }) {
   );
 
   const jobsFetcher =
-    useFetcher<PostgrestResponse<{ id: string; jobId: string }>>();
+    useFetcher<QueryResponse<{ id: string; jobId: string }>>();
   useMount(() => {
     jobsFetcher.load(path.to.api.jobs);
   });
@@ -908,7 +908,7 @@ function JobOperationSelect(initialValues: { jobId?: string }) {
   );
 
   const jobOperationFetcher =
-    useFetcher<PostgrestResponse<{ id: string; description: string }>>();
+    useFetcher<QueryResponse<{ id: string; description: string }>>();
   // biome-ignore lint/correctness/useExhaustiveDependencies: suppressed due to migration
   useEffect(() => {
     if (jobId) {

@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
@@ -26,10 +25,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     throw new Error("Invalid orderId or lineId");
   }
 
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "production"
   });
-  const serviceRole = getCarbonServiceRole();
 
   const formData = await request.formData();
   const validation = await validator(salesOrderToJobValidator).validate(
@@ -45,8 +43,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
   let leadTime = 7;
   if (useNextSequence) {
     const [nextSequence, manufacturing] = await Promise.all([
-      getNextSequence(serviceRole, "job", companyId),
-      getItemReplenishment(serviceRole, validation.data.itemId, companyId)
+      getNextSequence(client, "job", companyId),
+      getItemReplenishment(client, validation.data.itemId, companyId)
     ]);
     if (nextSequence.error) {
       throw redirect(
@@ -61,7 +59,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     leadTime = manufacturing.data?.leadTime ?? 7;
   } else {
     const manufacturing = await getItemReplenishment(
-      serviceRole,
+      client,
       validation.data.itemId,
       companyId
     );
@@ -72,13 +70,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const { id: _id, ...d } = validation.data;
 
   const storageUnitId = await getDefaultStorageUnitForJob(
-    serviceRole,
+    client,
     validation.data.itemId,
     validation.data.locationId,
     companyId
   );
 
-  const createJob = await upsertJob(serviceRole, {
+  const createJob = await upsertJob(client, {
     ...d,
     jobId,
     storageUnitId: storageUnitId ?? undefined,
@@ -100,7 +98,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (validation.data.quoteId && validation.data.quoteLineId) {
-    const upsertMethod = await upsertJobMethod(serviceRole, "quoteLineToJob", {
+    const upsertMethod = await upsertJobMethod(client, "quoteLineToJob", {
       sourceId: `${d.quoteId}:${d.quoteLineId}`,
       targetId: id,
       companyId,
@@ -118,7 +116,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
   } else {
-    const upsertMethod = await upsertJobMethod(serviceRole, "itemToJob", {
+    const upsertMethod = await upsertJobMethod(client, "itemToJob", {
       sourceId: d.itemId,
       targetId: id,
       companyId,

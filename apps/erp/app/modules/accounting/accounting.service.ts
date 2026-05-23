@@ -1,11 +1,18 @@
-import type { Database, Json } from "@carbon/database";
+import type {
+  Json,
+  QueryDatabase,
+  EnumValue,
+  glAccountClassEnum,
+  glIncomeBalanceEnum,
+  journalEntrySourceTypeEnum
+} from "@carbon/database/schema";
 import { getDateNYearsAgo, toStoredAmount } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { z } from "zod";
 import { getNextSequence } from "~/modules/settings";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import type {
   accountValidator,
   costCenterValidator,
@@ -106,7 +113,7 @@ function applyRootSignCorrection<
 }
 
 export async function getTrialBalance(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   companyId: string | null,
   args: {
@@ -124,7 +131,7 @@ export async function getTrialBalance(
 }
 
 export async function getFinancialStatementBalances(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   companyId: string | null,
   args: {
@@ -183,7 +190,7 @@ export async function getFinancialStatementBalances(
 }
 
 export async function getCompaniesInGroup(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string
 ) {
   return client
@@ -196,14 +203,14 @@ export async function getCompaniesInGroup(
 }
 
 export async function deleteAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   accountId: string
 ) {
   return client.from("account").delete().eq("id", accountId);
 }
 
 export async function deletePaymentTerm(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   paymentTermId: string
 ) {
   return client
@@ -213,14 +220,14 @@ export async function deletePaymentTerm(
 }
 
 export async function getAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   accountId: string
 ) {
   return client.from("account").select("*").eq("id", accountId).single();
 }
 
 export async function getAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -245,12 +252,12 @@ export async function getAccounts(
 }
 
 export async function getAccountsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   args?: {
     isGroup?: boolean | null;
-    incomeBalance?: Database["public"]["Enums"]["glIncomeBalance"] | null;
-    classes?: Database["public"]["Enums"]["glAccountClass"][];
+    incomeBalance?: EnumValue<typeof glIncomeBalanceEnum> | null;
+    classes?: EnumValue<typeof glAccountClassEnum>[];
   }
 ) {
   let query = client
@@ -276,7 +283,7 @@ export async function getAccountsList(
 }
 
 export async function getGroupAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string
 ) {
   return client
@@ -289,7 +296,7 @@ export async function getGroupAccounts(
 }
 
 export async function getBaseCurrency(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   const { data: company, error } = await client
@@ -315,7 +322,7 @@ export async function getBaseCurrency(
 }
 
 export async function getChartOfAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   args: {
     incomeBalance: "Income Statement" | "Balance Sheet" | null;
@@ -377,18 +384,40 @@ export async function getChartOfAccounts(
 }
 
 export async function getCurrency(
-  client: SupabaseClient<Database>,
-  currencyId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  currencyId: string,
+  companyGroupId: string
 ) {
-  return client
+  const currency = await client
     .from("currency")
-    .select("*, currencyCode!inner(name)")
+    .select("*")
     .eq("id", currencyId)
+    .eq("companyGroupId", companyGroupId)
     .single();
+
+  if (currency.error || !currency.data) return currency;
+
+  const currencyCode = await client
+    .from("currencyCode")
+    .select("name")
+    .eq("code", currency.data.code)
+    .single();
+
+  if (currencyCode.error || !currencyCode.data) {
+    return { ...currency, data: null, error: currencyCode.error };
+  }
+
+  return {
+    ...currency,
+    data: {
+      ...currency.data,
+      currencyCode: currencyCode.data
+    }
+  };
 }
 
 export async function getCurrencyByCode(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   currencyCode: string
 ) {
@@ -401,7 +430,7 @@ export async function getCurrencyByCode(
 }
 
 export async function getCurrencies(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -422,7 +451,7 @@ export async function getCurrencies(
   return query;
 }
 
-export async function getCurrenciesList(client: SupabaseClient<Database>) {
+export async function getCurrenciesList(client: CarbonDatabaseClient<QueryDatabase>) {
   return client
     .from("currencyCode")
     .select("code, name")
@@ -430,7 +459,7 @@ export async function getCurrenciesList(client: SupabaseClient<Database>) {
 }
 
 export async function getCurrentAccountingPeriod(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   date: string
 ) {
@@ -444,7 +473,7 @@ export async function getCurrentAccountingPeriod(
 }
 
 export async function getDefaultAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -455,7 +484,7 @@ export async function getDefaultAccounts(
 }
 
 export async function getFiscalYearSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -466,18 +495,20 @@ export async function getFiscalYearSettings(
 }
 
 export async function getPaymentTerm(
-  client: SupabaseClient<Database>,
-  paymentTermId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  paymentTermId: string,
+  companyId?: string
 ) {
-  return client
+  let query = client
     .from("paymentTerm")
     .select("*")
-    .eq("id", paymentTermId)
-    .single();
+    .eq("id", paymentTermId);
+  if (companyId) query = query.eq("companyId", companyId);
+  return query.single();
 }
 
 export async function getPaymentTerms(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -502,7 +533,7 @@ export async function getPaymentTerms(
 }
 
 export async function getPaymentTermsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -514,7 +545,7 @@ export async function getPaymentTermsList(
 }
 
 export async function updateDefaultBalanceSheetAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   defaultAccounts: z.infer<typeof defaultBalanceSheetAccountValidator> & {
     companyId: string;
     updatedBy: string;
@@ -527,7 +558,7 @@ export async function updateDefaultBalanceSheetAccounts(
 }
 
 export async function updateDefaultIncomeAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   defaultAccounts: z.infer<typeof defaultIncomeAcountValidator> & {
     companyId: string;
     updatedBy: string;
@@ -540,7 +571,7 @@ export async function updateDefaultIncomeAccounts(
 }
 
 export async function updateFiscalYearSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   fiscalYearSettings: z.infer<typeof fiscalYearSettingsValidator> & {
     companyId: string;
     updatedBy: string;
@@ -553,7 +584,7 @@ export async function updateFiscalYearSettings(
 }
 
 export async function upsertAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   account:
     | (Omit<z.infer<typeof accountValidator>, "id"> & {
         companyGroupId: string;
@@ -578,7 +609,7 @@ export async function upsertAccount(
 }
 
 export async function upsertCurrency(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   currency:
     | (Omit<z.infer<typeof currencyValidator>, "id"> & {
         companyGroupId: string;
@@ -604,7 +635,7 @@ export async function upsertCurrency(
 }
 
 export async function upsertPaymentTerm(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   paymentTerm:
     | (Omit<z.infer<typeof paymentTermValidator>, "id"> & {
         companyId: string;
@@ -633,21 +664,21 @@ export async function upsertPaymentTerm(
 }
 
 export async function deleteCostCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   costCenterId: string
 ) {
   return client.from("costCenter").delete().eq("id", costCenterId);
 }
 
 export async function getCostCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   costCenterId: string
 ) {
   return client.from("costCenter").select("*").eq("id", costCenterId).single();
 }
 
 export async function getCostCenters(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -670,7 +701,7 @@ export async function getCostCenters(
 }
 
 export async function getCostCentersList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -681,7 +712,7 @@ export async function getCostCentersList(
 }
 
 export async function getCostCentersTree(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -694,7 +725,7 @@ export async function getCostCentersTree(
 }
 
 export async function upsertCostCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   costCenter:
     | (Omit<z.infer<typeof costCenterValidator>, "id"> & {
         companyId: string;
@@ -719,7 +750,7 @@ export async function upsertCostCenter(
 }
 
 export async function getDimensions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -727,7 +758,7 @@ export async function getDimensions(
 ) {
   let query = client
     .from("dimension")
-    .select("*, dimensionValue(id, name)", {
+    .select("*", {
       count: "exact"
     })
     .eq("companyGroupId", companyGroupId)
@@ -740,22 +771,81 @@ export async function getDimensions(
   query = setGenericQueryFilters(query, args, [
     { column: "name", ascending: true }
   ]);
-  return query;
+  const dimensions = await query;
+  if (dimensions.error || !dimensions.data) return dimensions;
+
+  const dimensionIds = dimensions.data.map((dimension) => dimension.id);
+  const dimensionValues =
+    dimensionIds.length > 0
+      ? await client
+          .from("dimensionValue")
+          .select("id, name, dimensionId")
+          .in("dimensionId", dimensionIds)
+          .eq("companyGroupId", companyGroupId)
+      : { data: [], error: null };
+
+  if (dimensionValues.error) {
+    return { ...dimensions, data: [], error: dimensionValues.error };
+  }
+
+  const valuesByDimensionId = new Map<string, any[]>();
+  (dimensionValues.data ?? []).forEach((dimensionValue) => {
+    const values = valuesByDimensionId.get(dimensionValue.dimensionId) ?? [];
+    values.push(dimensionValue);
+    valuesByDimensionId.set(dimensionValue.dimensionId, values);
+  });
+
+  return {
+    ...dimensions,
+    data: dimensions.data.map((dimension) => ({
+      ...dimension,
+      dimensionValue: valuesByDimensionId.get(dimension.id) ?? []
+    }))
+  };
 }
 
 export async function getDimension(
-  client: SupabaseClient<Database>,
-  dimensionId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  dimensionId: string,
+  companyGroupId: string
 ) {
-  return client
+  const dimension = await client
     .from("dimension")
-    .select("*, dimensionValue(id, name)")
+    .select("*")
     .eq("id", dimensionId)
     .single();
+
+  if (dimension.error || !dimension.data) return dimension;
+
+  if (dimension.data.companyGroupId !== companyGroupId) {
+    return {
+      ...dimension,
+      data: null,
+      error: { message: "Dimension not found" }
+    };
+  }
+
+  const dimensionValues = await client
+    .from("dimensionValue")
+    .select("id, name")
+    .eq("dimensionId", dimensionId)
+    .eq("companyGroupId", companyGroupId);
+
+  if (dimensionValues.error) {
+    return { ...dimension, data: null, error: dimensionValues.error };
+  }
+
+  return {
+    ...dimension,
+    data: {
+      ...dimension.data,
+      dimensionValue: dimensionValues.data ?? []
+    }
+  };
 }
 
 export async function upsertDimension(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dimension:
     | (Omit<z.infer<typeof dimensionValidator>, "id" | "dimensionValues"> & {
         companyGroupId: string;
@@ -832,7 +922,7 @@ export async function upsertDimension(
 }
 
 export async function deleteDimension(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   dimensionId: string
 ) {
   return client
@@ -842,7 +932,7 @@ export async function deleteDimension(
 }
 
 export async function getActiveDimensionsWithValues(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   companyId: string
 ) {
@@ -918,7 +1008,7 @@ export async function getActiveDimensionsWithValues(
 }
 
 function getEntityDimensionValues(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   entityType: string,
   companyId: string
 ) {
@@ -974,7 +1064,7 @@ function getEntityDimensionValues(
 }
 
 export async function getJournalLineDimensions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   journalLineIds: string[]
 ) {
   if (journalLineIds.length === 0) {
@@ -1064,7 +1154,7 @@ export async function getJournalLineDimensions(
 }
 
 function getEntityValuesByIds(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   entityType: string,
   ids: string[]
 ) {
@@ -1092,7 +1182,7 @@ function getEntityValuesByIds(
 }
 
 export async function saveJournalLineDimensions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   journalLineId: string,
   companyId: string,
   dimensions: Array<{ dimensionId: string; valueId: string }>
@@ -1117,7 +1207,7 @@ export async function saveJournalLineDimensions(
 }
 
 export async function translateCompanyBalances(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   companyId: string,
   targetCurrency: string,
@@ -1173,7 +1263,7 @@ export async function translateCompanyBalances(
 }
 
 export async function getConsolidatedBalances(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   companyIds: string[],
   targetCurrency: string,
@@ -1191,12 +1281,13 @@ export async function getConsolidatedBalances(
     .eq("active", true);
 
   const groupCompanies = allGroupCompanies ?? [];
-  const selectedSet = new Set(companyIds);
+  const companyById = new Map(groupCompanies.map((c) => [c.id, c]));
+  const selectedCompanyIds = companyIds.filter((id) => companyById.has(id));
+  const selectedSet = new Set(selectedCompanyIds);
 
   // Collect all ancestors of selected companies
   const ancestors = new Set<string>();
-  const companyById = new Map(groupCompanies.map((c) => [c.id, c]));
-  for (const id of companyIds) {
+  for (const id of selectedCompanyIds) {
     let current = companyById.get(id);
     while (current?.parentCompanyId) {
       ancestors.add(current.parentCompanyId);
@@ -1216,7 +1307,7 @@ export async function getConsolidatedBalances(
     .map((c) => c.id);
 
   // All companies whose balances we need (operating + elimination entities)
-  const allIds = [...companyIds, ...eliminationIds];
+  const allIds = [...selectedCompanyIds, ...eliminationIds];
 
   // Get balances for all companies and translate to target currency
   const [allBalances, translations] = await Promise.all([
@@ -1310,7 +1401,7 @@ export async function getConsolidatedBalances(
   // Use the first company's account structure as the base (shared chart of accounts)
   const baseAccounts = allBalances.find((r) => r.data)?.data ?? [];
 
-  const consolidated = baseAccounts.map((account) => {
+  const consolidated = baseAccounts.map((account: any) => {
     const summed = accountMap.get(account.id);
     return {
       ...account,
@@ -1328,7 +1419,7 @@ export async function getConsolidatedBalances(
 // -- Intercompany --
 
 export async function getIntercompanyTransactions(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   args: GenericQueryFilters & { status: string | null }
 ) {
@@ -1351,7 +1442,7 @@ export async function getIntercompanyTransactions(
 }
 
 export async function createIntercompanyTransaction(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   input: z.infer<typeof intercompanyTransactionValidator> & {
     companyGroupId: string;
     userId: string;
@@ -1359,6 +1450,45 @@ export async function createIntercompanyTransaction(
 ) {
   const today = new Date().toISOString().split("T")[0];
   const postingDate = input.postingDate || today;
+  const now = new Date().toISOString();
+  const companyIds = [
+    ...new Set([input.sourceCompanyId, input.targetCompanyId])
+  ];
+  const accountIds = [
+    ...new Set([input.debitAccountId, input.creditAccountId])
+  ];
+
+  const companies = await client
+    .from("company")
+    .select("id")
+    .in("id", companyIds)
+    .eq("companyGroupId", input.companyGroupId);
+
+  if (companies.error) return companies;
+  if ((companies.data ?? []).length !== companyIds.length) {
+    return {
+      data: null,
+      error: {
+        message: "Intercompany companies must belong to this company group"
+      }
+    };
+  }
+
+  const accounts = await client
+    .from("account")
+    .select("id")
+    .in("id", accountIds)
+    .eq("companyGroupId", input.companyGroupId);
+
+  if (accounts.error) return accounts;
+  if ((accounts.data ?? []).length !== accountIds.length) {
+    return {
+      data: null,
+      error: {
+        message: "Intercompany accounts must belong to this company group"
+      }
+    };
+  }
 
   const nextSequence = await getNextSequence(
     client,
@@ -1371,10 +1501,16 @@ export async function createIntercompanyTransaction(
   const journal = await client
     .from("journal")
     .insert({
+      id: crypto.randomUUID(),
       journalEntryId: nextSequence.data,
       description: `IC: ${input.description}`,
       companyId: input.sourceCompanyId,
-      postingDate
+      postingDate,
+      status: "Posted",
+      postedAt: now,
+      postedBy: input.userId,
+      createdAt: now,
+      createdBy: input.userId
     })
     .select("id")
     .single();
@@ -1389,6 +1525,7 @@ export async function createIntercompanyTransaction(
     .from("journalLine")
     .insert([
       {
+        id: crypto.randomUUID(),
         journalId,
         accountId: input.debitAccountId,
         description: input.description,
@@ -1396,9 +1533,12 @@ export async function createIntercompanyTransaction(
         journalLineReference: journalLineRef,
         intercompanyPartnerId: input.targetCompanyId,
         companyId: input.sourceCompanyId,
-        companyGroupId: input.companyGroupId
+        createdAt: now,
+        accrual: false,
+        quantity: 0
       },
       {
+        id: crypto.randomUUID(),
         journalId,
         accountId: input.creditAccountId,
         description: input.description,
@@ -1406,17 +1546,26 @@ export async function createIntercompanyTransaction(
         journalLineReference: journalLineRef,
         intercompanyPartnerId: input.targetCompanyId,
         companyId: input.sourceCompanyId,
-        companyGroupId: input.companyGroupId
+        createdAt: now,
+        accrual: false,
+        quantity: 0
       }
     ])
     .select("id");
 
   if (journalLines.error) return journalLines;
+  if (!journalLines.data?.[0]?.id) {
+    return {
+      data: null,
+      error: { message: "Failed to create intercompany journal lines" }
+    };
+  }
 
   // Create intercompany transaction record
   return client
     .from("intercompanyTransaction")
     .insert({
+      id: crypto.randomUUID(),
       companyGroupId: input.companyGroupId,
       sourceCompanyId: input.sourceCompanyId,
       targetCompanyId: input.targetCompanyId,
@@ -1424,14 +1573,15 @@ export async function createIntercompanyTransaction(
       amount: input.amount,
       currencyCode: input.currencyCode,
       description: input.description,
-      status: "Unmatched"
+      status: "Unmatched",
+      createdAt: now
     })
     .select("id")
     .single();
 }
 
 export async function runIntercompanyMatching(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string
 ) {
   return client.rpc("matchIntercompanyTransactions", {
@@ -1440,7 +1590,7 @@ export async function runIntercompanyMatching(
 }
 
 export async function generateEliminations(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   userId: string
 ) {
@@ -1451,7 +1601,7 @@ export async function generateEliminations(
 }
 
 export async function getIntercompanyBalance(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string
 ) {
   return client.rpc("getIntercompanyBalance", {
@@ -1460,7 +1610,7 @@ export async function getIntercompanyBalance(
 }
 
 export async function getExchangeRateHistory(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyGroupId: string,
   currencyCode: string
 ) {
@@ -1482,7 +1632,7 @@ export async function getExchangeRateHistory(
 // amount > 0 = debit, amount < 0 = credit.
 
 export async function getJournalEntries(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & { search: string | null; status: string | null }
 ) {
@@ -1509,21 +1659,68 @@ export async function getJournalEntries(
 }
 
 export async function getJournalEntry(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId: string
 ) {
-  return client
+  const journal = await client
     .from("journal")
-    .select("*, journalLine(*, account!journalLine_accountId_fkey(class))")
+    .select("*")
     .eq("id", id)
+    .eq("companyId", companyId)
     .single();
+
+  if (journal.error || !journal.data) return journal;
+
+  const journalLines = await client
+    .from("journalLine")
+    .select("*")
+    .eq("journalId", id)
+    .eq("companyId", companyId);
+
+  if (journalLines.error) {
+    return { ...journal, data: null, error: journalLines.error };
+  }
+
+  const accountIds = Array.from(
+    new Set(
+      (journalLines.data ?? []).map((line) => line.accountId).filter(Boolean)
+    )
+  );
+  const accounts =
+    accountIds.length > 0
+      ? await client
+          .from("account")
+          .select("id, class")
+          .in("id", accountIds)
+          .eq("companyId", companyId)
+      : { data: [], error: null };
+
+  if (accounts.error) {
+    return { ...journal, data: null, error: accounts.error };
+  }
+
+  const accountsById = new Map(
+    (accounts.data ?? []).map((account) => [account.id, account])
+  );
+
+  return {
+    ...journal,
+    data: {
+      ...journal.data,
+      journalLine: (journalLines.data ?? []).map((line) => ({
+        ...line,
+        account: accountsById.get(line.accountId) ?? null
+      }))
+    }
+  };
 }
 
 export async function createJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   data: z.infer<typeof journalEntryValidator> & {
     journalEntryId: string;
-    sourceType: Database["public"]["Enums"]["journalEntrySourceType"];
+    sourceType: EnumValue<typeof journalEntrySourceTypeEnum>;
     companyId: string;
     createdBy: string;
   }
@@ -1540,7 +1737,7 @@ export async function createJournalEntry(
 }
 
 export async function updateJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   data: z.infer<typeof journalEntryValidator> & {
     updatedBy: string;
@@ -1555,14 +1752,14 @@ export async function updateJournalEntry(
 }
 
 export async function deleteJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("journal").delete().eq("id", id).eq("status", "Draft");
 }
 
 export async function upsertJournalEntryLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   data:
     | (z.infer<typeof journalEntryLineValidator> & {
         journalId: string;
@@ -1622,14 +1819,14 @@ export async function upsertJournalEntryLine(
 }
 
 export async function deleteJournalEntryLine(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string
 ) {
   return client.from("journalLine").delete().eq("id", id);
 }
 
 export async function saveJournalEntryWithLines(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   data: {
     journalEntryId: string;
     postingDate: string;
@@ -1740,12 +1937,13 @@ export async function saveJournalEntryWithLines(
 }
 
 export async function postJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
+  companyId: string,
   userId: string
 ) {
   // 1. Fetch entry + lines
-  const entry = await getJournalEntry(client, id);
+  const entry = await getJournalEntry(client, id, companyId);
   if (entry.error) return entry;
   if (entry.data.status !== "Draft") {
     return {
@@ -1760,7 +1958,7 @@ export async function postJournalEntry(
   }
 
   // 2. Validate balance (sum of amounts should be 0)
-  const total = lines.reduce((sum, l) => sum + Number(l.amount), 0);
+  const total = lines.reduce((sum: any, l: any) => sum + Number(l.amount), 0);
 
   if (Math.abs(total) > 0.001) {
     return {
@@ -1779,12 +1977,13 @@ export async function postJournalEntry(
       updatedBy: userId
     })
     .eq("id", id)
+    .eq("companyId", companyId)
     .select("id")
     .single();
 }
 
 export async function reverseJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   id: string,
   data: {
     journalEntryId: string;
@@ -1793,7 +1992,7 @@ export async function reverseJournalEntry(
   }
 ) {
   // 1. Fetch original
-  const original = await getJournalEntry(client, id);
+  const original = await getJournalEntry(client, id, data.companyId);
   if (original.error) return original;
   if (original.data.status !== "Posted") {
     return {
@@ -1823,7 +2022,7 @@ export async function reverseJournalEntry(
   if (reversed.error) return reversed;
 
   // 3. Copy lines with negated amounts
-  const lines = (original.data.journalLine ?? []).map((line) => ({
+  const lines = (original.data.journalLine ?? []).map((line: any) => ({
     journalId: reversed.data.id,
     accountId: line.accountId,
     companyId: line.companyId,
@@ -1845,7 +2044,8 @@ export async function reverseJournalEntry(
       reversedById: reversed.data.id,
       updatedBy: data.userId
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("companyId", data.companyId);
 
   if (updateResult.error) return updateResult;
 

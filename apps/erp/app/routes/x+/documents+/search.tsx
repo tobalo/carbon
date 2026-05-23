@@ -38,6 +38,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       favorite,
       recent,
       createdBy,
+      userId,
       active,
       limit,
       offset,

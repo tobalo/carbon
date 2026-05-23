@@ -72,7 +72,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let expiredItemIds = new Set<string>();
   if (nearExpiryWarningDays !== null && materials.data) {
     const itemIds = materials.data
-      .map((m) => m.jobMaterialItemId)
+      .map((m: any) => m.jobMaterialItemId)
       .filter(Boolean) as string[];
     if (itemIds.length > 0) {
       const todayStr = today(getLocalTimeZone()).toString();
@@ -93,7 +93,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   return {
     count: materials.count ?? 0,
-    materials: (materials.data ?? []).map((m) => ({
+    materials: (materials.data ?? []).map((m: any) => ({
       ...m,
       hasExpiredBatch: expiredItemIds.has(m.jobMaterialItemId ?? "")
     })),

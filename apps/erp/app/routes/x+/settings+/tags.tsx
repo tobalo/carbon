@@ -10,7 +10,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const value = formData.getAll("value");
 
   const result = await client
-    // @ts-expect-error
     .from(table as string)
     .update({
       tags: value,

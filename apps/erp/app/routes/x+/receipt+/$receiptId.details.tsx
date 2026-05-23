@@ -1,6 +1,6 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -53,10 +53,9 @@ export async function action({ request }: ActionFunctionArgs) {
     currentReceipt.data.locationId !== d.locationId;
 
   if (receiptDataHasChanged) {
-    const serviceRole = getCarbonServiceRole();
     switch (d.sourceDocument) {
       case "Purchase Order":
-        const purchaseOrderReceipt = await serviceRole.functions.invoke<{
+        const purchaseOrderReceipt = await invokeFunction<{
           id: string;
         }>("create", {
           body: {
@@ -80,7 +79,7 @@ export async function action({ request }: ActionFunctionArgs) {
         break;
 
       case "Inbound Transfer":
-        const warehouseTransferReceipt = await serviceRole.functions.invoke<{
+        const warehouseTransferReceipt = await invokeFunction<{
           id: string;
         }>("create", {
           body: {

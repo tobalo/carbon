@@ -6,14 +6,14 @@
 
 **Architecture:** Unify MTO and MTS job completion paths so both call `complete_job_to_inventory()`. This creates cost layers in `costLedger` and itemLedger entries for the finished good. Then remove the `continue` statements in `post-shipment/index.ts` so MTO shipment lines go through the same COGS/inventory posting as regular lines.
 
-**Tech Stack:** PostgreSQL (PL/pgSQL migrations), TypeScript (Deno edge functions)
+**Tech Stack:** PostgreSQL (PL/pgSQL migrations), TypeScript (Node route handlers)
 
 ---
 
 ### Task 1: New migration — unify `sync_finish_job_operation` for MTO and MTS
 
 **Files:**
-- Create: `packages/database/supabase/migrations/20260512120000_mto-shipment-cogs.sql`
+- Create: `packages/database/drizzle/<new-migration>.sql`
 
 The current `sync_finish_job_operation` trigger (defined in `20260511120000_backflush-job-materials.sql:860-935`) branches on `v_sales_order_id IS NOT NULL`. MTO jobs only call `backflush_job_materials()`, while MTS jobs call `complete_job_to_inventory()` (which internally calls `backflush_job_materials()`). We need MTO to also call `complete_job_to_inventory()`.
 
@@ -104,13 +104,13 @@ $$;
 
 - [ ] **Step 2: Verify migration syntax**
 
-Run: `cd /Users/barbinbrad/Code/carbon && grep -c "CREATE OR REPLACE FUNCTION sync_finish_job_operation" packages/database/supabase/migrations/20260512120000_mto-shipment-cogs.sql`
+Run: `grep -c "CREATE OR REPLACE FUNCTION sync_finish_job_operation" packages/database/drizzle/<new-migration>.sql`
 Expected: `1`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/database/supabase/migrations/20260512120000_mto-shipment-cogs.sql
+git add packages/database/drizzle/<new-migration>.sql
 git commit -m "feat: unify MTO/MTS job completion to both call complete_job_to_inventory
 
 Previously MTO jobs only called backflush_job_materials(), skipping cost
@@ -125,13 +125,13 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ### Task 2: Remove `continue` in post-shipment posting flow
 
 **Files:**
-- Modify: `packages/database/supabase/functions/post-shipment/index.ts:322`
+- Modify: `packages/database/src/post-shipment.ts`
 
 The `continue` on line 322 causes MTO shipment lines (fulfillment type "Job") to skip all downstream processing: itemLedger creation, COGS journal entries, cost layer consumption. After Task 1, MTO finished goods will have proper cost layers, so we can let them flow through the normal COGS path.
 
 - [ ] **Step 1: Remove the `continue` statement**
 
-In `packages/database/supabase/functions/post-shipment/index.ts`, delete line 322 (`continue;`). The job update block (lines 215-321) should still run, but then fall through to the itemLedger/COGS code below instead of skipping it.
+In `packages/database/src/post-shipment.ts`, delete the `continue;` in the posting path. The job update block should still run, but then fall through to the itemLedger/COGS code below instead of skipping it.
 
 The change is deleting this single line:
 ```typescript
@@ -143,14 +143,14 @@ After the closing brace of the job update block on line 321 (`}`), the code shou
 
 - [ ] **Step 2: Verify the change**
 
-Run: `grep -n "continue;" packages/database/supabase/functions/post-shipment/index.ts | head -5`
+Run: `grep -n "continue;" packages/database/src/post-shipment.ts | head -5`
 
 The `continue` that was on line 322 should no longer appear in the posting section (lines 210-460). There may still be a `continue` in the void section — that's Task 3.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/database/supabase/functions/post-shipment/index.ts
+git add packages/database/src/post-shipment.ts
 git commit -m "feat: enable COGS posting for MTO shipment lines
 
 Remove continue statement that skipped itemLedger, COGS journal entries,
@@ -164,13 +164,13 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ### Task 3: Remove `continue` in post-shipment void flow
 
 **Files:**
-- Modify: `packages/database/supabase/functions/post-shipment/index.ts:1753`
+- Modify: `packages/database/src/post-shipment.ts`
 
 The void flow has the same issue: MTO shipment lines skip inventory restoration and COGS reversal journal entries.
 
 - [ ] **Step 1: Remove the `continue` statement in the void section**
 
-In `packages/database/supabase/functions/post-shipment/index.ts`, delete the `continue;` on line 1753 (this line number may have shifted by -1 after Task 2). It's inside the void flow's job update block, after `jobUpdates[jobId] = { ... }` on line 1747-1751.
+In `packages/database/src/post-shipment.ts`, delete the `continue;` inside the void flow's job update block.
 
 The change is deleting this single line:
 ```typescript
@@ -182,14 +182,14 @@ After removing it, the void flow will fall through to create positive adjustment
 
 - [ ] **Step 2: Verify the change**
 
-Run: `grep -n "continue;" packages/database/supabase/functions/post-shipment/index.ts`
+Run: `grep -n "continue;" packages/database/src/post-shipment.ts`
 
 There should be no `continue` statements remaining inside either the post or void shipment line loops related to job fulfillment.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/database/supabase/functions/post-shipment/index.ts
+git add packages/database/src/post-shipment.ts
 git commit -m "feat: enable COGS reversal for voided MTO shipments
 
 Remove continue statement that skipped inventory restoration and COGS
@@ -212,8 +212,8 @@ After all three tasks, verify:
 
 ## Notes
 
-- Migration file: `packages/database/supabase/migrations/20260512120000_mto-shipment-cogs.sql`
-- Edge function: `packages/database/supabase/functions/post-shipment/index.ts`
+- Migration file: `packages/database/drizzle/<new-migration>.sql`
+- Function route implementation: `packages/database/src/post-shipment.ts`
 - `complete_job_to_inventory` is defined in `20260511120000_backflush-job-materials.sql:342-837`
 - `backflush_job_materials` is defined in `20260511120000_backflush-job-materials.sql:1-340`
-- `calculateCOGS` is at `packages/database/supabase/functions/shared/calculate-cogs.ts`
+- COGS helpers live with the direct Postgres shipment implementation.

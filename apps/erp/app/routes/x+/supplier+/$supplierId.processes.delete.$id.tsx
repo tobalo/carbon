@@ -1,5 +1,8 @@
 import { assertIsPost, error } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertSupplierAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { useLingui } from "@lingui/react/macro";
 import type {
@@ -15,15 +18,17 @@ import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     delete: "purchasing"
   });
+  const { client } = auth;
 
   const { supplierId, id } = params;
   if (!supplierId) throw new Error("Could not find supplierId");
   if (!id) throw new Error("Could not find id");
+  assertSupplierAccountScope(auth, supplierId);
 
-  const update = await deleteSupplierProcess(client, id);
+  const update = await deleteSupplierProcess(client, id, supplierId);
 
   if (update.error) {
     throw redirect(

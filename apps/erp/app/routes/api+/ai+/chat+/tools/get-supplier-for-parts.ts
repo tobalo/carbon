@@ -1,6 +1,6 @@
 import { getAppUrl } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { tool } from "ai";
 import { LuSearch } from "react-icons/lu";
 import { z } from "zod";
@@ -30,7 +30,7 @@ export const getSupplierForPartsTool = tool({
 });
 
 export async function getSuppliersForParts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   partIds: string[],
   context: { companyId: string }
 ) {
@@ -86,7 +86,9 @@ export async function getSuppliersForParts(
   let mostFrequentPreferredSupplierId: string | null = null;
   let maxPreferredCount = 0;
 
-  for (const [supplierId, count] of Object.entries(preferredSupplierCounts)) {
+  for (const [supplierId, count] of Object.entries(
+    preferredSupplierCounts
+  ) as [string, number][]) {
     if (count > maxPreferredCount) {
       maxPreferredCount = count;
       mostFrequentPreferredSupplierId = supplierId;
@@ -119,7 +121,10 @@ export async function getSuppliersForParts(
   let mostFrequentSupplierId: string | null = null;
   let maxCount = 0;
 
-  for (const [supplierId, count] of Object.entries(supplierPartCounts)) {
+  for (const [supplierId, count] of Object.entries(supplierPartCounts) as [
+    string,
+    number
+  ][]) {
     if (count > maxCount) {
       maxCount = count;
       mostFrequentSupplierId = supplierId;

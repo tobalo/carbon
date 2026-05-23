@@ -1,4 +1,4 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { NotificationEvent } from "@carbon/notifications";
 import { getLocalTimeZone, now } from "@internationalized/date";
 import { inngest } from "../../client";
@@ -51,8 +51,8 @@ function isDayEnabledForSchedule(
 async function isHoliday(companyId: string, date: Date): Promise<boolean> {
   const dateString = date.toISOString().split("T")[0]!; // YYYY-MM-DD format
 
-  const serviceRole = getCarbonServiceRole();
-  const { data: holiday, error } = await serviceRole
+  const serviceClient = getCarbonServiceClient();
+  const { data: holiday, error } = await serviceClient
     .from("holiday")
     .select("id")
     .eq("companyId", companyId)
@@ -71,7 +71,7 @@ export const dispatchFunction = inngest.createFunction(
   { id: "dispatch", retries: 2 },
   { cron: "0 6 * * *" },
   async ({ step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
 
     return await step.run("generate-maintenance-dispatches", async () => {
       const currentDateTime = now(getLocalTimeZone());
@@ -82,9 +82,11 @@ export const dispatchFunction = inngest.createFunction(
       try {
         // Get all companies with maintenanceGenerateInAdvance enabled
         const { data: companiesWithSettings, error: settingsError } =
-          await serviceRole
+          await serviceClient
             .from("companySettings")
-            .select("id, maintenanceGenerateInAdvance, maintenanceAdvanceDays")
+            .select(
+              "id, maintenanceGenerateInAdvance, maintenanceAdvanceDays, maintenanceDispatchNotificationGroup"
+            )
             .eq("maintenanceGenerateInAdvance", true);
 
         if (settingsError) {
@@ -99,14 +101,43 @@ export const dispatchFunction = inngest.createFunction(
         );
 
         let totalDispatchesCreated = 0;
+        const companyIds =
+          companiesWithSettings?.map((settings) => settings.id) ?? [];
+        if (companyIds.length === 0) {
+          return { dispatchesCreated: totalDispatchesCreated };
+        }
+
+        const { data: companies, error: companiesError } = await serviceClient
+          .from("company")
+          .select("id, name, active")
+          .in("id", companyIds);
+
+        if (companiesError) {
+          console.error(
+            `Failed to load maintenance dispatch companies: ${companiesError.message}`
+          );
+          return;
+        }
+
+        const companiesById = new Map(
+          (companies ?? []).map((company) => [company.id, company])
+        );
 
         for (const settings of companiesWithSettings ?? []) {
+          const company = companiesById.get(settings.id);
+          if (company?.active !== true) {
+            console.log(
+              `Skipping inactive company ${company?.name ?? settings.id}`
+            );
+            continue;
+          }
+
           const advanceDays = settings.maintenanceAdvanceDays ?? 7;
           const futureDate = currentDateTime.add({ days: advanceDays });
 
           // Get active schedules that are due
           const { data: dueSchedules, error: schedulesError } =
-            await serviceRole
+            await serviceClient
               .from("maintenanceSchedule")
               .select("*")
               .eq("companyId", settings.id)
@@ -129,6 +160,20 @@ export const dispatchFunction = inngest.createFunction(
           for (const schedule of dueSchedules ?? []) {
             try {
               const typedSchedule = schedule as MaintenanceSchedule;
+              const { data: workCenter, error: workCenterError } =
+                await serviceClient
+                  .from("workCenter")
+                  .select("id")
+                  .eq("id", typedSchedule.workCenterId)
+                  .eq("companyId", settings.id)
+                  .single();
+
+              if (workCenterError || !workCenter) {
+                console.error(
+                  `Skipping schedule ${schedule.id}: work center ${typedSchedule.workCenterId} is not in company ${settings.id}`
+                );
+                continue;
+              }
 
               // Track current nextDueAt for this schedule (will be updated as we create dispatches)
               let currentNextDueAt = typedSchedule.nextDueAt
@@ -200,7 +245,7 @@ export const dispatchFunction = inngest.createFunction(
 
                 // Get next sequence number
                 const { data: sequenceData, error: sequenceError } =
-                  await serviceRole.rpc("get_next_sequence", {
+                  await serviceClient.rpc("get_next_sequence", {
                     sequence_name: "maintenanceDispatch",
                     company_id: settings.id
                   });
@@ -214,7 +259,7 @@ export const dispatchFunction = inngest.createFunction(
 
                 // Create the dispatch
                 const { data: newDispatch, error: dispatchError } =
-                  await serviceRole
+                  await serviceClient
                     .from("maintenanceDispatch")
                     .insert({
                       maintenanceDispatchId: sequenceData,
@@ -241,13 +286,14 @@ export const dispatchFunction = inngest.createFunction(
                 }
 
                 // Copy items from schedule to dispatch
-                const { data: scheduleItems } = await serviceRole
+                const { data: scheduleItems } = await serviceClient
                   .from("maintenanceScheduleItem")
                   .select("itemId, quantity, unitOfMeasureCode")
-                  .eq("maintenanceScheduleId", schedule.id);
+                  .eq("maintenanceScheduleId", schedule.id)
+                  .eq("companyId", settings.id);
 
                 if (scheduleItems && scheduleItems.length > 0) {
-                  await serviceRole.from("maintenanceDispatchItem").insert(
+                  await serviceClient.from("maintenanceDispatchItem").insert(
                     scheduleItems.map((item) => ({
                       maintenanceDispatchId: newDispatch.id,
                       itemId: item.itemId,
@@ -260,7 +306,7 @@ export const dispatchFunction = inngest.createFunction(
                 }
 
                 // Link work center
-                await serviceRole.from("maintenanceDispatchWorkCenter").insert({
+                await serviceClient.from("maintenanceDispatchWorkCenter").insert({
                   maintenanceDispatchId: newDispatch.id,
                   workCenterId: schedule.workCenterId,
                   companyId: settings.id,
@@ -272,16 +318,9 @@ export const dispatchFunction = inngest.createFunction(
                   `Created dispatch ${sequenceData} for schedule "${schedule.name}" on ${targetDate.toISOString().split("T")[0]}`
                 );
 
-                // Get employees assigned to this work center to notify them
-                const { data: workCenterEmployees } = await (serviceRole as any)
-                  .from("workCenterEmployee")
-                  .select("userId")
-                  .eq("workCenterId", schedule.workCenterId);
-
-                if (workCenterEmployees && workCenterEmployees.length > 0) {
-                  const userIds = workCenterEmployees.map(
-                    (e: any) => e.userId as string
-                  );
+                const notificationGroup =
+                  settings.maintenanceDispatchNotificationGroup ?? [];
+                if (notificationGroup.length > 0) {
                   await inngest.send({
                     name: "carbon/notify",
                     data: {
@@ -289,13 +328,14 @@ export const dispatchFunction = inngest.createFunction(
                       companyId: settings.id,
                       documentId: newDispatch.id,
                       recipient: {
-                        type: "users" as const,
-                        userIds
-                      }
+                        type: "group" as const,
+                        groupIds: notificationGroup
+                      },
+                      from: "system"
                     }
                   });
                   console.log(
-                    `Notified ${userIds.length} work center employees about dispatch ${sequenceData}`
+                    `Notified ${notificationGroup.length} maintenance dispatch groups about dispatch ${sequenceData}`
                   );
                 }
 
@@ -323,13 +363,14 @@ export const dispatchFunction = inngest.createFunction(
               }
 
               // Update schedule's lastGeneratedAt and nextDueAt after processing all dates
-              await serviceRole
+              await serviceClient
                 .from("maintenanceSchedule")
                 .update({
                   lastGeneratedAt: currentDateTime.toAbsoluteString(),
                   nextDueAt: currentNextDueAt.toISOString()
                 })
-                .eq("id", schedule.id);
+                .eq("id", schedule.id)
+                .eq("companyId", settings.id);
             } catch (err) {
               console.error(
                 `Error processing schedule ${schedule.id}: ${

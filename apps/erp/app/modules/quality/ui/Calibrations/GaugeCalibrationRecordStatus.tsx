@@ -1,8 +1,11 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  inspectionStatusEnum
+} from "@carbon/database/schema";
 import { Status } from "@carbon/react";
 
 type GaugeCalibrationRecordStatusProps = {
-  status?: Database["public"]["Enums"]["inspectionStatus"] | null;
+  status?: EnumValue<typeof inspectionStatusEnum> | null;
 };
 
 const GaugeCalibrationRecordStatus = ({

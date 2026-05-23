@@ -1,16 +1,15 @@
 import { openai } from "@ai-sdk/openai";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { GetStartedEmail, WelcomeEmail } from "@carbon/documents/email";
 import { RESEND_DOMAIN } from "@carbon/env";
 import { resend, sendEmail } from "@carbon/lib/resend.server";
 import { getSlackClient } from "@carbon/lib/slack.server";
 import { getTwentyClient } from "@carbon/lib/twenty.server";
 import { render } from "@react-email/components";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateObject } from "ai";
 import { z } from "zod/v3";
 import { inngest } from "../../client";
+import type { JobQueryClient } from "../../../lib/query-client";
 
 export const onboardFunction = inngest.createFunction(
   { id: "onboard", retries: 3 },
@@ -18,16 +17,22 @@ export const onboardFunction = inngest.createFunction(
   async ({ event, step }) => {
     const { type, companyId, userId, plan } = event.data;
 
-    const carbon = getCarbonServiceRole();
+    const carbon = getCarbonServiceClient();
     const twenty = getTwentyClient();
     const slack = getSlackClient();
 
     const { company, user } = await step.run(
       "load-company-and-user",
       async () => {
-        const [company, user] = await Promise.all([
+        const [company, user, membership] = await Promise.all([
           carbon.from("company").select("*").eq("id", companyId).single(),
-          carbon.from("user").select("*").eq("id", userId).single()
+          carbon.from("user").select("*").eq("id", userId).single(),
+          carbon
+            .from("userToCompany")
+            .select("userId")
+            .eq("userId", userId)
+            .eq("companyId", companyId)
+            .maybeSingle()
         ]);
 
         if (company.error) {
@@ -38,6 +43,11 @@ export const onboardFunction = inngest.createFunction(
         if (user.error) {
           console.error("Could not find user", user.error);
           throw new Error(user.error.message);
+        }
+
+        if (membership.error || !membership.data) {
+          console.error("User does not belong to company", membership.error);
+          throw new Error("User does not belong to company");
         }
 
         return { company: company.data, user: user.data };
@@ -333,7 +343,7 @@ export const onboardFunction = inngest.createFunction(
 );
 
 async function shouldSendOnboardingEmailsToUser(
-  carbon: SupabaseClient<Database>,
+  carbon: JobQueryClient,
   userId: string
 ) {
   const userToCompany = await carbon

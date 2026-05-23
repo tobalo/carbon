@@ -190,7 +190,7 @@ const QuoteLinePricing = ({
     return parsedAdditionalCharges.success ? parsedAdditionalCharges.data : {};
   }, [editableFields.additionalCharges]);
 
-  const additionalChargesByQuantity = quantities.map((quantity) => {
+  const additionalChargesByQuantity = quantities.map((quantity: any) => {
     const charges = Object.values(additionalCharges).reduce((acc, charge) => {
       const amount = charge.amounts?.[quantity] ?? 0;
       return acc + amount;
@@ -198,7 +198,7 @@ const QuoteLinePricing = ({
     return charges;
   });
 
-  const taxableAdditionalChargesByQuantity = quantities.map((quantity) => {
+  const taxableAdditionalChargesByQuantity = quantities.map((quantity: any) => {
     return Object.values(additionalCharges).reduce((acc, charge) => {
       if (charge.taxable === false) return acc;
       return acc + (charge.amounts?.[quantity] ?? 0);
@@ -298,7 +298,7 @@ const QuoteLinePricing = ({
     [additionalCharges, lineId, carbon]
   );
 
-  const costsByQuantity = quantities.map((quantity) => {
+  const costsByQuantity = quantities.map((quantity: any) => {
     const costs = getLineCosts(quantity);
     return {
       materialCost: costs.materialCost / quantity,
@@ -314,8 +314,8 @@ const QuoteLinePricing = ({
   });
 
   const unitCostsByQuantity = hasCalculatedCost
-    ? costsByQuantity.map((costs) =>
-        Object.values(costs).reduce((sum, v) => sum + v, 0)
+    ? costsByQuantity.map((costs: any) =>
+        Object.values(costs).reduce((sum: number, v: any) => sum + v, 0)
       )
     : quantities.map(() => editableFields.unitCost);
 
@@ -334,10 +334,10 @@ const QuoteLinePricing = ({
   );
 
   const visibleCategories = costCategoryKeys.filter((key: CostCategoryKey) =>
-    costsByQuantity.some((costs) => costs[key] > 0)
+    costsByQuantity.some((costs: any) => costs[key] > 0)
   );
 
-  const netPricesByQuantity = quantities.map((quantity, index) => {
+  const netPricesByQuantity = quantities.map((quantity: any, index: any) => {
     const price = editableFields.prices[quantity]?.unitPrice ?? 0;
     const discount = editableFields.prices[quantity]?.discountPercent ?? 0;
     const netPrice = price * (1 - discount);
@@ -358,7 +358,7 @@ const QuoteLinePricing = ({
       newCategoryMarkupsByQuantity[quantity] = newMarkups;
     }
 
-    const unitPricesByQuantity = costsByQuantity.map((costs) =>
+    const unitPricesByQuantity = costsByQuantity.map((costs: any) =>
       computeUnitPriceFromMarkups(costs, newMarkups)
     );
 
@@ -653,7 +653,7 @@ const QuoteLinePricing = ({
           <Thead>
             <Tr>
               <Th className="w-[300px]" />
-              {quantities.map((quantity) => (
+              {quantities.map((quantity: any) => (
                 <Th key={quantity.toString()}>{quantity}</Th>
               ))}
             </Tr>
@@ -665,7 +665,7 @@ const QuoteLinePricing = ({
                   <span>Lead Time</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 const leadTime = editableFields.prices[quantity]?.leadTime ?? 0;
                 return (
                   <Td
@@ -705,7 +705,7 @@ const QuoteLinePricing = ({
                   </HStack>
                 </Td>
 
-                {unitCostsByQuantity.map((cost, index) => {
+                {unitCostsByQuantity.map((cost: any, index: any) => {
                   return hasCalculatedCost ? (
                     <Td key={index} className="group-hover:bg-muted/50">
                       <VStack spacing={0}>
@@ -762,7 +762,7 @@ const QuoteLinePricing = ({
                     </span>
                   </HStack>
                 </Td>
-                {quantities.map((quantity, index) => {
+                {quantities.map((quantity: any, index: any) => {
                   const price = editableFields.prices[quantity]?.unitPrice ?? 0;
                   const cost = unitCostsByQuantity[index];
 
@@ -823,7 +823,7 @@ const QuoteLinePricing = ({
                       Markup by Category
                     </Button>
                   </Td>
-                  {quantities.map((quantity) => (
+                  {quantities.map((quantity: any) => (
                     <Td key={quantity.toString()} />
                   ))}
                 </Tr>
@@ -834,7 +834,7 @@ const QuoteLinePricing = ({
                         <Td className="border-r border-border pl-8">
                           <span>{categoryLabels[category]}</span>
                         </Td>
-                        {quantities.map((quantity, index) => {
+                        {quantities.map((quantity: any, index: any) => {
                           const categoryCost =
                             costsByQuantity[index]?.[category] ?? 0;
                           const markupValue =
@@ -893,7 +893,7 @@ const QuoteLinePricing = ({
                   <span>Unit Price</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 const price = editableFields.prices[quantity]?.unitPrice;
                 return (
                   <Td key={quantity.toString()}>
@@ -929,7 +929,7 @@ const QuoteLinePricing = ({
                   <span>Discount Percent</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const discount =
                   editableFields.prices[quantity]?.discountPercent;
 
@@ -965,7 +965,7 @@ const QuoteLinePricing = ({
                   <span>Net Unit Price</span>
                 </HStack>
               </Td>
-              {netPricesByQuantity.map((price, index) => {
+              {netPricesByQuantity.map((price: any, index: any) => {
                 return (
                   <Td key={index} className="group-hover:bg-muted/50">
                     <VStack spacing={0}>
@@ -991,7 +991,7 @@ const QuoteLinePricing = ({
                     </span>
                   </HStack>
                 </Td>
-                {netPricesByQuantity.map((price, index) => {
+                {netPricesByQuantity.map((price: any, index: any) => {
                   const cost = unitCostsByQuantity[index];
                   const profit = ((price - cost) / price) * 100;
                   return (
@@ -1019,7 +1019,7 @@ const QuoteLinePricing = ({
                     <span>Total Profit</span>
                   </HStack>
                 </Td>
-                {quantities.map((quantity, index) => {
+                {quantities.map((quantity: any, index: any) => {
                   const price = netPricesByQuantity[index];
                   const cost = unitCostsByQuantity[index];
                   const profit = (price - cost) * quantity;
@@ -1047,7 +1047,7 @@ const QuoteLinePricing = ({
                   <span>Shipping Cost</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 const shippingCost =
                   editableFields.prices[quantity]?.shippingCost;
                 return (
@@ -1153,7 +1153,7 @@ const QuoteLinePricing = ({
                         </HStack>
                       </HStack>
                     </Td>
-                    {quantities.map((quantity) => {
+                    {quantities.map((quantity: any) => {
                       const amount = charge.amounts?.[quantity] ?? 0;
                       return (
                         <Td key={quantity.toString()}>
@@ -1225,7 +1225,7 @@ const QuoteLinePricing = ({
                   </fetcher.Form>
                 </HStack>
               </Td>
-              {quantities.map((quantity) => {
+              {quantities.map((quantity: any) => {
                 return <Td key={quantity.toString()}></Td>;
               })}
             </Tr>
@@ -1235,7 +1235,7 @@ const QuoteLinePricing = ({
                   <span>Subtotal</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const price =
                   (netPricesByQuantity[index] ?? 0) * quantity +
                   (editableFields.prices[quantity]?.shippingCost ?? 0) +
@@ -1255,7 +1255,7 @@ const QuoteLinePricing = ({
                   <span>Tax Percent</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const taxPercent = editableFields.taxPercent;
                 return (
                   <Td key={index} className="group-hover:bg-muted/50">
@@ -1292,7 +1292,7 @@ const QuoteLinePricing = ({
                   <span>Total Price</span>
                 </HStack>
               </Td>
-              {quantities.map((quantity, index) => {
+              {quantities.map((quantity: any, index: any) => {
                 const subtotal =
                   (netPricesByQuantity[index] ?? 0) * quantity +
                   (editableFields.prices[quantity]?.shippingCost ?? 0) +
@@ -1320,7 +1320,7 @@ const QuoteLinePricing = ({
                       <span>Exchange Rate</span>
                     </HStack>
                   </Td>
-                  {quantities.map((quantity, index) => {
+                  {quantities.map((quantity: any, index: any) => {
                     const exchangeRate =
                       editableFields.prices[quantity]?.exchangeRate;
                     return (
@@ -1338,7 +1338,7 @@ const QuoteLinePricing = ({
                       <span>Converted Total Price</span>
                     </HStack>
                   </Td>
-                  {quantities.map((quantity, index) => {
+                  {quantities.map((quantity: any, index: any) => {
                     const subtotal =
                       (netPricesByQuantity[index] ?? 0) * quantity +
                       (editableFields.prices[quantity]?.shippingCost ?? 0) +

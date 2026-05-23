@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Hidden,
   Submit,
@@ -30,6 +29,7 @@ import { useUser } from "~/hooks";
 import { suggestionValidator } from "~/modules/shared";
 import type { action } from "~/routes/x+/resources+/suggestions.new";
 import { path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 
 const Picker = React.lazy(() => import("@emoji-mart/react"));
 
@@ -57,7 +57,6 @@ const Suggestion = () => {
     name: string;
     path: string;
   } | null>(null);
-  const { carbon } = useCarbon();
   const user = useUser();
   const companyId = user.company.id;
 
@@ -75,7 +74,7 @@ const Suggestion = () => {
   }, [fetcher.data]);
 
   const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       const file = e.target.files[0];
       const fileName = file.name;
       toast.info(t`Uploading ${fileName}`);
@@ -87,12 +86,11 @@ const Suggestion = () => {
       }
 
       const storagePath = `${companyId}/suggestions/${nanoid()}.${fileExtension}`;
-      const imageUpload = await carbon.storage
-        .from("private")
-        .upload(storagePath, file, {
-          cacheControl: `${12 * 60 * 60}`,
-          upsert: true
-        });
+      const imageUpload = await uploadStorageObject({
+        bucket: "private",
+        path: storagePath,
+        file
+      });
 
       if (imageUpload.error) {
         console.error(imageUpload.error);

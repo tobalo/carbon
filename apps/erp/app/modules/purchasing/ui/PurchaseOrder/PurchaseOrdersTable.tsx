@@ -46,7 +46,7 @@ import {
   useCurrencyFormatter,
   useDateFormatter,
   usePermissions,
-  useRealtime
+  usePollingRevalidation
 } from "~/hooks";
 import { useCustomColumns } from "~/hooks/useCustomColumns";
 import type { PurchaseOrder } from "~/modules/purchasing";
@@ -64,7 +64,7 @@ type PurchaseOrdersTableProps = {
 
 const PurchaseOrdersTable = memo(
   ({ data, count }: PurchaseOrdersTableProps) => {
-    useRealtime("purchaseOrder");
+    usePollingRevalidation("purchaseOrder");
 
     const { t } = useLingui();
     const permissions = usePermissions();
@@ -354,7 +354,7 @@ const PurchaseOrdersTable = memo(
         selectedRows.forEach((row) => {
           if (row.id) formData.append("ids", row.id);
         });
-        formData.append("field", field);
+        formData.append("field", String(field));
         if (value) formData.append("value", value);
         fetcher.submit(formData, {
           method: "post",

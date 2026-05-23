@@ -72,7 +72,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Filter assignment status by trainingAssignmentId
   const filteredStatus = (assignmentStatus.data ?? []).filter(
-    (s) => s.trainingAssignmentId === assignmentId
+    (s: any) => s.trainingAssignmentId === assignmentId
   );
 
   const currentPeriod =

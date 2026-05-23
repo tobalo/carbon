@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableInsert } from "@carbon/database/schema";
 import type {
   getCustomers,
   getEmployees,
@@ -17,9 +17,9 @@ export type Employee = NonNullable<
   Awaited<ReturnType<typeof getEmployees>>["data"]
 >[number];
 
-export type EmployeeInsert = Database["public"]["Tables"]["employee"]["Insert"];
+export type EmployeeInsert = TableInsert<"employee">;
 
-export type InviteInsert = Database["public"]["Tables"]["invite"]["Insert"];
+export type InviteInsert = TableInsert<"invite">;
 
 export type EmployeeTypePermission = NonNullable<
   Awaited<ReturnType<typeof getPermissionsByEmployeeType>>["data"]

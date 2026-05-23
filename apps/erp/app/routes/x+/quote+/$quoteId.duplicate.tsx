@@ -1,12 +1,11 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
-import { copyQuote } from "~/modules/sales/sales.service";
+import { copyQuote, getQuote } from "~/modules/sales/sales.service";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "sales"
   });
 
@@ -23,10 +22,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
       message: "Invalid form data"
     };
 
-  const serviceRole = await getCarbonServiceRole();
+  const quote = await getQuote(client, quoteId);
+  if (quote.error || quote.data?.companyId !== companyId) {
+    return {
+      success: false,
+      message: "Failed to duplicate quote"
+    };
+  }
 
   // @ts-expect-error TS2345 - TODO: fix type
-  const copy = await copyQuote(serviceRole, {
+  const copy = await copyQuote(client, {
     sourceId: quoteId,
     targetId: asRevision ? quoteId : "",
     companyId: companyId,

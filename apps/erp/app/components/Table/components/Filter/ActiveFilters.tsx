@@ -14,7 +14,7 @@ import {
   useMount
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { useEffect, useState } from "react";
 import { LuX } from "react-icons/lu";
 import { useFetcher } from "react-router";
@@ -85,7 +85,7 @@ const ActiveFilter = ({ filter, operator, value }: ActiveFilterProps) => {
     }
   }, [open]);
 
-  const fetcher = useFetcher<PostgrestResponse<{ id: string; name: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string; name: string }>>();
 
   useMount(() => {
     if (filter.filter.type === "fetcher") {

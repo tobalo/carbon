@@ -1,6 +1,8 @@
 import { badRequest, parseNumberFromUrlParam } from "@carbon/auth";
-import type { PostgrestFilterBuilder } from "@supabase/postgrest-js";
-import type { GenericSchema } from "@supabase/supabase-js/dist/module/lib/types";
+import type {
+  GenericSchema,
+  QueryFilterBuilder
+} from "@carbon/database/query-client";
 
 export type Sort = {
   sortBy: string;
@@ -63,8 +65,7 @@ export function getGenericFilter<
   U extends Record<string, unknown>,
   V
 >(
-  // @ts-expect-error TS2707 - TODO: fix type
-  query: PostgrestFilterBuilder<T, U, V>,
+  query: QueryFilterBuilder<T, U, V>,
   column: string,
   operator: string,
   value: string
@@ -98,12 +99,10 @@ export function setGenericQueryFilters<
   U extends Record<string, unknown>,
   V
 >(
-  // @ts-expect-error TS2707 - TODO: fix type
-  query: PostgrestFilterBuilder<T, U, V>,
+  query: QueryFilterBuilder<T, U, V>,
   args: Partial<GenericQueryFilters>,
   defaultSorts?: { column: string; ascending: boolean; foreignTable?: string }[]
-  // @ts-expect-error TS2707 - TODO: fix type
-): PostgrestFilterBuilder<T, U, V> {
+): QueryFilterBuilder<T, U, V> {
   args.filters?.forEach((filter) => {
     if (!filter.value) return;
     query = getGenericFilter(

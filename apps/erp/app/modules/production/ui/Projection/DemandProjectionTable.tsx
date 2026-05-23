@@ -82,7 +82,7 @@ const DemandProjectionsTable = memo(
               </VStack>
             ),
             cell: ({ row }) => {
-              const value = row.getValue<number>(weekKey);
+              const value = row.getValue<number>(String(weekKey));
               if (value === undefined || value === null || value === 0)
                 return "-";
               return <span>{numberFormatter.format(value)}</span>;

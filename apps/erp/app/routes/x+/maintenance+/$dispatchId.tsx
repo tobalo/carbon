@@ -3,6 +3,7 @@ import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import type { JSONContent } from "@carbon/react";
 import { VStack } from "@carbon/react";
+import { listObjects, toStorageFileObject } from "@carbon/storage";
 import { msg } from "@lingui/core/macro";
 import type { LoaderFunctionArgs } from "react-router";
 import { Outlet, redirect, useLoaderData, useParams } from "react-router";
@@ -36,10 +37,11 @@ async function getMaintenanceDispatchFiles(
   companyId: string,
   dispatchId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/maintenance/${dispatchId}`);
-  return result.data || [];
+  const objects = await listObjects({
+    companyId,
+    prefix: `${companyId}/maintenance/${dispatchId}`
+  });
+  return objects.map((object) => toStorageFileObject(object, "private"));
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {

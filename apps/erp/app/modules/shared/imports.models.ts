@@ -1,5 +1,5 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { QueryDatabase } from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { z } from "zod";
 
 // to avoid a circular dependency
@@ -35,7 +35,7 @@ export const fieldMappings = {
       enumData: {
         description: "The account manager of the customer",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           return client
@@ -142,7 +142,7 @@ export const fieldMappings = {
       enumData: {
         description: "The account manager of the customer",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           return client
@@ -307,7 +307,7 @@ export const fieldMappings = {
       enumData: {
         description: "The unit of measure of the part",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           const { data, error } = await client
@@ -401,7 +401,7 @@ export const fieldMappings = {
       enumData: {
         description: "The unit of measure of the part",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           const { data, error } = await client
@@ -495,7 +495,7 @@ export const fieldMappings = {
       enumData: {
         description: "The unit of measure of the part",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           const { data, error } = await client
@@ -589,7 +589,7 @@ export const fieldMappings = {
       enumData: {
         description: "The unit of measure of the part",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           const { data, error } = await client
@@ -651,7 +651,7 @@ export const fieldMappings = {
       enumData: {
         description: "The substance of the material",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           return client
@@ -670,7 +670,7 @@ export const fieldMappings = {
       enumData: {
         description: "The form of the material",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           return client
@@ -725,7 +725,7 @@ export const fieldMappings = {
       enumData: {
         description: "The unit of measure of the part",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           const { data, error } = await client
@@ -787,7 +787,7 @@ export const fieldMappings = {
       enumData: {
         description: "The unit of measure of the part",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           const { data, error } = await client
@@ -870,7 +870,7 @@ export const fieldMappings = {
       enumData: {
         description: "The location of the work center",
         fetcher: async (
-          client: SupabaseClient<Database>,
+          client: CarbonDatabaseClient<QueryDatabase>,
           companyId: string
         ) => {
           return client

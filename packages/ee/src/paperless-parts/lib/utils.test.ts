@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { calculatePromisedDate } from "./utils";
 
@@ -18,7 +18,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [];
+    const holidays: TableRow<"holiday">[] = [];
     const leadTime = 3;
 
     const result = calculatePromisedDate(leadTime, holidays);
@@ -39,7 +39,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [];
+    const holidays: TableRow<"holiday">[] = [];
     const leadTime = 3;
 
     const result = calculatePromisedDate(leadTime, holidays);
@@ -62,7 +62,7 @@ describe("calculatePromisedDate", () => {
     vi.setSystemTime(mockDate);
 
     // Labor Day 2024 is September 2 (Monday)
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [
+    const holidays: TableRow<"holiday">[] = [
       {
         id: "1",
         companyId: "test-company",
@@ -99,7 +99,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [];
+    const holidays: TableRow<"holiday">[] = [];
     const leadTime = 2;
 
     const result = calculatePromisedDate(leadTime, holidays);
@@ -120,7 +120,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [
+    const holidays: TableRow<"holiday">[] = [
       {
         id: "1",
         companyId: "test-company",
@@ -171,7 +171,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [];
+    const holidays: TableRow<"holiday">[] = [];
     const leadTime = 1;
 
     const result = calculatePromisedDate(leadTime, holidays);
@@ -191,7 +191,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [];
+    const holidays: TableRow<"holiday">[] = [];
     const leadTime = 1;
 
     const result = calculatePromisedDate(leadTime, holidays);
@@ -213,7 +213,7 @@ describe("calculatePromisedDate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
-    const holidays: Database["public"]["Tables"]["holiday"]["Row"][] = [];
+    const holidays: TableRow<"holiday">[] = [];
     const leadTime = 2;
 
     const result = calculatePromisedDate(leadTime, holidays);

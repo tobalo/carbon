@@ -17,7 +17,8 @@ import { redirect, useLoaderData, useNavigate } from "react-router";
 import { getIntegration, IntegrationForm } from "~/modules/settings";
 import {
   invalidateIntegrationHealthCache,
-  upsertCompanyIntegration
+  upsertCompanyIntegration,
+  withIntegrationWebhookSecret
 } from "~/modules/settings/settings.server";
 import { path } from "~/utils/path";
 
@@ -27,8 +28,14 @@ import { path } from "~/utils/path";
  */
 function buildIntegrationMetadata(
   existingMetadata: Record<string, unknown>,
-  formData: Record<string, unknown>
+  formData: Record<string, unknown>,
+  integrationId: string
 ): Record<string, unknown> {
+  const withBoundarySecret = (metadata: Record<string, unknown>) =>
+    integrationId === "jira" || integrationId === "linear"
+      ? withIntegrationWebhookSecret(metadata)
+      : metadata;
+
   // Extract owner settings from form data
   const ownerSettings = {
     customerOwner: formData.customerOwner as string | undefined,
@@ -45,7 +52,7 @@ function buildIntegrationMetadata(
 
   if (!hasOwnerSettings) {
     // No owner settings, just merge as-is
-    return { ...existingMetadata, ...formData };
+    return withBoundarySecret({ ...existingMetadata, ...formData });
   }
 
   // Build syncConfig.entities from owner settings
@@ -101,11 +108,11 @@ function buildIntegrationMetadata(
     ...restFormData
   } = formData;
 
-  return {
+  return withBoundarySecret({
     ...existingMetadata,
     ...restFormData,
     syncConfig
-  };
+  });
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -258,7 +265,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     (existing.data?.metadata as Record<string, unknown>) ?? {};
 
   // Build metadata, transforming owner settings into syncConfig structure
-  const metadata = buildIntegrationMetadata(existingMetadata, d);
+  const metadata = buildIntegrationMetadata(existingMetadata, d, integrationId);
 
   const wasInstalled = existing.data?.active === true;
 

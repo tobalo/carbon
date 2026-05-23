@@ -1,6 +1,6 @@
 import { $ } from "execa";
 
-import { client } from "./client";
+import { fetchWorkspaces } from "./client";
 
 export type Workspace = {
   id: number;
@@ -23,12 +23,6 @@ export type Workspace = {
   connection_string: string | null;
   database_url: string | null;
   database_connection_pooler_url: string | null;
-  project_id: string | null;
-  access_token: string | null;
-  anon_key: string | null;
-  database_password: string | null;
-  jwt_key: string | null;
-  service_role_key: string | null;
 
   // App Configuration
   auth_providers: string | null;
@@ -85,24 +79,16 @@ async function deploy(): Promise<void> {
 
   console.log(`✅ 🏷️ Using image tag: ${imageTag}`);
 
-  const { data: workspaces, error } = await client
-    .from("workspaces")
-    .select("*");
-
-  if (error) {
-    console.error("🔴 🍳 Failed to fetch workspaces", error);
-    process.exit(1);
-  }
+  const workspaces = await fetchWorkspaces<Workspace>();
 
   let hasErrors = false;
 
   console.log("✅ 🛩️ Successfully retreived workspaces");
 
-  for await (const workspace of workspaces as Workspace[]) {
+  for await (const workspace of workspaces) {
     try {
       console.log(`✅ 🥚 Migrating ${workspace.id}`);
       const {
-        anon_key,
         auth_providers,
         aws_account_id,
         aws_region,
@@ -114,7 +100,6 @@ async function deploy(): Promise<void> {
         cloudflare_turnstile_site_key,
         controlled_environment,
         database_connection_pooler_url,
-        database_password,
         database_url,
         domain_name,
         exchange_rates_api_key,
@@ -138,7 +123,6 @@ async function deploy(): Promise<void> {
         redis_url,
         resend_api_key,
         resend_domain,
-        service_role_key,
         session_secret,
         slack_bot_token,
         slack_client_id,
@@ -186,34 +170,15 @@ async function deploy(): Promise<void> {
         continue;
       }
 
-      if (!database_url) {
-        console.log(`🔴🍳 Missing database url for ${workspace.id}`);
-        continue;
-      }
+      const runtimeDatabaseUrl =
+        database_connection_pooler_url ?? database_url ?? workspace.connection_string;
 
-      if (!database_connection_pooler_url) {
+      if (!runtimeDatabaseUrl) {
         console.log(
-          `🔴🍳 Missing database connection pooler url for ${workspace.id}`
+          `🔴🍳 Missing runtime database url for ${workspace.id}`
         );
         continue;
       }
-
-      if (!database_password) {
-        console.log(`🔴🍳 Missing database password for ${workspace.id}`);
-        continue;
-      }
-
-      if (!anon_key) {
-        console.log(`🔴🍳 Missing anon key for ${workspace.id}`);
-        continue;
-      }
-
-      if (!service_role_key) {
-        console.log(`🔴🍳 Missing service role key for ${workspace.id}`);
-        continue;
-      }
-
-      
 
       if (!resend_api_key) {
         console.log(`🔴🍳 Missing Resend API key for ${workspace.id}`);
@@ -257,8 +222,12 @@ async function deploy(): Promise<void> {
         env: {
           AWS_ACCOUNT_ID: aws_account_id,
           AWS_REGION: aws_region,
+          AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
+          AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
           IMAGE_TAG: imageTag,
+          AUTH_PROVIDER: process.env.AUTH_PROVIDER ?? "better_auth",
           AUTH_PROVIDERS: auth_providers ?? undefined,
+          BETTER_AUTH_SECRET: session_secret,
           CARBON_EDITION: carbon_edition ?? "enterprise",
           CERT_ARN_ERP: cert_arn_erp,
           CERT_ARN_MES: cert_arn_mes,
@@ -267,12 +236,17 @@ async function deploy(): Promise<void> {
           CLOUDFLARE_TURNSTILE_SITE_KEY:
             cloudflare_turnstile_site_key ?? undefined,
           CONTROLLED_ENVIRONMENT: controlled_environment ?? undefined,
+          DATABASE_SERVICE_URL: database_url ?? runtimeDatabaseUrl,
+          DATABASE_URL: runtimeDatabaseUrl,
           DOMAIN: domain_name,
           EXCHANGE_RATES_API_KEY: exchange_rates_api_key ?? undefined,
+          GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+          GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
           GOOGLE_PLACES_API_KEY: google_places_api_key ?? undefined,
           INNGEST_BASE_URL: inngest_base_url ?? undefined,
           INNGEST_EVENT_KEY: inngest_event_key,
           INNGEST_SIGNING_KEY: inngest_signing_key,
+          JOBS_DATABASE_URL: runtimeDatabaseUrl,
           JIRA_CLIENT_ID: jira_client_id ?? undefined,
           JIRA_CLIENT_SECRET: jira_client_secret ?? undefined,
           JIRA_OAUTH_REDIRECT_URL: jira_oauth_redirect_url ?? undefined,
@@ -289,6 +263,13 @@ async function deploy(): Promise<void> {
           REDIS_URL: redis_url ?? undefined,
           RESEND_API_KEY: resend_api_key,
           RESEND_DOMAIN: resend_domain ?? "carbon.ms",
+          S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID,
+          S3_ENDPOINT: process.env.S3_ENDPOINT,
+          S3_PRIVATE_BUCKET: process.env.S3_PRIVATE_BUCKET,
+          S3_PUBLIC_BASE_URL: process.env.S3_PUBLIC_BASE_URL,
+          S3_PUBLIC_BUCKET: process.env.S3_PUBLIC_BUCKET,
+          S3_REGION: process.env.S3_REGION,
+          S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
           SESSION_SECRET: session_secret,
           SLACK_BOT_TOKEN: slack_bot_token ?? undefined,
           SLACK_CLIENT_ID: slack_client_id ?? undefined,
@@ -299,10 +280,6 @@ async function deploy(): Promise<void> {
           STRIPE_BYPASS_COMPANY_IDS: stripe_bypass_company_ids ?? undefined,
           STRIPE_SECRET_KEY: stripe_secret_key ?? undefined,
           STRIPE_WEBHOOK_SECRET: stripe_webhook_secret ?? undefined,
-          SUPABASE_ANON_KEY: anon_key,
-          SUPABASE_DB_URL: database_connection_pooler_url,
-          SUPABASE_SERVICE_ROLE_KEY: service_role_key,
-          SUPABASE_URL: database_url,
           URL_ERP: url_erp,
           URL_MES: url_mes,
           VERCEL_ENV: "production",

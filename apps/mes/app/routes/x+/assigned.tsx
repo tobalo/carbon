@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import {
   Button,
   Heading,
@@ -23,19 +22,18 @@ import type { Operation } from "~/services/types";
 import { makeDurations } from "~/utils/durations";
 
 export async function loader({ context, request }: LoaderFunctionArgs) {
-  const { companyId, userId } = await requirePermissions(request, {});
+  const { client, companyId, userId } = await requirePermissions(request, {});
 
-  const serviceRole = getCarbonServiceRole();
   const locationId = context.get(userContext)?.locationId;
 
   const [operations, workCenters] = await Promise.all([
-    getJobOperationsAssignedToEmployee(serviceRole, userId, companyId),
-    getWorkCentersByLocation(serviceRole, locationId)
+    getJobOperationsAssignedToEmployee(client, userId, companyId),
+    getWorkCentersByLocation(client, locationId, companyId)
   ]);
 
   return {
-    operations: operations?.data?.map(makeDurations) ?? [],
-    workCenters: workCenters?.data ?? []
+    operations: ((operations?.data ?? []) as Operation[]).map(makeDurations),
+    workCenters: (workCenters?.data ?? []) as any[]
   };
 }
 

@@ -23,7 +23,11 @@ export async function action({ request }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  await assertMethodOperationIsDraft(client, validation.data.operationId);
+  await assertMethodOperationIsDraft(
+    client,
+    validation.data.operationId,
+    companyId
+  );
 
   const insert = await upsertMethodOperationStep(client, {
     ...validation.data,

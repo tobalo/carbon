@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { z } from "zod";
@@ -11,7 +10,9 @@ const integrationMetadataParser = z.object({
 });
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {});
+  const { client, companyId } = await requirePermissions(request, {
+    view: "production"
+  });
 
   const integration = await getCompanyIntegration(client, companyId, "radan");
   if (!integration) {
@@ -50,7 +51,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     // Cache for job documents to avoid duplicate fetches
     const jobDocumentsCache = new Map();
-    const serviceRole = getCarbonServiceRole();
 
     // Enrich data with job documents
     const enrichedData = await Promise.all(
@@ -60,7 +60,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           if (jobDocumentsCache.has(item.jobId)) {
             documents = jobDocumentsCache.get(item.jobId);
           } else {
-            documents = await getJobDocuments(serviceRole, companyId, {
+            documents = await getJobDocuments(client, companyId, {
               id: item.jobId,
               salesOrderLineId: item.salesOrderLineId,
               itemId: item.itemId

@@ -1,13 +1,11 @@
-import { ERP_URL as ERP_URL_CONFIG, SUPABASE_URL } from "@carbon/auth";
+import { getAppUrl, getPublicStorageUrl } from "@carbon/auth";
 import { generatePath } from "react-router";
 
 const challenge = "/challenge"; // from ~/routes/challenge+ folder
 const course = "/course"; // from ~/routes/course+ folder
 const lesson = "/lesson"; // from ~/routes/lesson+ folder
 
-const ERP_URL = SUPABASE_URL?.includes("localhost")
-  ? "http://localhost:3000"
-  : ERP_URL_CONFIG;
+const ERP_URL = getAppUrl();
 
 export const path = {
   to: {
@@ -37,7 +35,7 @@ export const removeSubdomain = (url?: string): string => {
 };
 
 export const getStoragePath = (bucket: string, path: string) => {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return getPublicStorageUrl(path, bucket);
 };
 
 export const requestReferrer = (request: Request) => {

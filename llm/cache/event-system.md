@@ -142,10 +142,10 @@ Message format:
 ### Creating Subscriptions
 
 ```typescript
-import { getCarbonServiceRole } from "@carbon/auth";
+import { getCarbonServiceClient } from "@carbon/auth";
 import { createEventSystemSubscription } from "@carbon/database/event";
 
-const client = getCarbonServiceRole();
+const client = getCarbonServiceClient();
 
 // Create a webhook subscription
 const subscription = await createEventSystemSubscription(client, {

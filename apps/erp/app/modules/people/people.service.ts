@@ -1,12 +1,15 @@
-import type { Database, Json } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  Json,
+  QueryDatabase
+} from "@carbon/database/schema";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import type { z } from "zod";
 import type { DataType } from "~/modules/shared";
 import type { Employee } from "~/modules/users";
 import { getEmployees } from "~/modules/users/users.service";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
+import { sanitize } from "@carbon/utils";
 import type {
   departmentValidator,
   employeeJobValidator,
@@ -15,7 +18,7 @@ import type {
 } from "./people.models";
 
 export async function deleteAttribute(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   attributeId: string
 ) {
   return client
@@ -25,7 +28,7 @@ export async function deleteAttribute(
 }
 
 export async function deleteAttributeCategory(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   attributeCategoryId: string
 ) {
   return client
@@ -35,21 +38,21 @@ export async function deleteAttributeCategory(
 }
 
 export async function deleteDepartment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   departmentId: string
 ) {
   return client.from("department").delete().eq("id", departmentId);
 }
 
 export async function deleteHoliday(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   holidayId: string
 ) {
   return client.from("holiday").delete().eq("id", holidayId);
 }
 
 export async function deleteShift(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   shiftId: string
 ) {
   // TODO: Set all employeeShifts to null
@@ -57,19 +60,42 @@ export async function deleteShift(
 }
 
 export async function getAttribute(
-  client: SupabaseClient<Database>,
-  attributeId: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  attributeId: string,
+  companyId: string
 ) {
-  return client
+  const attribute = await client
     .from("userAttribute")
-    .select("*, userAttributeCategory(name)")
+    .select("*")
     .eq("id", attributeId)
     .eq("active", true)
     .single();
+
+  if (attribute.error || !attribute.data) return attribute;
+
+  const category = await client
+    .from("userAttributeCategory")
+    .select("name")
+    .eq("id", attribute.data.userAttributeCategoryId)
+    .eq("companyId", companyId)
+    .eq("active", true)
+    .single();
+
+  if (category.error || !category.data) {
+    return { ...attribute, data: null, error: category.error };
+  }
+
+  return {
+    ...attribute,
+    data: {
+      ...attribute.data,
+      userAttributeCategory: category.data
+    }
+  };
 }
 
 async function getAttributes(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   userIds: string[]
 ) {
@@ -91,18 +117,17 @@ async function getAttributes(
 }
 
 export async function getAttributeCategories(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
   let query = client
     .from("userAttributeCategory")
-    .select("*, userAttribute(id, name, attributeDataType(id))", {
+    .select("*", {
       count: "exact"
     })
     .eq("companyId", companyId)
-    .eq("active", true)
-    .eq("userAttribute.active", true);
+    .eq("active", true);
 
   if (args?.search) {
     query = query.ilike("name", `%${args.search}%`);
@@ -114,44 +139,143 @@ export async function getAttributeCategories(
     ]);
   }
 
-  return query;
+  const categories = await query;
+  if (categories.error || !categories.data) return categories;
+
+  const categoryIds = categories.data.map((category) => category.id);
+  const attributes =
+    categoryIds.length > 0
+      ? await client
+          .from("userAttribute")
+          .select("id, name, attributeDataTypeId, userAttributeCategoryId")
+          .in("userAttributeCategoryId", categoryIds)
+          .eq("active", true)
+      : { data: [], error: null };
+
+  if (attributes.error) {
+    return { ...categories, data: [], error: attributes.error };
+  }
+
+  const dataTypeIds = Array.from(
+    new Set(
+      (attributes.data ?? [])
+        .map((attribute) => attribute.attributeDataTypeId)
+        .filter(Boolean)
+    )
+  );
+  const dataTypes =
+    dataTypeIds.length > 0
+      ? await client.from("attributeDataType").select("id").in("id", dataTypeIds)
+      : { data: [], error: null };
+
+  if (dataTypes.error) {
+    return { ...categories, data: [], error: dataTypes.error };
+  }
+
+  const dataTypesById = new Map(
+    (dataTypes.data ?? []).map((dataType) => [dataType.id, dataType])
+  );
+  const attributesByCategoryId = new Map<string, any[]>();
+  (attributes.data ?? []).forEach((attribute) => {
+    const categoryAttributes =
+      attributesByCategoryId.get(attribute.userAttributeCategoryId) ?? [];
+    categoryAttributes.push({
+      ...attribute,
+      attributeDataType:
+        dataTypesById.get(attribute.attributeDataTypeId) ?? null
+    });
+    attributesByCategoryId.set(
+      attribute.userAttributeCategoryId,
+      categoryAttributes
+    );
+  });
+
+  return {
+    ...categories,
+    data: categories.data.map((category) => ({
+      ...category,
+      userAttribute: attributesByCategoryId.get(category.id) ?? []
+    }))
+  };
 }
 
 export async function getAttributeCategory(
-  client: SupabaseClient<Database>,
-  id: string
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string,
+  companyId: string
 ) {
-  return client
+  const category = await client
     .from("userAttributeCategory")
-    .select(
-      `*,
-      userAttribute(
-        id, name, sortOrder,
-        attributeDataType(id, label, isBoolean, isDate, isList, isNumeric, isText, isUser, isFile))
-      `,
-      {
-        count: "exact"
-      }
-    )
+    .select("*", { count: "exact" })
     .eq("id", id)
+    .eq("companyId", companyId)
     .eq("active", true)
-    .eq("userAttribute.active", true)
     .single();
+
+  if (category.error || !category.data) return category;
+
+  const attributes = await client
+    .from("userAttribute")
+    .select("id, name, sortOrder, attributeDataTypeId, userAttributeCategoryId")
+    .eq("userAttributeCategoryId", id)
+    .eq("active", true)
+    .order("sortOrder", { ascending: true });
+
+  if (attributes.error) {
+    return { ...category, data: null, error: attributes.error };
+  }
+
+  const dataTypeIds = Array.from(
+    new Set(
+      (attributes.data ?? [])
+        .map((attribute) => attribute.attributeDataTypeId)
+        .filter(Boolean)
+    )
+  );
+  const dataTypes =
+    dataTypeIds.length > 0
+      ? await client
+          .from("attributeDataType")
+          .select(
+            "id, label, isBoolean, isDate, isList, isNumeric, isText, isUser, isFile"
+          )
+          .in("id", dataTypeIds)
+      : { data: [], error: null };
+
+  if (dataTypes.error) {
+    return { ...category, data: null, error: dataTypes.error };
+  }
+
+  const dataTypesById = new Map(
+    (dataTypes.data ?? []).map((dataType) => [dataType.id, dataType])
+  );
+
+  return {
+    ...category,
+    data: {
+      ...category.data,
+      userAttribute: (attributes.data ?? []).map((attribute) => ({
+        ...attribute,
+        attributeDataType:
+          dataTypesById.get(attribute.attributeDataTypeId) ?? null
+      }))
+    }
+  };
 }
 
-export async function getAttributeDataTypes(client: SupabaseClient<Database>) {
+export async function getAttributeDataTypes(client: CarbonDatabaseClient<QueryDatabase>) {
   return client.from("attributeDataType").select("*");
 }
 
 export async function getDepartment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   departmentId: string
 ) {
   return client.from("department").select("*").eq("id", departmentId).single();
 }
 
 export async function getDepartments(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -176,7 +300,7 @@ export async function getDepartments(
 }
 
 export async function getDepartmentsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -187,7 +311,7 @@ export async function getDepartmentsList(
 }
 
 export async function getDepartmentsTree(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -198,7 +322,7 @@ export async function getDepartmentsTree(
 }
 
 export async function getEmployeeJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeId: string,
   companyId: string
 ) {
@@ -211,7 +335,7 @@ export async function getEmployeeJob(
 }
 
 export async function getEmployeeSummary(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeId: string,
   companyId: string
 ) {
@@ -224,14 +348,14 @@ export async function getEmployeeSummary(
 }
 
 export async function getHoliday(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   holidayId: string
 ) {
   return client.from("holiday").select("*").eq("id", holidayId).single();
 }
 
 export async function getHolidays(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -256,7 +380,7 @@ export async function getHolidays(
 }
 
 export function getHolidayYears(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client.from("holidayYears").select("year").eq("companyId", companyId);
@@ -282,7 +406,7 @@ type Person = Employee & {
 };
 
 export async function getPeople(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -361,7 +485,7 @@ export async function getPeople(
 }
 
 export async function getContacts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -393,7 +517,7 @@ export async function getContacts(
   };
 }
 export async function getShift(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   shiftId: string
 ) {
   return client
@@ -405,7 +529,7 @@ export async function getShift(
 }
 
 export async function getShifts(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -428,7 +552,7 @@ export async function getShifts(
 }
 
 export async function getShiftsList(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   locationId: string | null
 ) {
   let query = client.from("shift").select(`id, name`).eq("active", true);
@@ -441,7 +565,7 @@ export async function getShiftsList(
 }
 
 export async function insertAttribute(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   attribute: {
     name: string;
     attributeDataTypeId: number;
@@ -470,7 +594,7 @@ export async function insertAttribute(
 }
 
 export async function insertAttributeCategory(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   attributeCategory: {
     name: string;
     emoji?: string;
@@ -487,7 +611,7 @@ export async function insertAttributeCategory(
 }
 
 export async function insertEmployeeJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   job: {
     id: string;
     companyId: string;
@@ -498,7 +622,7 @@ export async function insertEmployeeJob(
 }
 
 export async function updateAttribute(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   attribute: {
     id?: string;
     name: string;
@@ -522,7 +646,7 @@ export async function updateAttribute(
 }
 
 export async function updateAttributeCategory(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   attributeCategory: {
     id: string;
     name: string;
@@ -539,7 +663,7 @@ export async function updateAttributeCategory(
 }
 
 export async function updateAttributeSortOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   updates: {
     id: string;
     sortOrder: number;
@@ -553,7 +677,7 @@ export async function updateAttributeSortOrder(
 }
 
 export async function updateEmployeeJob(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeId: string,
   employeeJob: z.infer<typeof employeeJobValidator> & {
     companyId: string;
@@ -569,7 +693,7 @@ export async function updateEmployeeJob(
 }
 
 export async function upsertDepartment(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   department:
     | (Omit<z.infer<typeof departmentValidator>, "id"> & {
         companyId: string;
@@ -592,7 +716,7 @@ export async function upsertDepartment(
 }
 
 export async function upsertHoliday(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   holiday:
     | (Omit<z.infer<typeof holidayValidator>, "id"> & {
         companyId: string;
@@ -612,7 +736,7 @@ export async function upsertHoliday(
 }
 
 export async function upsertShift(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   shift:
     | (Omit<z.infer<typeof shiftValidator>, "id"> & {
         createdBy: string;
@@ -632,7 +756,7 @@ export async function upsertShift(
 }
 
 export async function clockIn(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     employeeId: string;
     companyId: string;
@@ -656,7 +780,7 @@ export async function clockIn(
 }
 
 export async function clockOut(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     employeeId: string;
     companyId: string;
@@ -684,7 +808,7 @@ export async function clockOut(
 }
 
 export async function createTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   entry: {
     employeeId: string;
     companyId: string;
@@ -702,14 +826,14 @@ export async function createTimeCardEntry(
 }
 
 export async function deleteTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   entryId: string
 ) {
   return client.from("timeCardEntry").delete().eq("id", entryId);
 }
 
 export async function getClockedInEmployees(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -721,7 +845,7 @@ export async function getClockedInEmployees(
 }
 
 export async function getOpenClockEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   employeeId: string,
   companyId: string
 ) {
@@ -735,7 +859,7 @@ export async function getOpenClockEntry(
 }
 
 export async function getRecentTimecards(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   return client
@@ -747,7 +871,7 @@ export async function getRecentTimecards(
 }
 
 export async function getScheduledEmployeesToday(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ) {
   const { data } = await client
@@ -778,14 +902,14 @@ export async function getScheduledEmployeesToday(
 }
 
 export async function getTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   entryId: string
 ) {
   return client.from("timeCardEntry").select("*").eq("id", entryId).single();
 }
 
 export async function getTimeCardEntries(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     employeeId: string;
     companyId: string;
@@ -811,7 +935,7 @@ export async function getTimeCardEntries(
 }
 
 export async function getTimecardEntries(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -834,7 +958,7 @@ export async function getTimecardEntries(
 }
 
 export async function getWeeklyHoursForEmployees(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   employeeIds: string[]
 ): Promise<Record<string, number>> {
@@ -864,7 +988,7 @@ export async function getWeeklyHoursForEmployees(
 }
 
 export async function updateTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   args: {
     entryId: string;
     clockIn?: string;

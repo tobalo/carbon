@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -43,15 +42,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // when picking begins (handled by the picking flow).
   const COMMITTING_STATUSES = new Set(["Released", "Completed"]);
   if (COMMITTING_STATUSES.has(status)) {
-    const serviceRole = getCarbonServiceRole();
-    const { data: lines } = await serviceRole
+    const { data: lines } = await client
       .from("stockTransferLine")
       .select("id, itemId, fromStorageUnitId, toStorageUnitId, quantity")
       .eq("stockTransferId", id)
       .eq("companyId", companyId);
 
     const { violations, ruleNames } = await evaluateLinesForSurface({
-      client: serviceRole,
+      client,
       companyId,
       userId,
       surface: "stockTransfer",
@@ -77,6 +75,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const update = await updateStockTransferStatus(client, {
     id,
+    companyId,
     status,
     assignee: ["Completed"].includes(status) ? null : undefined,
     completedAt: ["Completed"].includes(status)

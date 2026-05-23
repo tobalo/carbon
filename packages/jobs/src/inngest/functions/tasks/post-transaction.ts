@@ -1,11 +1,19 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { inngest } from "../../client";
+import { invokeFunction } from "../../../lib/functions";
+import type { JobQueryClient } from "../../../lib/query-client";
+
+const postTransactionDocumentTables = {
+  receipt: "receipt",
+  "purchase-invoice": "purchaseInvoice",
+  shipment: "shipment"
+} as const;
 
 export const postTransactionFunction = inngest.createFunction(
   { id: "post-transactions", retries: 3 },
   { event: "carbon/post-transaction" },
   async ({ event, step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
     const payload = event.data;
 
     const result = await step.run("post-transaction", async () => {
@@ -13,22 +21,24 @@ export const postTransactionFunction = inngest.createFunction(
         `Post transaction ${payload.type} for ${payload.documentId}`
       );
 
-      let result: { success: boolean; message: string };
+      const scope = await verifyPostTransactionScope(serviceClient, payload);
+      if (!scope.success) {
+        return scope;
+      }
+
+      let result: { success: boolean; message?: string };
 
       switch (payload.type) {
         case "receipt":
           console.info(`Posting receipt ${payload.documentId}`);
           console.info(payload);
-          const postReceipt = await serviceRole.functions.invoke(
-            "post-receipt",
-            {
-              body: {
-                receiptId: payload.documentId,
-                userId: payload.userId,
-                companyId: payload.companyId
-              }
+          const postReceipt = await invokeFunction("post-receipt", {
+            body: {
+              receiptId: payload.documentId,
+              userId: payload.userId,
+              companyId: payload.companyId
             }
-          );
+          });
 
           result = {
             success: postReceipt.error === null,
@@ -39,7 +49,7 @@ export const postTransactionFunction = inngest.createFunction(
         case "purchase-invoice":
           console.info(`Posting purchase invoice ${payload.documentId}`);
           console.info(payload);
-          const postPurchaseInvoice = await serviceRole.functions.invoke(
+          const postPurchaseInvoice = await invokeFunction(
             "post-purchase-invoice",
             {
               body: {
@@ -57,7 +67,7 @@ export const postTransactionFunction = inngest.createFunction(
 
           if (result.success) {
             // Check if we should update prices on invoice post
-            const companySettings = await serviceRole
+            const companySettings = await serviceClient
               .from("companySettings")
               .select("purchasePriceUpdateTiming")
               .eq("id", payload.companyId)
@@ -72,7 +82,7 @@ export const postTransactionFunction = inngest.createFunction(
                 `Updating pricing from invoice ${payload.documentId}`
               );
 
-              const priceUpdate = await serviceRole.functions.invoke(
+              const priceUpdate = await invokeFunction(
                 "update-purchased-prices",
                 {
                   body: {
@@ -95,16 +105,13 @@ export const postTransactionFunction = inngest.createFunction(
           console.info(`Posting shipment ${payload.documentId}`);
           console.info(payload);
 
-          const postShipment = await serviceRole.functions.invoke(
-            "post-shipment",
-            {
-              body: {
-                shipmentId: payload.documentId,
-                userId: payload.userId,
-                companyId: payload.companyId
-              }
+          const postShipment = await invokeFunction("post-shipment", {
+            body: {
+              shipmentId: payload.documentId,
+              userId: payload.userId,
+              companyId: payload.companyId
             }
-          );
+          });
 
           result = {
             success: postShipment.error === null,
@@ -134,3 +141,55 @@ export const postTransactionFunction = inngest.createFunction(
     return result;
   }
 );
+
+async function verifyPostTransactionScope(
+  client: JobQueryClient,
+  payload: {
+    type: string;
+    documentId: string;
+    companyId: string;
+  }
+) {
+  const table =
+    postTransactionDocumentTables[
+      payload.type as keyof typeof postTransactionDocumentTables
+    ];
+
+  if (!table) {
+    return {
+      success: false,
+      message: `Invalid posting type: ${payload.type}`
+    };
+  }
+
+  const [company, document] = await Promise.all([
+    client
+      .from("company")
+      .select("id")
+      .eq("id", payload.companyId)
+      .eq("active", true)
+      .single(),
+    client
+      .from(table)
+      .select("id")
+      .eq("id", payload.documentId)
+      .eq("companyId", payload.companyId)
+      .single()
+  ]);
+
+  if (company.error || !company.data) {
+    return {
+      success: false,
+      message: "Company is inactive or not found"
+    };
+  }
+
+  if (document.error || !document.data) {
+    return {
+      success: false,
+      message: `${payload.type} ${payload.documentId} not found in company ${payload.companyId}`
+    };
+  }
+
+  return { success: true };
+}

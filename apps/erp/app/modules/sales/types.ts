@@ -1,4 +1,11 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  quoteStatusEnum,
+  salesOrderLineTypeEnum,
+  salesOrderStatusEnum,
+  salesOrderTransactionTypeEnum,
+  salesRfqStatusEnum
+} from "@carbon/database/schema";
 import type { jobStatus } from "../production/production.models";
 import type { QuantityEffect } from "../shared";
 import type {
@@ -211,7 +218,7 @@ export type HistoricalQuotationPrice = NonNullable<
   >["historicalQuoteLinePrices"]
 >[number];
 
-export type QuotationStatusType = Database["public"]["Enums"]["quoteStatus"];
+export type QuotationStatusType = EnumValue<typeof quoteStatusEnum>;
 
 export type QuotationPayment = NonNullable<
   Awaited<ReturnType<typeof getQuotePayment>>["data"]
@@ -248,14 +255,14 @@ export type SalesOrderLineShipment = NonNullable<
 >[number];
 
 export type SalesOrderLineType = Omit<
-  Database["public"]["Enums"]["salesOrderLineType"],
+  EnumValue<typeof salesOrderLineTypeEnum>,
   "Service"
 >;
 
-export type SalesOrderStatus = Database["public"]["Enums"]["salesOrderStatus"];
+export type SalesOrderStatus = EnumValue<typeof salesOrderStatusEnum>;
 
 export type SalesOrderTransactionType =
-  Database["public"]["Enums"]["salesOrderTransactionType"];
+  EnumValue<typeof salesOrderTransactionTypeEnum>;
 
 export type SalesOrderRelatedItems = Awaited<
   ReturnType<typeof getSalesOrderRelatedItems>
@@ -269,4 +276,4 @@ export type SalesRFQLine = NonNullable<
   Awaited<ReturnType<typeof getSalesRFQLines>>["data"]
 >[number];
 
-export type SalesRFQStatusType = Database["public"]["Enums"]["salesRfqStatus"];
+export type SalesRFQStatusType = EnumValue<typeof salesRfqStatusEnum>;

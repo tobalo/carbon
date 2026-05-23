@@ -37,7 +37,7 @@ import {
   ReorderEditBar,
   useLineOrderEditMode
 } from "~/components/LineReorder";
-import { usePermissions, useRealtime, useRouteData } from "~/hooks";
+import { usePermissions, usePollingRevalidation, useRouteData } from "~/hooks";
 import type { MethodItemType } from "~/modules/shared";
 import { path } from "~/utils/path";
 import { isSalesRfqLocked, salesRfqDragValidator } from "../../sales.models";
@@ -56,7 +56,7 @@ export default function SalesRFQExplorer() {
   }>(path.to.salesRfq(rfqId));
   const permissions = usePermissions();
 
-  useRealtime(
+  usePollingRevalidation(
     "modelUpload",
     `modelPath=in.(${salesRfqData?.lines.map((d) => d.modelPath).join(",")})`
   );

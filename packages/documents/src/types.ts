@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 
 export interface Email {
   company: Company;
@@ -28,12 +28,12 @@ export type Meta = {
   subject?: string;
 };
 
-export type Company = Database["public"]["Views"]["companies"]["Row"];
+export type Company = TableRow<"companies">;
 export type CompanySettings =
-  Database["public"]["Tables"]["companySettings"]["Row"];
+  TableRow<"companySettings">;
 export type QuoteCustomerDetails =
-  Database["public"]["Views"]["quoteCustomerDetails"]["Row"];
+  TableRow<"quoteCustomerDetails">;
 export type AccountsPayableBillingAddress =
-  Database["public"]["Tables"]["companyAccountsPayableBillingAddress"]["Row"];
+  TableRow<"companyAccountsPayableBillingAddress">;
 export type AccountsReceivableBillingAddress =
-  Database["public"]["Tables"]["companyAccountsReceivableBillingAddress"]["Row"];
+  TableRow<"companyAccountsReceivableBillingAddress">;

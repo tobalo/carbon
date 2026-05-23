@@ -46,8 +46,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     partManufacturing
   ] = await Promise.all([
     getMakeMethodById(client, makeMethodId, companyId),
-    getMethodMaterialsByMakeMethod(client, makeMethodId),
-    getMethodOperationsByMakeMethodId(client, makeMethodId),
+    getMethodMaterialsByMakeMethod(client, makeMethodId, companyId),
+    getMethodOperationsByMakeMethodId(client, makeMethodId, companyId),
     getTagsList(client, companyId, "operation"),
     getItemManufacturing(client, itemId, companyId)
   ]);
@@ -172,7 +172,6 @@ export default function PartMakeMethodPage() {
       <BillOfMaterial
         key={`bom:${makeMethodId}`}
         makeMethod={makeMethod}
-        // @ts-expect-error TS2322 - TODO: fix type
         materials={methodMaterials}
         operations={methodOperations}
         configurable={partManufacturing?.requiresConfiguration}
@@ -184,7 +183,6 @@ export default function PartMakeMethodPage() {
         key={`bop:${makeMethodId}`}
         makeMethod={makeMethod}
         materials={methodMaterials}
-        // @ts-expect-error
         operations={methodOperations}
         configurable={partManufacturing?.requiresConfiguration}
         configurationRules={configurationRules}

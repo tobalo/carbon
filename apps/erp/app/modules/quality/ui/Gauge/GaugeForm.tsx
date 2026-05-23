@@ -24,7 +24,7 @@ import {
 } from "@carbon/react";
 import { parseDate } from "@internationalized/date";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { Suspense, useState } from "react";
 import {
   LuCalendar,
@@ -59,7 +59,7 @@ type GaugeFormValues = z.infer<typeof gaugeValidator>;
 type GaugeFormProps = {
   initialValues: GaugeFormValues;
   gaugeTypes: ListItem[];
-  records?: Promise<PostgrestResponse<GaugeCalibrationRecord>>;
+  records?: Promise<QueryResponse<GaugeCalibrationRecord>>;
   type?: "modal" | "drawer";
   open?: boolean;
   onClose?: () => void;

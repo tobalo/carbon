@@ -1,6 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -13,11 +12,9 @@ import {
 import { isApprovalRequired } from "~/modules/shared";
 import { path } from "~/utils/path";
 
-// the edge function grows larger than 2MB - so this is a workaround to avoid the edge function limit
-
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "purchasing"
   });
 
@@ -48,16 +45,25 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const selectedLines = parseResult.data;
 
-  const serviceRole = getCarbonServiceRole();
-
   // Check supplier approval status
   const [quote, supplierApprovalRequired] = await Promise.all([
-    getSupplierQuote(serviceRole, id),
-    isApprovalRequired(serviceRole, "supplier", companyId)
+    getSupplierQuote(client, id),
+    isApprovalRequired(client, "supplier", companyId)
   ]);
 
+  if (quote.error) {
+    throw redirect(
+      path.to.supplierQuoteDetails(id),
+      await flash(request, error(quote.error, "Failed to load supplier quote"))
+    );
+  }
+
+  if (quote.data.companyId !== companyId) {
+    throw redirect(path.to.supplierQuotes);
+  }
+
   if (supplierApprovalRequired && quote.data?.supplierId) {
-    const supplier = await getSupplier(serviceRole, quote.data.supplierId);
+    const supplier = await getSupplier(client, quote.data.supplierId);
     if (supplier.data?.status !== "Active") {
       throw redirect(
         path.to.supplierQuoteDetails(id),
@@ -69,7 +75,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
-  const convert = await convertSupplierQuoteToOrder(serviceRole, {
+  const convert = await convertSupplierQuoteToOrder(client, {
     id: id,
     companyId,
     userId,

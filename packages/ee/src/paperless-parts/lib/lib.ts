@@ -1,6 +1,11 @@
 import { openai } from "@ai-sdk/openai";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
+import type {
+  EnumValue,
+  TableInsert,
+  TableRow,
+  salesOrderStatusEnum
+} from "@carbon/database/schema";
 import {
   getMaterialDescription,
   getMaterialId,
@@ -8,7 +13,8 @@ import {
   supportedModelTypes,
   textToTiptap
 } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { uploadObject } from "@carbon/storage";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { generateObject } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -30,7 +36,7 @@ import type {
 import { calculatePromisedDate } from "./utils";
 
 async function lookupEntityByPaperlessId(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   entityType: string,
   integration: string,
   externalId: string,
@@ -48,19 +54,20 @@ async function lookupEntityByPaperlessId(
 }
 
 async function createPaperlessMapping(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   entityType: string,
   entityId: string,
   integration: string,
   externalId: string,
   companyId: string
 ): Promise<void> {
-  await getCarbonServiceRole()
+  await getCarbonServiceClient()
     .from("externalIntegrationMapping")
     .delete()
     .eq("entityType", entityType)
     .eq("entityId", entityId)
-    .eq("integration", integration);
+    .eq("integration", integration)
+    .eq("companyId", companyId);
 
   await carbon.from("externalIntegrationMapping").insert({
     entityType,
@@ -132,7 +139,7 @@ const substanceSchema = z.object({
 });
 
 async function determineMaterialSubstance(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   materialInfo: {
     description: string;
     materialName: string;
@@ -242,7 +249,7 @@ function cleanExpiredCache(): void {
  * Get cached material properties or fetch from database if not cached
  */
 async function getCachedMaterialProperties(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   substanceId: string
 ): Promise<MaterialPropertiesCache | null> {
   // Clean expired entries periodically
@@ -410,7 +417,7 @@ type PaperlessPartsMaterialInput = {
 };
 
 async function determineMaterialProperties(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   substanceId: string,
   materialInfo: PaperlessPartsMaterialInput
 ): Promise<MaterialNamingDetails | null> {
@@ -517,19 +524,22 @@ async function determineMaterialProperties(
  * }
  * ```
  *
- * @param carbon - Supabase client
+ * @param carbon - Carbon database client
  * @param materialId - The material ID (readableId)
  * @param companyId - The company ID
  * @returns Material naming details with both names and codes
  */
 export async function getMaterialProperties(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   materialId: string,
   companyId: string
 ): Promise<MaterialNamingDetails | null> {
   try {
     const materialNamingDetails = await carbon
-      .rpc("get_material_naming_details", { readable_id: materialId })
+      .rpc("get_material_naming_details", {
+        readable_id: materialId,
+        company_id: companyId
+      })
       .single();
 
     if (materialNamingDetails.error || !materialNamingDetails.data) {
@@ -575,7 +585,7 @@ export async function getMaterialProperties(
 }
 
 export async function getOrCreateMaterial(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     input: PaperlessPartsMaterialInput;
     createdBy: string;
@@ -775,7 +785,7 @@ export async function getOrCreateMaterial(
  * Upload CAD model file and create model record
  */
 async function uploadModelFile(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     file: File;
     companyId: string;
@@ -794,6 +804,7 @@ async function uploadModelFile(
       .from("item")
       .select("modelUploadId")
       .eq("id", itemId)
+      .eq("companyId", companyId)
       .single();
 
     if (existingItem.error) {
@@ -808,7 +819,8 @@ async function uploadModelFile(
       const lineUpdate = await carbon
         .from("salesOrderLine")
         .update({ modelUploadId: existingItem.data.modelUploadId })
-        .eq("id", salesOrderLineId);
+        .eq("id", salesOrderLineId)
+        .eq("companyId", companyId);
 
       if (lineUpdate.error) {
         console.error(
@@ -830,27 +842,17 @@ async function uploadModelFile(
 
     console.log(`Uploading CAD model ${file.name} to ${modelPath}`);
 
-    // Upload model to storage
-    const modelUpload = await carbon.storage
-      .from("private")
-      .upload(modelPath, file, {
-        upsert: true
-      });
-
-    if (modelUpload.error) {
-      console.error(`Failed to upload model ${file.name}:`, modelUpload.error);
-      return false;
-    }
-
-    if (!modelUpload.data?.path) {
-      console.error(`No path returned for uploaded model ${file.name}`);
-      return false;
-    }
+    await uploadObject({
+      companyId,
+      key: modelPath,
+      body: new Uint8Array(await file.arrayBuffer()),
+      contentType: file.type || "application/octet-stream"
+    });
 
     // Create model record
     const modelRecord = await carbon.from("modelUpload").insert({
       id: modelId,
-      modelPath: modelUpload.data.path,
+      modelPath,
       name: file.name,
       size: file.size,
       companyId,
@@ -870,8 +872,13 @@ async function uploadModelFile(
       carbon
         .from("salesOrderLine")
         .update({ modelUploadId: modelId })
-        .eq("id", salesOrderLineId),
-      carbon.from("item").update({ modelUploadId: modelId }).eq("id", itemId)
+        .eq("id", salesOrderLineId)
+        .eq("companyId", companyId),
+      carbon
+        .from("item")
+        .update({ modelUploadId: modelId })
+        .eq("id", itemId)
+        .eq("companyId", companyId)
     ]);
 
     if (lineUpdate.error) {
@@ -901,7 +908,7 @@ async function uploadModelFile(
  * Upload file to Carbon storage and create document record using upsertDocument
  */
 async function uploadFileToItem(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     file: File;
     companyId: string;
@@ -920,22 +927,12 @@ async function uploadFileToItem(
 
     console.log(`Uploading ${file.name} to ${storagePath}`);
 
-    const fileUpload = await carbon.storage
-      .from("private")
-      .upload(storagePath, file, {
-        cacheControl: `${12 * 60 * 60}`,
-        upsert: true
-      });
-
-    if (fileUpload.error) {
-      console.error(`Failed to upload file ${file.name}:`, fileUpload.error);
-      return false;
-    }
-
-    if (!fileUpload.data?.path) {
-      console.error(`No path returned for uploaded file ${file.name}`);
-      return false;
-    }
+    await uploadObject({
+      companyId,
+      key: storagePath,
+      body: new Uint8Array(await file.arrayBuffer()),
+      contentType: file.type || "application/octet-stream"
+    });
 
     return true;
   } catch (error) {
@@ -948,7 +945,7 @@ async function uploadFileToItem(
  * Download and upload supporting files for a component
  */
 async function processSupportingFiles(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     supportingFiles: Array<{ filename?: string; url?: string }>;
     companyId: string;
@@ -1038,10 +1035,10 @@ async function processSupportingFiles(
 }
 
 export async function getCustomerIdAndContactId(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   paperless: PaperlessPartsClient<unknown>,
   args: {
-    company: Database["public"]["Tables"]["company"]["Row"];
+    company: TableRow<"company">;
     contact: z.infer<typeof ContactSchema>;
     createdBy?: string;
   }
@@ -1488,10 +1485,10 @@ export async function getCustomerIdAndContactId(
 }
 
 export async function getCustomerLocationIds(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     customerId: string;
-    company: Database["public"]["Tables"]["company"]["Row"];
+    company: TableRow<"company">;
     billingInfo?: z.infer<typeof AddressSchema>;
     shippingInfo?: z.infer<typeof AddressSchema>;
   }
@@ -1609,13 +1606,14 @@ export async function getCustomerLocationIds(
           );
         }
 
-        invoiceLocationId = newCustomerLocation.data.id;
+        const createdInvoiceLocationId = newCustomerLocation.data.id;
+        invoiceLocationId = createdInvoiceLocationId;
 
         // Create the mapping for the new billing location
         await createPaperlessMapping(
           carbon,
           "customerLocation",
-          invoiceLocationId,
+          createdInvoiceLocationId,
           "paperlessPartsId",
           String(billingInfo.id),
           company.id
@@ -1732,13 +1730,14 @@ export async function getCustomerLocationIds(
           );
         }
 
-        shipmentLocationId = newCustomerLocation.data.id;
+        const createdShipmentLocationId = newCustomerLocation.data.id;
+        shipmentLocationId = createdShipmentLocationId;
 
         // Create the mapping for the new shipping location
         await createPaperlessMapping(
           carbon,
           "customerLocation",
-          shipmentLocationId,
+          createdShipmentLocationId,
           "paperlessPartsId",
           String(shippingInfo.id),
           company.id
@@ -1754,9 +1753,9 @@ export async function getCustomerLocationIds(
 }
 
 export async function getEmployeeAndSalesPersonId(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
-    company: Database["public"]["Tables"]["company"]["Row"];
+    company: TableRow<"company">;
     estimator?: z.infer<typeof SalesPersonSchema>;
     salesPerson?: z.infer<typeof SalesPersonSchema>;
     createdBy?: string;
@@ -1794,9 +1793,9 @@ export async function getEmployeeAndSalesPersonId(
 }
 
 export async function getOrderLocationId(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
-    company: Database["public"]["Tables"]["company"]["Row"];
+    company: TableRow<"company">;
     sendFrom?: z.infer<typeof FacilitySchema>;
   }
 ): Promise<string | null> {
@@ -1829,7 +1828,7 @@ export async function getOrderLocationId(
 
 export function getCarbonOrderStatus(
   status: z.infer<typeof OrderSchema>["status"]
-): Database["public"]["Enums"]["salesOrderStatus"] {
+): EnumValue<typeof salesOrderStatusEnum> {
   switch (status) {
     case "confirmed":
       return "Confirmed";
@@ -1851,7 +1850,7 @@ export function getCarbonOrderStatus(
  * Find existing part by Paperless Parts external ID
  */
 export async function getPaperlessPart(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     companyId: string;
     paperlessPartsId: string | number;
@@ -1918,7 +1917,7 @@ export async function getPaperlessPart(
  * Download and process thumbnail from URL, upload to Carbon storage
  */
 async function downloadAndUploadThumbnail(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     thumbnailUrl: string;
     companyId: string;
@@ -1943,20 +1942,16 @@ async function downloadAndUploadThumbnail(
     formData.append("file", blob);
     formData.append("contained", "true");
 
-    // Process the image through the resizer
-    const supabaseUrl = process.env.SUPABASE_URL;
-    if (!supabaseUrl) {
-      console.error("SUPABASE_URL environment variable not found");
+    const imageResizerUrl = process.env.IMAGE_RESIZER_URL;
+    if (!imageResizerUrl) {
+      console.error("IMAGE_RESIZER_URL environment variable not found");
       return null;
     }
 
-    const resizerResponse = await fetch(
-      `${supabaseUrl}/functions/v1/image-resizer`,
-      {
-        method: "POST",
-        body: formData
-      }
-    );
+    const resizerResponse = await fetch(imageResizerUrl, {
+      method: "POST",
+      body: formData
+    });
 
     if (!resizerResponse.ok) {
       console.error(`Image resizer failed: ${resizerResponse.statusText}`);
@@ -1980,20 +1975,15 @@ async function downloadAndUploadThumbnail(
       type: contentType
     });
 
-    // Upload to private bucket
     const storagePath = `${companyId}/thumbnails/${itemId}/${fileName}`;
-    const { data, error } = await carbon.storage
-      .from("private")
-      .upload(storagePath, thumbnailFile, {
-        upsert: true
-      });
+    await uploadObject({
+      companyId,
+      key: storagePath,
+      body: new Uint8Array(await thumbnailFile.arrayBuffer()),
+      contentType: thumbnailFile.type || "application/octet-stream"
+    });
 
-    if (error) {
-      console.error("Failed to upload thumbnail to storage:", error);
-      return null;
-    }
-
-    return data?.path || null;
+    return storagePath;
   } catch (error) {
     console.error("Error processing thumbnail:", error);
     return null;
@@ -2004,7 +1994,7 @@ async function downloadAndUploadThumbnail(
  * Create new item and part from Paperless Parts component data
  */
 export async function createPartFromComponent(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     companyId: string;
     createdBy: string;
@@ -2030,11 +2020,11 @@ export async function createPartFromComponent(
   } = args;
 
   const operations: Omit<
-    Database["public"]["Tables"]["methodOperation"]["Insert"],
+    TableInsert<"methodOperation">,
     "makeMethodId"
   >[] = [];
   const materials: Omit<
-    Database["public"]["Tables"]["methodMaterial"]["Insert"],
+    TableInsert<"methodMaterial">,
     "makeMethodId"
   >[] = [];
 
@@ -2432,7 +2422,7 @@ export async function createPartFromComponent(
  * Get or create part from Paperless Parts component
  */
 export async function getOrCreatePart(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     companyId: string;
     createdBy: string;
@@ -2547,7 +2537,7 @@ export async function getOrCreatePart(
 let servicePrefix = "Service: ";
 
 async function getOrCreateProcess(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   operation: any,
   companyId: string,
   createdBy: string
@@ -2589,7 +2579,7 @@ async function getOrCreateProcess(
  * Insert sales order lines from Paperless Parts order items
  */
 export async function insertOrderLines(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     salesOrderId: string;
     opportunityId: string;
@@ -2633,7 +2623,7 @@ export async function insertOrderLines(
     if (!orderItem.components?.length) {
       // Handle order items without components as comment lines
       if (orderItem.description || orderItem.public_notes) {
-        const commentLine: Database["public"]["Tables"]["salesOrderLine"]["Insert"] =
+        const commentLine: TableInsert<"salesOrderLine"> =
           {
             salesOrderId,
             salesOrderLineType: "Comment",
@@ -2720,7 +2710,7 @@ export async function insertOrderLines(
           ? parseFloat(String(orderItem.add_on_fees))
           : 0;
 
-        const salesOrderLine: Database["public"]["Tables"]["salesOrderLine"]["Insert"] =
+        const salesOrderLine: TableInsert<"salesOrderLine"> =
           {
             salesOrderId,
             salesOrderLineType: "Part",
@@ -2835,7 +2825,7 @@ export async function insertOrderLines(
  * Insert quote lines from Paperless Parts quote items
  */
 export async function insertQuoteLines(
-  carbon: SupabaseClient<Database>,
+  carbon: DatabaseQueryClient,
   args: {
     quoteId: string;
     opportunityId: string | undefined;
@@ -2980,7 +2970,7 @@ export async function insertQuoteLines(
           : "Make to Order";
 
         // Insert quote line
-        const quoteLine: Database["public"]["Tables"]["quoteLine"]["Insert"] = {
+        const quoteLine: TableInsert<"quoteLine"> = {
           quoteId,
           itemId,
           description: component.description || component.part_name || "",
@@ -3018,7 +3008,7 @@ export async function insertQuoteLines(
 
         // Insert quote line prices for each quantity break
         if (component.quantities?.length) {
-          const quoteLinePrices: Database["public"]["Tables"]["quoteLinePrice"]["Insert"][] =
+          const quoteLinePrices: TableInsert<"quoteLinePrice">[] =
             component.quantities.map((qp) => ({
               quoteId,
               quoteLineId,
@@ -3093,7 +3083,7 @@ export async function insertQuoteLines(
                   // Get labor and overhead rates for this operation
                   const operationRates = getOperationRates(process.id);
 
-                  const quoteOperation: Database["public"]["Tables"]["quoteOperation"]["Insert"] =
+                  const quoteOperation: TableInsert<"quoteOperation"> =
                     {
                       quoteId,
                       quoteLineId,
@@ -3151,7 +3141,7 @@ export async function insertQuoteLines(
                       .eq("id", materialResult.itemId)
                       .single();
 
-                    const quoteMaterial: Database["public"]["Tables"]["quoteMaterial"]["Insert"] =
+                    const quoteMaterial: TableInsert<"quoteMaterial"> =
                       {
                         quoteId,
                         quoteLineId,
@@ -3245,7 +3235,7 @@ export async function insertQuoteLines(
 
                 // 4. Insert "Make" materials first - a trigger will create quoteMakeMethod for each
                 if (madeChildren.length > 0) {
-                  const madeMaterialInserts: Database["public"]["Tables"]["quoteMaterial"]["Insert"][] =
+                  const madeMaterialInserts: TableInsert<"quoteMaterial">[] =
                     [];
 
                   for (const { childComponent, childItemId } of madeChildren) {
@@ -3346,7 +3336,7 @@ export async function insertQuoteLines(
                       .eq("id", childItemId)
                       .single();
 
-                    const childMaterial: Database["public"]["Tables"]["quoteMaterial"]["Insert"] =
+                    const childMaterial: TableInsert<"quoteMaterial"> =
                       {
                         quoteId,
                         quoteLineId,

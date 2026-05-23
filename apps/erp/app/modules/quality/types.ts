@@ -1,4 +1,10 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  TableRow,
+  inboundInspectionSampleStatusEnum,
+  inboundInspectionStatusEnum,
+  nonConformanceStatusEnum
+} from "@carbon/database/schema";
 import type { nonConformanceAssociationType } from "./quality.models";
 import type {
   getGaugeCalibrationRecords,
@@ -67,7 +73,7 @@ export type IssueAssociationNode = {
   }[];
 };
 
-export type IssueStatus = Database["public"]["Enums"]["nonConformanceStatus"];
+export type IssueStatus = EnumValue<typeof nonConformanceStatusEnum>;
 
 export type Issue = NonNullable<
   Awaited<ReturnType<typeof getIssues>>["data"]
@@ -142,19 +148,19 @@ export type InboundInspectionDetail = NonNullable<
 >;
 
 export type InboundInspectionStatus =
-  Database["public"]["Enums"]["inboundInspectionStatus"];
+  EnumValue<typeof inboundInspectionStatusEnum>;
 
 export type InboundInspectionSampleStatus =
-  Database["public"]["Enums"]["inboundInspectionSampleStatus"];
+  EnumValue<typeof inboundInspectionSampleStatusEnum>;
 
 export type InboundInspectionRow =
-  Database["public"]["Tables"]["inboundInspection"]["Row"];
+  TableRow<"inboundInspection">;
 
 export type InboundInspectionSampleRow =
-  Database["public"]["Tables"]["inboundInspectionSample"]["Row"];
+  TableRow<"inboundInspectionSample">;
 
 export type InspectionTrackedEntity = Pick<
-  Database["public"]["Tables"]["trackedEntity"]["Row"],
+  TableRow<"trackedEntity">,
   "id" | "readableId" | "attributes" | "status" | "sourceDocumentReadableId"
 >;
 

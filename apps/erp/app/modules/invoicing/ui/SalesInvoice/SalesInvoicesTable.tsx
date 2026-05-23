@@ -29,7 +29,7 @@ import {
   useCurrencyFormatter,
   useDateFormatter,
   usePermissions,
-  useRealtime
+  usePollingRevalidation
 } from "~/hooks";
 import { useCustomColumns } from "~/hooks/useCustomColumns";
 import type { SalesInvoice } from "~/modules/invoicing";
@@ -44,7 +44,7 @@ type SalesInvoicesTableProps = {
 };
 
 const SalesInvoicesTable = memo(({ data, count }: SalesInvoicesTableProps) => {
-  useRealtime("salesInvoice", `id=in.(${data.map((d) => d.id).join(",")})`);
+  usePollingRevalidation("salesInvoice", `id=in.(${data.map((d) => d.id).join(",")})`);
 
   const { t } = useLingui();
   const permissions = usePermissions();

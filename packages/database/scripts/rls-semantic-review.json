@@ -1,0 +1,444 @@
+{
+  "profiles": {
+    "app-layer-permission-gate": {
+      "description": "The greenfield RLS contract enforces tenant/principal isolation in Postgres. Module/action authorization from these legacy policies is intentionally enforced before query execution by Better Auth claims, API-key scopes, and route/service permission gates.",
+      "evidence": [
+        "packages/auth/src/services/auth.server.ts",
+        "packages/auth/src/services/users.ts",
+        "packages/database/src/drizzle.ts",
+        "packages/database/src/query-client.ts"
+      ]
+    },
+    "document-app-gate": {
+      "description": "Document row isolation is handled by generated tenant RLS. Document module permissions, read/write group UX, and file access are enforced by app routes/components and direct S3 download/upload routes.",
+      "evidence": [
+        "packages/auth/src/services/auth.server.ts",
+        "apps/erp/app/routes/x+/documents+/search.tsx",
+        "apps/erp/app/routes/x+/documents+/search.$documentId.tsx",
+        "apps/erp/app/routes/x+/documents+/$documentId.delete.tsx",
+        "apps/erp/app/routes/file+/preview+/image.tsx",
+        "packages/storage/src/path.ts"
+      ]
+    },
+    "external-account-app-gate": {
+      "description": "Customer/supplier account ownership semantics are app-layer authorization concerns in the greenfield target. Tenant RLS bounds company data; account-specific customer/supplier access is resolved through user account rows and module permission gates.",
+      "evidence": [
+        "packages/auth/src/services/auth.server.ts",
+        "packages/auth/src/services/users.server.ts",
+        "apps/erp/app/modules/users/users.server.ts",
+        "apps/erp/app/modules/users/users.service.ts"
+      ]
+    },
+    "users-admin-app-gate": {
+      "description": "User and employee-type permission administration is protected by the users module permission gates and Better Auth session/API-key authorization before the database call.",
+      "evidence": [
+        "packages/auth/src/services/auth.server.ts",
+        "apps/erp/app/modules/users/users.server.ts",
+        "apps/erp/app/modules/users/users.service.ts",
+        "apps/erp/app/modules/users/ui/EmployeeTypes/EmployeeTypesTable.tsx",
+        "apps/erp/app/modules/users/ui/Employees/EmployeesTable.tsx"
+      ]
+    }
+  },
+  "reviews": [
+    {
+      "table": "contact",
+      "name": "Customers with sales_create can create contacts from their organization",
+      "operations": ["insert"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "create": "sales" }]
+    },
+    {
+      "table": "contact",
+      "name": "Customers with sales_delete can delete contacts from their organization",
+      "operations": ["delete"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "delete": "sales" }]
+    },
+    {
+      "table": "contact",
+      "name": "Customers with sales_update can update contacts from their organization",
+      "operations": ["update"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "update": "sales" }]
+    },
+    {
+      "table": "contact",
+      "name": "Customers with sales_view can view contacts from their organization",
+      "operations": ["select"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "view": "sales" }]
+    },
+    {
+      "table": "contact",
+      "name": "Employees with purchasing_view can view contacts that are suppliers",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "contact",
+      "name": "Suppliers with purchasing_create can create contacts from their organization",
+      "operations": ["insert"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "contact",
+      "name": "Suppliers with purchasing_delete can delete contacts from their organization",
+      "operations": ["delete"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "delete": "purchasing" }]
+    },
+    {
+      "table": "contact",
+      "name": "Suppliers with purchasing_update can update contacts from their organization",
+      "operations": ["update"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "update": "purchasing" }]
+    },
+    {
+      "table": "contact",
+      "name": "Suppliers with purchasing_view can view contacts from their organization",
+      "operations": ["select"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with documents can view documents where they are in the readGroups",
+      "operations": ["select"],
+      "profile": "document-app-gate",
+      "permissions": [{ "view": "documents" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with documents_create can create documents where they are in the writeGroups",
+      "operations": ["insert"],
+      "profile": "document-app-gate",
+      "permissions": [{ "create": "documents" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with documents_delete can delete documents where they are in the writeGroups",
+      "operations": ["delete"],
+      "profile": "document-app-gate",
+      "permissions": [{ "delete": "documents" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with documents_update can update documents where they are in the writeGroups",
+      "operations": ["update"],
+      "profile": "document-app-gate",
+      "permissions": [{ "update": "documents" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with purchasing_create can create documents that start with purchasing",
+      "operations": ["insert"],
+      "profile": "document-app-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with purchasing_delete can delete documents that start with purchasing",
+      "operations": ["delete"],
+      "profile": "document-app-gate",
+      "permissions": [{ "delete": "purchasing" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with purchasing_update can update documents that start with purchasing",
+      "operations": ["update"],
+      "profile": "document-app-gate",
+      "permissions": [{ "update": "purchasing" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with purchasing_view can view documents that start with purchasing",
+      "operations": ["select"],
+      "profile": "document-app-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with sales_create can create documents that start with quote",
+      "operations": ["insert"],
+      "profile": "document-app-gate",
+      "permissions": [{ "create": "sales" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with sales_delete can delete documents that start with quote",
+      "operations": ["delete"],
+      "profile": "document-app-gate",
+      "permissions": [{ "delete": "sales" }]
+    },
+    {
+      "table": "document",
+      "name": "Users with sales_update can update documents that start with quote",
+      "operations": ["update"],
+      "profile": "document-app-gate",
+      "permissions": [{ "update": "sales" }]
+    },
+    {
+      "table": "employeeTypePermission",
+      "name": "Employees with users_update can view/modify permissions for employee type permissions",
+      "operations": ["select", "insert", "update", "delete"],
+      "profile": "users-admin-app-gate",
+      "permissions": [{ "update": "users" }]
+    },
+    {
+      "table": "externalLink",
+      "name": "Employees with sales_create can insert sales-related external links",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "sales" }]
+    },
+    {
+      "table": "externalLink",
+      "name": "Employees with sales_delete can delete sales-related external links",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "sales" }]
+    },
+    {
+      "table": "externalLink",
+      "name": "Employees with sales_update can update sales-related external links",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "sales" }]
+    },
+    {
+      "table": "item",
+      "name": "Suppliers with parts_delete can delete items that they created or supply",
+      "operations": ["delete"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "delete": "parts" }]
+    },
+    {
+      "table": "item",
+      "name": "Suppliers with parts_update can update parts that they created or supply",
+      "operations": ["update"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "update": "parts" }]
+    },
+    {
+      "table": "itemCost",
+      "name": "Suppliers with parts_update can update parts costs that they supply",
+      "operations": ["update"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "update": "parts" }]
+    },
+    {
+      "table": "job",
+      "name": "Customers with production_view can view their own jobs",
+      "operations": ["select"],
+      "profile": "external-account-app-gate",
+      "permissions": [{ "view": "production" }]
+    },
+    {
+      "table": "job",
+      "name": "Employees can view jobs",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "production" }]
+    },
+    {
+      "table": "job",
+      "name": "Employees with production_create can insert jobs",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "production" }]
+    },
+    {
+      "table": "job",
+      "name": "Employees with production_delete can delete jobs",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "production" }]
+    },
+    {
+      "table": "job",
+      "name": "Employees with production_update can update jobs",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "production" }]
+    },
+    {
+      "table": "jobMaterial",
+      "name": "Employees can view job materials",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "production" }]
+    },
+    {
+      "table": "jobMaterial",
+      "name": "Employees with production_create can insert job materials",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "production" }]
+    },
+    {
+      "table": "jobMaterial",
+      "name": "Employees with production_delete can delete job materials",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "production" }]
+    },
+    {
+      "table": "jobMaterial",
+      "name": "Employees with production_update can update job materials",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "production" }]
+    },
+    {
+      "table": "jobOperation",
+      "name": "Employees can view job operations",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "production" }]
+    },
+    {
+      "table": "jobOperation",
+      "name": "Employees with production_create can insert job operations",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "production" }]
+    },
+    {
+      "table": "jobOperation",
+      "name": "Employees with production_delete can delete job operations",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "production" }]
+    },
+    {
+      "table": "jobOperation",
+      "name": "Employees with production_update can update job operations",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "production" }]
+    },
+    {
+      "table": "purchasingRfq",
+      "name": "Employees with purchasing_create can insert purchasingRfq",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfq",
+      "name": "Employees with purchasing_delete can delete purchasingRfq",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfq",
+      "name": "Employees with purchasing_update can update purchasingRfq",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfq",
+      "name": "Employees with purchasing_view can view purchasingRfq",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqLine",
+      "name": "Employees with purchasing_create can insert purchasingRfqLine",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqLine",
+      "name": "Employees with purchasing_delete can delete purchasingRfqLine",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqLine",
+      "name": "Employees with purchasing_update can update purchasingRfqLine",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqLine",
+      "name": "Employees with purchasing_view can view purchasingRfqLine",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqSupplier",
+      "name": "Employees with purchasing_create can insert purchasingRfqSupplier",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqSupplier",
+      "name": "Employees with purchasing_delete can delete purchasingRfqSupplier",
+      "operations": ["delete"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "delete": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqSupplier",
+      "name": "Employees with purchasing_update can update purchasingRfqSupplier",
+      "operations": ["update"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "update": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqSupplier",
+      "name": "Employees with purchasing_view can view purchasingRfqSupplier",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqToPurchaseOrder",
+      "name": "Employees with purchasing_create can insert purchasingRfqToPurchaseOrder",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqToPurchaseOrder",
+      "name": "Employees with purchasing_view can view purchasingRfqToPurchaseOrder",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqToSupplierQuote",
+      "name": "Employees with purchasing_create can insert purchasingRfqToSupplierQuote",
+      "operations": ["insert"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "create": "purchasing" }]
+    },
+    {
+      "table": "purchasingRfqToSupplierQuote",
+      "name": "Employees with purchasing_view can view purchasingRfqToSupplierQuote",
+      "operations": ["select"],
+      "profile": "app-layer-permission-gate",
+      "permissions": [{ "view": "purchasing" }]
+    },
+    {
+      "table": "user",
+      "name": "Claims admin can view/modify users",
+      "operations": ["select", "insert", "update", "delete"],
+      "profile": "users-admin-app-gate",
+      "permissions": [{ "update": "users" }]
+    }
+  ]
+}

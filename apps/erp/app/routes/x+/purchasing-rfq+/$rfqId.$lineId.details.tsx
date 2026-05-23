@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -28,7 +27,7 @@ import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "purchasing"
   });
 
@@ -36,9 +35,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   if (!rfqId) throw new Error("Could not find rfqId");
   if (!lineId) throw new Error("Could not find lineId");
 
-  const serviceRole = getCarbonServiceRole();
-
-  const line = await getPurchasingRFQLine(serviceRole, lineId);
+  const line = await getPurchasingRFQLine(client, lineId);
 
   if (line.error) {
     throw redirect(
@@ -47,9 +44,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
   }
 
+  if (line.data.companyId !== companyId) {
+    throw redirect(path.to.purchasingRfq(rfqId));
+  }
+
   return {
     line: line.data,
-    files: getSupplierInteractionLineDocuments(serviceRole, companyId, lineId)
+    files: getSupplierInteractionLineDocuments(client, companyId, lineId)
   };
 };
 

@@ -11,6 +11,7 @@ import { usePermissions, useUser } from "~/hooks";
 import type { loader } from "~/routes/x+/quality-document+/$id";
 import type { action } from "~/routes/x+/quality-document+/update";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 
 export default function QualityDocumentEditor() {
   const { id } = useParams();
@@ -68,9 +69,11 @@ export default function QualityDocumentEditor() {
   const onUploadImage = async (file: File) => {
     const ext = file.name.split(".").pop();
     const storagePath = `${companyId}/parts/${nanoid()}.${ext}`;
-    const result = await carbon?.storage
-      .from("private")
-      .upload(storagePath, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: storagePath,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

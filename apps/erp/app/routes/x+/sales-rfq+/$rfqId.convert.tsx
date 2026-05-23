@@ -1,12 +1,12 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import {
   calculatePricesForQuantities,
   convertSalesRfqToQuote,
+  getSalesRFQ,
   resolvePurchaseToOrderPrices,
   resolveQuoteLinePrices
 } from "~/modules/sales";
@@ -14,15 +14,26 @@ import { path } from "~/utils/path";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "sales"
   });
 
   const { rfqId: id } = params;
   if (!id) throw new Error("Could not find id");
 
-  const serviceRole = getCarbonServiceRole();
-  const convert = await convertSalesRfqToQuote(serviceRole, {
+  const rfq = await getSalesRFQ(client, id);
+  if (rfq.error) {
+    throw redirect(
+      path.to.salesRfq(id),
+      await flash(request, error(rfq.error, "Failed to load RFQ"))
+    );
+  }
+
+  if (rfq.data.companyId !== companyId) {
+    throw redirect(path.to.salesRfqs);
+  }
+
+  const convert = await convertSalesRfqToQuote(client, {
     id,
     companyId,
     userId
@@ -43,7 +54,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   // never writes any prices — so the new quote opens with empty pricing.
   // The standard "add quote line" path in `$quoteId.new.tsx` calls these
   // same helpers per methodType; mirror that here.
-  const newLines = await serviceRole
+  const newLines = await client
     .from("quoteLine")
     .select("id, methodType, quantity")
     .eq("quoteId", quoteId);
@@ -57,7 +68,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         switch (line.methodType) {
           case "Make to Order":
             return calculatePricesForQuantities(
-              serviceRole,
+              client,
               quoteId,
               line.id,
               quantities,
@@ -65,7 +76,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             );
           case "Pull from Inventory":
             return resolveQuoteLinePrices(
-              serviceRole,
+              client,
               companyId,
               quoteId,
               line.id,
@@ -74,7 +85,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             );
           case "Purchase to Order":
             return resolvePurchaseToOrderPrices(
-              serviceRole,
+              client,
               companyId,
               quoteId,
               line.id,

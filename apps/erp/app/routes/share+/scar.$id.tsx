@@ -1,5 +1,5 @@
 import { assertIsPost, error, success } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -66,8 +66,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     };
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const externalLink = await getExternalLink(serviceRole, id);
+  const serviceClient = getCarbonServiceClient();
+  const externalLink = await getExternalLink(serviceClient, id);
   if (!externalLink.data || !externalLink.data?.documentId) {
     return {
       state: IssueState.NotFound,
@@ -76,8 +76,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   const issue = await getIssueFromExternalLink(
-    serviceRole,
-    externalLink.data.documentId
+    serviceClient,
+    externalLink.data.documentId,
+    externalLink.data.companyId
   );
   if (!issue.data) {
     return {
@@ -87,10 +88,14 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   const [company, supplier, actionTasks] = await Promise.all([
-    getCompany(serviceRole, externalLink.data.companyId),
-    getSupplier(serviceRole, issue.data.supplierId),
+    getCompany(serviceClient, externalLink.data.companyId),
+    getSupplier(
+      serviceClient,
+      issue.data.supplierId,
+      externalLink.data.companyId
+    ),
     getIssueActionTasks(
-      serviceRole,
+      serviceClient,
       issue.data.nonConformanceId,
       externalLink.data.companyId,
       issue.data.supplierId
@@ -132,19 +137,20 @@ export const scarValidator = z.object({
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const serviceRole = getCarbonServiceRole();
+  const serviceClient = getCarbonServiceClient();
 
   const { id } = params;
   if (!id) throw new Error("Could not find id");
 
-  const externalLink = await getExternalLink(serviceRole, id);
+  const externalLink = await getExternalLink(serviceClient, id);
   if (!externalLink.data || !externalLink.data?.documentId) {
     throw new Error("Could not find id");
   }
 
   const issue = await getIssueFromExternalLink(
-    serviceRole,
-    externalLink.data.documentId
+    serviceClient,
+    externalLink.data.documentId,
+    externalLink.data.companyId
   );
   if (!issue.data) {
     throw new Error("Could not find the issue");
@@ -160,8 +166,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
+  if (validation.data.supplierId !== issue.data.supplierId) {
+    throw new Error("Invalid supplier id");
+  }
+
   const tasks = await getIssueActionTasks(
-    serviceRole,
+    serviceClient,
     issue.data.nonConformanceId,
     externalLink.data.companyId,
     issue.data.supplierId
@@ -173,10 +183,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (validation.data.status) {
-    const statusUpdate = await updateIssueTaskStatus(serviceRole, {
+    const statusUpdate = await updateIssueTaskStatus(serviceClient, {
       id: validation.data.taskId,
       status: validation.data.status,
-      type: validation.data.type
+      type: validation.data.type,
+      companyId: externalLink.data.companyId,
+      nonConformanceId: issue.data.nonConformanceId,
+      supplierId: issue.data.supplierId
     });
 
     if (statusUpdate.error) {
@@ -200,10 +213,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (validation.data.content) {
-    const contentUpdate = await updateIssueTaskContent(serviceRole, {
+    const contentUpdate = await updateIssueTaskContent(serviceClient, {
       id: validation.data.taskId,
       content: validation.data.content,
-      type: validation.data.type
+      type: validation.data.type,
+      companyId: externalLink.data.companyId,
+      nonConformanceId: issue.data.nonConformanceId,
+      supplierId: issue.data.supplierId
     });
 
     if (contentUpdate.error) {
@@ -361,7 +377,7 @@ export function TaskItem({
     task,
     type
   });
-  const statusAction = statusActions[currentStatus];
+  const statusAction = statusActions[currentStatus as keyof typeof statusActions];
   const { content, setContent, onUpdateContent } = useTaskNotes({
     initialContent: (task.notes ?? {}) as JSONContent,
     taskId: task.id!,

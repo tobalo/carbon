@@ -119,6 +119,7 @@ import type { action as editQuoteOperationToolAction } from "~/routes/x+/quote+/
 import type { action as newQuoteOperationToolAction } from "~/routes/x+/quote+/methods+/operation.tool.new";
 import { useItems, useTools } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import { quoteOperationValidator } from "../../sales.models";
 import type { Quotation } from "../../types";
 
@@ -407,9 +408,11 @@ const QuoteBillOfProcess = ({
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/opportunity-line/${selectedItemId}/${nanoid()}.${fileType}`;
-    const result = await carbon?.storage
-      .from("private")
-      .upload(fileName, file, { upsert: true });
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       throw new Error(result.error.message);
@@ -953,7 +956,6 @@ function AttributesForm({
 
   const [description, setDescription] = useState<JSONContent>({});
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -962,7 +964,11 @@ function AttributesForm({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -1260,7 +1266,6 @@ function AttributesListItem({
     attribute.description ?? {}
   );
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -1269,7 +1274,11 @@ function AttributesListItem({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error("Failed to upload image");
@@ -1849,14 +1858,33 @@ function OperationForm({
       carbon.from("process").select("*").eq("id", processId).single(),
       carbon
         .from("workCenterProcess")
-        .select("workCenter(*)")
-        .eq("processId", processId)
-        .eq("workCenter.active", true),
+        .select("*")
+        .eq("processId", processId),
       carbon.from("supplierProcess").select("*").eq("processId", processId)
     ]);
 
+    const workCenterIds =
+      workCenters.data?.map((workCenter) => workCenter.workCenterId) ?? [];
+    const activeWorkCenterRows =
+      workCenterIds.length > 0
+        ? await carbon
+            .from("workCenter")
+            .select("*")
+            .in("id", workCenterIds)
+            .eq("active", true)
+        : { data: [] };
+    const workCentersById = new Map(
+      activeWorkCenterRows.data?.map(
+        (workCenter) => [workCenter.id, workCenter] as const
+      ) ?? []
+    );
     const activeWorkCenters =
-      workCenters?.data?.filter((wc) => Boolean(wc.workCenter)) ?? [];
+      workCenters?.data
+        ?.map((wc) => ({
+          ...wc,
+          workCenter: workCentersById.get(wc.workCenterId) ?? null
+        }))
+        .filter((wc) => Boolean(wc.workCenter)) ?? [];
 
     if (process.error) throw new Error(process.error.message);
 

@@ -21,7 +21,7 @@ import {
   supportedModelTypes
 } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
+import type { QueryResponse } from "@carbon/database/query-client";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
@@ -44,6 +44,7 @@ import {
 import { ReplenishmentSystemIcon, TrackingTypeIcon } from "~/components/Icons";
 import { useNextItemId, usePermissions, useUser } from "~/hooks";
 import { path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import {
   itemReplenishmentSystems,
   itemTrackingTypes,
@@ -68,7 +69,7 @@ const ToolForm = ({ initialValues, type = "card", onClose }: ToolFormProps) => {
   const { company } = useUser();
   const baseCurrency = company?.baseCurrencyCode ?? "USD";
 
-  const fetcher = useFetcher<PostgrestResponse<{ id: string }>>();
+  const fetcher = useFetcher<QueryResponse<{ id: string }>>();
 
   const [modelUploadId, setModelUploadId] = useState<string | null>(null);
   const [modelIsUploading, setModelIsUploading] = useState(false);
@@ -89,7 +90,11 @@ const ToolForm = ({ initialValues, type = "card", onClose }: ToolFormProps) => {
     const fileName = `${companyId}/models/${modelId}.${fileExtension}`;
 
     const [fileUpload, recordInsert] = await Promise.all([
-      carbon.storage.from("private").upload(fileName, file),
+      uploadStorageObject({
+        bucket: "private",
+        path: fileName,
+        file
+      }),
       carbon.from("modelUpload").insert({
         id: modelId,
         modelPath: fileName,

@@ -33,7 +33,15 @@ export const Linear = defineIntegration({
   })
 });
 
-function SetupInstructions({ companyId }: { companyId: string }) {
+function SetupInstructions({
+  companyId,
+  metadata
+}: {
+  companyId: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const webhookSecret =
+    typeof metadata?.webhookSecret === "string" ? metadata.webhookSecret : "";
   const webhookUrl = isBrowser
     ? `${window.location.origin}/api/webhook/${Linear.id}/${companyId}`
     : "";
@@ -55,6 +63,16 @@ function SetupInstructions({ companyId }: { companyId: string }) {
         <Input value={webhookUrl} />
         <InputRightElement>
           <Copy text={webhookUrl} />
+        </InputRightElement>
+      </InputGroup>
+      <p className="text-sm text-muted-foreground">
+        Configure this signing secret for the webhook and send the SHA-256 HMAC
+        body signature in the x-carbon-webhook-signature header.
+      </p>
+      <InputGroup className="mb-8">
+        <Input value={webhookSecret} readOnly />
+        <InputRightElement>
+          <Copy text={webhookSecret} />
         </InputRightElement>
       </InputGroup>
 

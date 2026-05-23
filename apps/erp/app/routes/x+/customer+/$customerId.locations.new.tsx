@@ -1,5 +1,8 @@
 import { assertIsPost, error, notFound, success } from "@carbon/auth";
-import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  assertCustomerAccountScope,
+  requirePermissions
+} from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type {
@@ -19,15 +22,17 @@ import { customerLocationsQuery } from "~/utils/react-query";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { client, companyId } = await requirePermissions(request, {
+  const auth = await requirePermissions(request, {
     create: "sales"
   });
+  const { client, companyId } = auth;
 
   const formData = await request.formData();
   const modal = formData.get("type") === "modal";
 
   const { customerId } = params;
   if (!customerId) throw notFound("customerId not found");
+  assertCustomerAccountScope(auth, customerId);
 
   const validation = await validator(customerLocationValidator).validate(
     formData

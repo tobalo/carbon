@@ -1,4 +1,7 @@
-import type { Database } from "@carbon/database";
+import type {
+  EnumValue,
+  procedureStepTypeEnum
+} from "@carbon/database/schema";
 import { Checkbox, cn } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
 import { useNumberFormatter } from "@react-aria/i18n";
@@ -26,7 +29,7 @@ type JobOperationStepRecord = {
   id: string;
   jobOperationStepId: string;
   index: number;
-  type: Database["public"]["Enums"]["procedureStepType"];
+  type: EnumValue<typeof procedureStepTypeEnum>;
   name: string;
   value: string | null;
   numericValue: number | null;

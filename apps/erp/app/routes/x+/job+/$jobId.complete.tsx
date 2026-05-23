@@ -1,3 +1,4 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
@@ -38,7 +39,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
     locationId,
     storageUnitId,
     leftoverAction,
-    leftoverShipQuantity
+    leftoverShipQuantity,
+    leftoverReceiveQuantity
   } = validation.data;
 
   const makeToOrder = !!salesOrderId || !!salesOrderLineId;
@@ -48,6 +50,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     .from("job")
     .select("quantity")
     .eq("id", jobId)
+    .eq("companyId", companyId)
     .single();
   if (job.error) {
     throw redirect(
@@ -59,6 +62,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const originalQuantity = job.data?.quantity ?? 0;
   const leftoverQuantity = Math.max(0, quantityComplete - originalQuantity);
   const hasLeftover = leftoverQuantity > 0;
+  const quantityToReceiveToInventory =
+    hasLeftover && leftoverAction === "receive"
+      ? leftoverQuantity
+      : hasLeftover && leftoverAction === "split"
+        ? (leftoverReceiveQuantity ?? 0)
+        : 0;
+  const shelfId = storageUnitId;
 
   let quantityToShip = originalQuantity;
 
@@ -97,7 +107,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         updatedAt: new Date().toISOString(),
         updatedBy: userId
       })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("companyId", companyId);
 
     if (quantityShippedUpdate.error) {
       throw redirect(
@@ -106,6 +117,51 @@ export async function action({ request, params }: ActionFunctionArgs) {
           request,
           error(quantityShippedUpdate.error, "Failed to update job")
         )
+      );
+    }
+
+    // If we need to receive leftovers to inventory
+    if (quantityToReceiveToInventory > 0) {
+      const issue = await invokeFunction("issue", {
+        body: {
+          jobId,
+          type: "jobCompleteInventory",
+          companyId,
+          userId,
+          quantityComplete: quantityToReceiveToInventory,
+          shelfId,
+          locationId
+        },
+      });
+
+      if (issue.error) {
+        throw redirect(
+          requestReferrer(request) ?? path.to.job(jobId),
+          await flash(
+            request,
+            error(issue.error, "Failed to receive leftovers to inventory")
+          )
+        );
+      }
+    }
+  } else {
+    // Make-to-stock: receive all completed to inventory
+    const issue = await invokeFunction("issue", {
+      body: {
+        jobId,
+        type: "jobCompleteInventory",
+        companyId,
+        userId,
+        quantityComplete,
+        shelfId,
+        locationId
+      },
+    });
+
+    if (issue.error) {
+      throw redirect(
+        requestReferrer(request) ?? path.to.job(jobId),
+        await flash(request, error(issue.error, "Failed to complete job"))
       );
     }
   }

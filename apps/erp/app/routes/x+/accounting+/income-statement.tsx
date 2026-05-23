@@ -63,7 +63,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       startDate ?? undefined
     );
 
-    const incomeStatementAccounts = consolidated.data.filter(
+    const incomeStatementAccounts = (consolidated.data as any[]).filter(
       (a) => a.incomeBalance === "Income Statement"
     );
 
@@ -107,7 +107,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     selectedCompany.baseCurrencyCode !== parentCurrency;
 
   let incomeStatementAccounts = (balances.data ?? []).filter(
-    (a) => a.incomeBalance === "Income Statement"
+    (a: any) => a.incomeBalance === "Income Statement"
   ) as (Chart & { translatedBalance?: number; exchangeRate?: number })[];
 
   if (showTranslated && isForeignCurrency && parentCurrency) {

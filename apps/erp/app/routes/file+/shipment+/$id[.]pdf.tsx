@@ -1,5 +1,4 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { PackingSlipPDF } from "@carbon/documents/pdf";
 import type { JSONContent } from "@carbon/react";
 import { getPreferenceHeaders } from "@carbon/react";
@@ -24,7 +23,7 @@ import {
   getSalesTerms
 } from "~/modules/sales";
 import { getCompany, getCompanySettings } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { client, companyId } = await requirePermissions(request, {
@@ -38,8 +37,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     [
       getCompany(client, companyId),
       getCompanySettings(client, companyId),
-      getShipment(client, id),
-      getShipmentLinesWithDetails(client, id)
+      getShipment(client, id, companyId),
+      getShipmentLinesWithDetails(client, id, companyId)
     ]
   );
 
@@ -55,8 +54,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     console.error(shipmentLines.error);
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const terms = await getSalesTerms(serviceRole, companyId);
+  const terms = await getSalesTerms(client, companyId);
 
   if (terms.error) {
     console.error(terms.error);
@@ -67,6 +65,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     shipment.error ||
     shipmentLines.error ||
     terms.error ||
+    shipment.data.companyId !== companyId ||
     shipment.data.sourceDocumentId === null
   ) {
     throw new Error("Failed to load sales order");
@@ -77,9 +76,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   switch (shipment.data.sourceDocument) {
     case "Sales Order": {
       const [salesOrder, salesOrderShipment] = await Promise.all([
-        getSalesOrder(serviceRole, shipment.data.sourceDocumentId),
-        getSalesOrderShipment(serviceRole, shipment.data.sourceDocumentId)
+        getSalesOrder(client, shipment.data.sourceDocumentId, companyId),
+        getSalesOrderShipment(client, shipment.data.sourceDocumentId, companyId)
       ]);
+
+      if (salesOrder.error || !salesOrder.data) {
+        console.error(salesOrder.error);
+        throw new Error("Failed to load sales order");
+      }
 
       const [
         customer,
@@ -88,23 +92,27 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         shippingMethod,
         shipmentTracking
       ] = await Promise.all([
-        serviceRole
+        client
           .from("customer")
           .select("*")
           .eq("id", salesOrder.data?.customerId ?? "")
+          .eq("companyId", companyId)
           .single(),
         getCustomerLocation(
-          serviceRole,
-          salesOrder.data?.customerLocationId ?? ""
+          client,
+          salesOrder.data.customerLocationId ?? "",
+          salesOrder.data.customerId ?? undefined,
+          companyId
         ),
-        getPaymentTerm(serviceRole, salesOrder.data?.paymentTermId ?? ""),
+        getPaymentTerm(client, salesOrder.data.paymentTermId ?? "", companyId),
         getShippingMethod(
-          serviceRole,
+          client,
           shipment.data.shippingMethodId ??
             salesOrderShipment.data?.shippingMethodId ??
-            ""
+            "",
+          companyId
         ),
-        getShipmentTracking(serviceRole, shipment.data.id, companyId)
+        getShipmentTracking(client, shipment.data.id, companyId)
       ]);
 
       if (customer.error) {
@@ -131,7 +139,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(serviceRole, path).then(
+                  return getBase64ImageFromStorage(client, path).then(
                     (data) => ({
                       id,
                       data
@@ -163,7 +171,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           sourceDocumentId={salesOrder.data?.salesOrderId ?? undefined}
           shipment={shipment.data}
           shipmentLines={shipmentLines.data ?? []}
-          // @ts-expect-error
           shippingAddress={customerLocation.data?.address ?? null}
           terms={(terms?.data?.salesTerms ?? {}) as JSONContent}
           paymentTerm={paymentTerm.data ?? { id: "", name: "" }}
@@ -192,16 +199,24 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       return new Response(new Uint8Array(body), { status: 200, headers });
     }
     case "Sales Invoice": {
-      const salesInvoice = await serviceRole
+      const salesInvoice = await client
         .from("salesInvoice")
-        .select("*, salesInvoiceShipment(*)")
+        .select("*")
         .eq("id", shipment.data.sourceDocumentId ?? "")
+        .eq("companyId", companyId)
         .single();
 
       if (salesInvoice.error) {
         console.error(salesInvoice.error);
         throw new Error("Failed to load sales invoice");
       }
+
+      const salesInvoiceShipment = await client
+        .from("salesInvoiceShipment")
+        .select("*")
+        .eq("id", salesInvoice.data?.id ?? "")
+        .eq("companyId", companyId)
+        .maybeSingle();
 
       const [
         customer,
@@ -210,20 +225,31 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         shippingMethod,
         shipmentTracking
       ] = await Promise.all([
-        serviceRole
+        client
           .from("customer")
           .select("*")
           .eq("id", salesInvoice.data?.customerId ?? "")
+          .eq("companyId", companyId)
           .single(),
-        getCustomerLocation(serviceRole, salesInvoice.data?.locationId ?? ""),
-        getPaymentTerm(serviceRole, salesInvoice.data?.paymentTermId ?? ""),
-        getShippingMethod(
-          serviceRole,
-          shipment.data.shippingMethodId ??
-            salesInvoice.data?.salesInvoiceShipment?.shippingMethodId ??
-            ""
+        getCustomerLocation(
+          client,
+          salesInvoice.data?.locationId ?? "",
+          salesInvoice.data?.customerId ?? undefined,
+          companyId
         ),
-        getShipmentTracking(serviceRole, shipment.data.id, companyId)
+        getPaymentTerm(
+          client,
+          salesInvoice.data?.paymentTermId ?? "",
+          companyId
+        ),
+        getShippingMethod(
+          client,
+          shipment.data.shippingMethodId ??
+            salesInvoiceShipment.data?.shippingMethodId ??
+            "",
+          companyId
+        ),
+        getShipmentTracking(client, shipment.data.id, companyId)
       ]);
 
       if (customer.error) {
@@ -250,7 +276,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(serviceRole, path).then(
+                  return getBase64ImageFromStorage(client, path).then(
                     (data) => ({
                       id,
                       data
@@ -282,7 +308,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           sourceDocumentId={salesInvoice.data?.invoiceId ?? undefined}
           shipment={shipment.data}
           shipmentLines={shipmentLines.data ?? []}
-          // @ts-expect-error
           shippingAddress={customerLocation.data?.address ?? null}
           terms={(terms?.data?.salesTerms ?? {}) as JSONContent}
           paymentTerm={paymentTerm.data ?? { id: "", name: "" }}
@@ -312,9 +337,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
     case "Purchase Order": {
       const [purchaseOrder, purchaseOrderDelivery] = await Promise.all([
-        getPurchaseOrder(client, shipment.data.sourceDocumentId),
-        getPurchaseOrderDelivery(client, shipment.data.sourceDocumentId)
+        getPurchaseOrder(client, shipment.data.sourceDocumentId, companyId),
+        getPurchaseOrderDelivery(
+          client,
+          shipment.data.sourceDocumentId,
+          companyId
+        )
       ]);
+
+      if (purchaseOrder.error || !purchaseOrder.data) {
+        console.error(purchaseOrder.error);
+        throw new Error("Failed to load purchase order");
+      }
 
       const [
         supplier,
@@ -326,16 +360,24 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         client
           .from("supplier")
           .select("*")
-          .eq("id", purchaseOrder.data?.supplierId ?? "")
+          .eq("id", purchaseOrder.data.supplierId ?? "")
+          .eq("companyId", companyId)
           .single(),
         getSupplierLocation(
           client,
-          purchaseOrder.data?.supplierLocationId ?? ""
+          purchaseOrder.data.supplierLocationId ?? "",
+          purchaseOrder.data.supplierId ?? undefined,
+          companyId
         ),
-        getPaymentTerm(client, purchaseOrder.data?.paymentTermId ?? ""),
+        getPaymentTerm(
+          client,
+          purchaseOrder.data.paymentTermId ?? "",
+          companyId
+        ),
         getShippingMethod(
           client,
-          purchaseOrderDelivery.data?.shippingMethodId ?? ""
+          purchaseOrderDelivery.data?.shippingMethodId ?? "",
+          companyId
         ),
         getShipmentTracking(client, shipment.data.id, companyId)
       ]);
@@ -364,7 +406,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(client, path).then(
+                  return getBase64ImageFromStorage(client, path).then(
                     (data) => ({
                       id,
                       data
@@ -396,7 +438,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           sourceDocumentId={purchaseOrder.data?.purchaseOrderId ?? undefined}
           shipment={shipment.data}
           shipmentLines={shipmentLines.data ?? []}
-          // @ts-expect-error
           shippingAddress={supplierLocation.data?.address ?? null}
           terms={(terms?.data?.salesTerms ?? {}) as JSONContent}
           paymentTerm={poPaymentTerm.data ?? { id: "", name: "" }}

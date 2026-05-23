@@ -4,11 +4,10 @@ import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { updatePurchasingRFQLineOrder } from "~/modules/purchasing";
-import { getDatabaseClient } from "~/services/database.server";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { userId } = await requirePermissions(request, {
+  const { client, userId } = await requirePermissions(request, {
     update: "purchasing"
   });
 
@@ -31,7 +30,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   );
 
   try {
-    await updatePurchasingRFQLineOrder(getDatabaseClient(), updates);
+    await updatePurchasingRFQLineOrder(client, updates);
   } catch (err) {
     return data(
       { success: false },

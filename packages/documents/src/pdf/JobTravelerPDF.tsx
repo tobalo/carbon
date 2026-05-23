@@ -1,4 +1,4 @@
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { getMESUrl } from "@carbon/env";
 import type { JSONContent } from "@carbon/react";
 import { formatDate, formatDurationMinutes } from "@carbon/utils";
@@ -8,19 +8,19 @@ import { generateQRCode } from "../qr/qr-code";
 import type { Company, PDF } from "../types";
 import { Header, Note, Template } from "./components";
 
-type JobOperationStep = Database["public"]["Tables"]["jobOperationStep"]["Row"];
+type JobOperationStep = TableRow<"jobOperationStep">;
 
 type JobOperationWithSteps =
-  Database["public"]["Tables"]["jobOperation"]["Row"] & {
+  TableRow<"jobOperation"> & {
     jobOperationStep?: JobOperationStep[];
   };
 
 interface JobTravelerProps extends PDF {
-  job: Database["public"]["Views"]["jobs"]["Row"];
-  jobMakeMethod: Database["public"]["Tables"]["jobMakeMethod"]["Row"];
+  job: TableRow<"jobs">;
+  jobMakeMethod: TableRow<"jobMakeMethod">;
   jobOperations: JobOperationWithSteps[];
-  customer: Database["public"]["Tables"]["customer"]["Row"] | null;
-  item: Database["public"]["Tables"]["item"]["Row"];
+  customer: TableRow<"customer"> | null;
+  item: TableRow<"item">;
   batchNumber: string | undefined;
   bomId?: string;
   notes?: JSONContent;
@@ -101,9 +101,9 @@ const jobHeaderStyles = StyleSheet.create({
 
 type JobHeaderProps = {
   company: Company;
-  job: Database["public"]["Views"]["jobs"]["Row"];
-  customer: Database["public"]["Tables"]["customer"]["Row"] | null;
-  item: Database["public"]["Tables"]["item"]["Row"];
+  job: TableRow<"jobs">;
+  customer: TableRow<"customer"> | null;
+  item: TableRow<"item">;
   jobOperations: JobOperationWithSteps[];
   batchNumber?: string;
   bomId?: string;
@@ -586,7 +586,7 @@ const JobTravelerPDF = ({
 
 export default JobTravelerPDF;
 
-type Operation = Database["public"]["Tables"]["jobOperation"]["Row"];
+type Operation = TableRow<"jobOperation">;
 
 function getParallelizedOrder(
   index: number,

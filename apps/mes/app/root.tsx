@@ -41,13 +41,12 @@ import { getMode, setMode } from "~/services/mode.server";
 import Background from "~/styles/background.css?url";
 import NProgress from "~/styles/nprogress.css?url";
 import Tailwind from "~/styles/tailwind.css?url";
-import type { Route } from "./+types/root";
 import { getTheme } from "./services/theme.server";
 
 export const middleware = [flashMiddleware];
 export const clientMiddleware = [flashClientMiddleware];
 
-export const links: Route.LinksFunction = () => [
+export const links = () => [
   { rel: "stylesheet", href: Tailwind },
   { rel: "stylesheet", href: Background },
   { rel: "stylesheet", href: NProgress }
@@ -71,8 +70,6 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     NODE_ENV,
     POSTHOG_API_HOST,
     POSTHOG_PROJECT_PUBLIC_KEY,
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
     VERCEL_ENV,
     VERCEL_URL
   } = getBrowserEnv();
@@ -92,8 +89,6 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         NODE_ENV,
         POSTHOG_API_HOST,
         POSTHOG_PROJECT_PUBLIC_KEY,
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY,
         VERCEL_ENV,
         VERCEL_URL
       },
@@ -236,7 +231,7 @@ export default function App() {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+export function ErrorBoundary({ error }: { error: unknown }) {
   const message = isRouteErrorResponse(error)
     ? (error.data.message ?? error.data)
     : error instanceof Error

@@ -2,25 +2,27 @@
  * Tree and BOM (Bill of Materials) utility types and functions
  */
 
+type TreeData<TData> = unknown extends TData ? any : TData;
+
 /** A tree structure */
-export type Tree<TData> = {
+export type Tree<TData = any> = {
   id: string;
   children?: Tree<TData>[];
-  data: TData;
+  data: TreeData<TData>;
 };
 
 /** A tree but flattened so it can easily be used for DOM elements */
-export type FlatTreeItem<TData> = {
+export type FlatTreeItem<TData = any> = {
   id: string;
   parentId: string | undefined;
   children: string[];
   hasChildren: boolean;
   /** The indentation level, the root is 0 */
   level: number;
-  data: TData;
+  data: TreeData<TData>;
 };
 
-export type FlatTree<TData> = FlatTreeItem<TData>[];
+export type FlatTree<TData = any> = FlatTreeItem<TData>[];
 
 /**
  * Flattens a tree structure into an array of FlatTreeItems.

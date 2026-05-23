@@ -1,8 +1,8 @@
 import { CarbonEdition, error, STRIPE_BYPASS_COMPANY_IDS } from "@carbon/auth";
 import { flash } from "@carbon/auth/session.server";
-import type { Database } from "@carbon/database";
+import type { QueryDatabase } from "@carbon/database/schema";
 import { Edition, normalizePlanId, type Plan } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonDatabaseClient } from "@carbon/database/query-client";
 import { redirect } from "react-router";
 import {
   defaultUpgradeMessage,
@@ -19,7 +19,7 @@ function isBypassCompany(companyId: string): boolean {
 }
 
 async function getCompanyPlan(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string
 ): Promise<Plan> {
   const { data } = await client
@@ -33,7 +33,7 @@ async function getCompanyPlan(
 
 /** Self-hosted and bypass-listed companies always pass. */
 export async function companyHasPlan(
-  client: SupabaseClient<Database>,
+  client: CarbonDatabaseClient<QueryDatabase>,
   companyId: string,
   spec: GateSpec
 ): Promise<boolean> {
@@ -46,7 +46,7 @@ export async function companyHasPlan(
 
 type RequirePlanArgs = {
   request: Request;
-  client: SupabaseClient<Database>;
+  client: CarbonDatabaseClient<QueryDatabase>;
   companyId: string;
   redirectTo: string;
   message?: string;

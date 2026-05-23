@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -14,7 +13,7 @@ import { setCustomFields } from "~/utils/form";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "sales"
   });
 
@@ -36,8 +35,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  const serviceRole = getCarbonServiceRole();
-  const updateQuoteMaterial = await upsertQuoteMaterial(serviceRole, {
+  const updateQuoteMaterial = await upsertQuoteMaterial(client, {
     quoteId,
     quoteLineId: lineId,
     ...validation.data,
@@ -71,7 +69,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  await recalculateQuoteLinePrices(serviceRole, quoteId, lineId, userId);
+  await recalculateQuoteLinePrices(client, quoteId, lineId, userId);
 
   return {
     id: quoteMaterialId,

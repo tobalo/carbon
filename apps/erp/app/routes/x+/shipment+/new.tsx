@@ -1,9 +1,9 @@
+import { invokeFunction } from "@carbon/auth/functions.server";
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { msg } from "@lingui/core/macro";
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import type { ShipmentSourceDocument } from "~/modules/inventory";
 import { getUserDefaults } from "~/modules/users/users.server";
@@ -26,11 +26,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const sourceDocumentId = (formData.get("sourceDocumentId") as string) ?? "";
 
   const defaults = await getUserDefaults(client, userId, companyId);
-  const serviceRole = getCarbonServiceRole();
 
   switch (sourceDocument) {
     case "Sales Order":
-      const salesOrderShipment = await serviceRole.functions.invoke<{
+      const salesOrderShipment = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -40,7 +39,7 @@ export async function action({ request }: ActionFunctionArgs) {
           salesOrderId: sourceDocumentId,
           shipmentId: undefined,
           userId: userId
-        }
+        },
       });
       if (!salesOrderShipment.data || salesOrderShipment.error) {
         console.error(salesOrderShipment.error);
@@ -55,7 +54,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       throw redirect(path.to.shipmentDetails(salesOrderShipment.data.id));
     case "Purchase Order":
-      const purchaseOrderShipment = await serviceRole.functions.invoke<{
+      const purchaseOrderShipment = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -65,7 +64,7 @@ export async function action({ request }: ActionFunctionArgs) {
           purchaseOrderId: sourceDocumentId,
           shipmentId: undefined,
           userId: userId
-        }
+        },
       });
       if (!purchaseOrderShipment.data || purchaseOrderShipment.error) {
         console.error(purchaseOrderShipment.error);
@@ -80,7 +79,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       throw redirect(path.to.shipmentDetails(purchaseOrderShipment.data.id));
     case "Outbound Transfer":
-      const warehouseTransferShipment = await serviceRole.functions.invoke<{
+      const warehouseTransferShipment = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -89,7 +88,7 @@ export async function action({ request }: ActionFunctionArgs) {
           warehouseTransferId: sourceDocumentId,
           shipmentId: undefined,
           userId: userId
-        }
+        },
       });
       if (!warehouseTransferShipment.data || warehouseTransferShipment.error) {
         console.error(warehouseTransferShipment.error);
@@ -106,7 +105,7 @@ export async function action({ request }: ActionFunctionArgs) {
         path.to.shipmentDetails(warehouseTransferShipment.data.id)
       );
     default:
-      const defaultShipment = await serviceRole.functions.invoke<{
+      const defaultShipment = await invokeFunction<{
         id: string;
       }>("create", {
         body: {
@@ -114,7 +113,7 @@ export async function action({ request }: ActionFunctionArgs) {
           companyId,
           locationId: defaults.data?.locationId,
           userId: userId
-        }
+        },
       });
 
       if (!defaultShipment.data || defaultShipment.error) {

@@ -10,7 +10,7 @@ import { AttributeForm } from "~/modules/people/ui/Attributes";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "people",
     role: "employee"
   });
@@ -19,7 +19,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (!attributeId) throw notFound("attributeId not found");
   if (!categoryId) throw notFound("categoryId not found");
 
-  const attribute = await getAttribute(client, attributeId);
+  const attribute = await getAttribute(client, attributeId, companyId);
   if (attribute.error) {
     throw redirect(
       path.to.attributeCategoryList(categoryId),
@@ -50,7 +50,6 @@ export default function EditAttributeRoute() {
       initialValues={{
         id: attribute?.id,
         name: attribute?.name,
-        // @ts-expect-error
         attributeDataTypeId: attribute?.attributeDataTypeId.toString(),
         userAttributeCategoryId: attribute?.userAttributeCategoryId,
         canSelfManage: attribute.canSelfManage ?? true,

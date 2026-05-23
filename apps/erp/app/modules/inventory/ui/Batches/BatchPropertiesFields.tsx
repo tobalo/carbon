@@ -125,7 +125,7 @@ function PropertyField({
               <SelectValue placeholder={t`Select an option`} />
             </SelectTrigger>
             <SelectContent>
-              {property.listOptions?.map((option) => (
+              {property.listOptions?.map((option: any) => (
                 <SelectItem key={option} value={option}>
                   {option}
                 </SelectItem>

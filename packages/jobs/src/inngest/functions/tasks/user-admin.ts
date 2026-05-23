@@ -1,5 +1,5 @@
 import type { Result } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { deactivateUser } from "@carbon/auth/users.server";
 import { InviteEmail } from "@carbon/documents/email";
 import { CarbonEdition, getAppUrl, RESEND_DOMAIN } from "@carbon/env";
@@ -14,7 +14,7 @@ export const userAdminFunction = inngest.createFunction(
   { id: "user-admin", retries: 3 },
   { event: "carbon/user-admin" },
   async ({ event, step }) => {
-    const serviceRole = getCarbonServiceRole();
+    const serviceClient = getCarbonServiceClient();
     const payload = event.data;
 
     const result = await step.run("user-admin-action", async () => {
@@ -26,7 +26,7 @@ export const userAdminFunction = inngest.createFunction(
         case "deactivate":
           console.log(`Deactivating ${payload.id}`);
           result = await deactivateUser(
-            serviceRole,
+            serviceClient,
             payload.id,
             payload.companyId
           );
@@ -38,12 +38,12 @@ export const userAdminFunction = inngest.createFunction(
           const { id: userId, companyId, location, ip } = payload;
           console.log(`Resending invite for ${payload.id}`);
           const [company, user] = await Promise.all([
-            serviceRole
+            serviceClient
               .from("company")
               .select("name")
               .eq("id", companyId)
               .single(),
-            serviceRole
+            serviceClient
               .from("user")
               .select("email, fullName")
               .eq("id", userId)
@@ -54,11 +54,13 @@ export const userAdminFunction = inngest.createFunction(
             throw new Error("Failed to load company or user");
           }
 
-          const existingInvite = await serviceRole
+          const existingInvite = await serviceClient
             .from("invite")
             .select("createdBy")
             .eq("email", user.data.email)
             .eq("companyId", companyId)
+            .is("acceptedAt", null)
+            .is("revokedAt", null)
             .maybeSingle();
 
           if (existingInvite.error || !existingInvite.data) {
@@ -69,11 +71,13 @@ export const userAdminFunction = inngest.createFunction(
           }
 
           const newCode = nanoid();
-          const refreshed = await serviceRole
+          const refreshed = await serviceClient
             .from("invite")
-            .update({ code: newCode, acceptedAt: null, revokedAt: null })
+            .update({ code: newCode })
             .eq("email", user.data.email)
             .eq("companyId", companyId)
+            .is("acceptedAt", null)
+            .is("revokedAt", null)
             .select("code")
             .single();
 
@@ -84,7 +88,7 @@ export const userAdminFunction = inngest.createFunction(
             };
           }
 
-          const inviter = await serviceRole
+          const inviter = await serviceClient
             .from("user")
             .select("email, fullName")
             .eq("id", existingInvite.data.createdBy)

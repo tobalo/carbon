@@ -33,6 +33,7 @@ import type React from "react";
 import { LuChevronDown, LuFingerprint, LuMoon, LuSun } from "react-icons/lu";
 import type {
   ActionFunctionArgs,
+  LinksFunction,
   LoaderFunctionArgs,
   MetaFunction
 } from "react-router";
@@ -53,7 +54,6 @@ import { modules } from "~/config";
 import { getMode, setMode } from "~/services/mode.server";
 import NProgress from "~/styles/nprogress.css?url";
 import Tailwind from "~/styles/tailwind.css?url";
-import type { Route } from "./+types/root";
 import AvatarMenu from "./components/AvatarMenu";
 import { useOptionalUser } from "./hooks/useUser";
 import { path } from "./utils/path";
@@ -61,7 +61,7 @@ import { path } from "./utils/path";
 export const middleware = [flashMiddleware];
 export const clientMiddleware = [flashClientMiddleware];
 
-export const links: Route.LinksFunction = () => [
+export const links: LinksFunction = () => [
   { rel: "stylesheet", href: Tailwind },
   { rel: "stylesheet", href: NProgress }
 ];
@@ -79,9 +79,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     CARBON_EDITION,
     CARBON_API_URL,
     POSTHOG_API_HOST,
-    POSTHOG_PROJECT_PUBLIC_KEY,
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
+    POSTHOG_PROJECT_PUBLIC_KEY
   } = getBrowserEnv();
 
   let session = await getOrRefreshAuthSession(request);
@@ -98,7 +96,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   }[] = [];
 
   if (session) {
-    const client = getCarbon(session.accessToken);
+    const client = getCarbon(session.accessToken, session.userId);
 
     const [authUser, completions, attempts] = await Promise.all([
       client.from("user").select("*").eq("id", session.userId).single(),
@@ -127,9 +125,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         CARBON_EDITION,
         CARBON_API_URL,
         POSTHOG_API_HOST,
-        POSTHOG_PROJECT_PUBLIC_KEY,
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY
+        POSTHOG_PROJECT_PUBLIC_KEY
       },
       lessonCompletions,
       mode: getMode(request),

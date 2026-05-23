@@ -1,25 +1,21 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import {
-  CARBON_API_KEY,
-  CARBON_API_URL,
+  getServiceDatabaseQueryClient,
+  type DatabaseQueryClient,
+  type QueryError
+} from "@carbon/database/query-client";
+import { uploadObject } from "@carbon/storage";
+import {
   CARBON_APP_URL,
-  CARBON_COMPANY_ID,
-  CARBON_PUBLIC_KEY
+  CARBON_COMPANY_ID
 } from "~/config";
 
 class CarbonClient {
   private readonly appUrl: string = CARBON_APP_URL;
-  private readonly client: SupabaseClient;
+  private readonly client: DatabaseQueryClient;
   private readonly companyId: string = CARBON_COMPANY_ID;
+
   constructor() {
-    this.client = createClient(CARBON_API_URL, CARBON_PUBLIC_KEY, {
-      global: {
-        headers: {
-          "carbon-key": CARBON_API_KEY
-        }
-      }
-    });
+    this.client = getServiceDatabaseQueryClient();
   }
 
   private getPublicModelUrl(path: string) {
@@ -28,9 +24,7 @@ class CarbonClient {
 
   async uploadModel(
     file: File
-  ): Promise<
-    { data: ModelUpload; error: null } | { data: null; error: PostgrestError }
-  > {
+  ): Promise<{ data: ModelUpload | null; error: QueryError | null }> {
     const { nanoid } = await import("nanoid");
 
     const modelId = nanoid();
@@ -38,7 +32,12 @@ class CarbonClient {
     const fileName = `${this.companyId}/models/${modelId}.${fileExtension}`;
 
     const [fileUpload, recordInsert] = await Promise.all([
-      this.client.storage.from("private").upload(fileName, file),
+      uploadPrivateFile({
+        companyId: this.companyId,
+        key: fileName,
+        file,
+        contentType: file.type
+      }),
       this.client.from("modelUpload").insert({
         id: modelId,
         modelPath: fileName,
@@ -52,12 +51,15 @@ class CarbonClient {
     if (fileUpload.error) {
       return {
         data: null,
-        error: fileUpload.error as unknown as PostgrestError
+        error: fileUpload.error as unknown as QueryError
       };
     }
 
     if (recordInsert.error) {
-      return recordInsert;
+      return {
+        data: null,
+        error: recordInsert.error as QueryError
+      };
     }
 
     return {
@@ -77,17 +79,17 @@ class CarbonClient {
     const thumbnailId = nanoid();
     const thumbnailPath = `${this.companyId}/thumbnails/${thumbnailId}.png`;
 
-    const thumbnailUpload = await this.client.storage
-      .from("private")
-      .upload(thumbnailPath, file, {
-        upsert: true,
-        contentType: "image/png"
-      });
+    const thumbnailUpload = await uploadPrivateFile({
+      companyId: this.companyId,
+      key: thumbnailPath,
+      file,
+      contentType: "image/png"
+    });
 
     if (thumbnailUpload.error) {
       return {
         data: null,
-        error: thumbnailUpload.error as unknown as PostgrestError
+        error: thumbnailUpload.error as unknown as QueryError
       };
     }
 
@@ -111,6 +113,32 @@ class CarbonClient {
 const carbon = new CarbonClient();
 
 export { carbon };
+
+async function uploadPrivateFile(args: {
+  companyId: string;
+  key: string;
+  file: File;
+  contentType?: string;
+}): Promise<{ data: { path: string } | null; error: QueryError | null }> {
+  try {
+    await uploadObject({
+      companyId: args.companyId,
+      key: args.key,
+      body: new Uint8Array(await args.file.arrayBuffer()),
+      contentType: args.contentType
+    });
+    return { data: { path: args.key }, error: null };
+  } catch (error) {
+    return { data: null, error: toQueryError(error) };
+  }
+}
+
+function toQueryError(error: unknown): QueryError {
+  if (error instanceof Error) {
+    return { message: error.message, name: error.name };
+  }
+  return { message: String(error) };
+}
 
 export type ModelUpload = {
   id: string;

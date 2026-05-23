@@ -2,8 +2,6 @@
 
 Contact: [support@carbon.ms](mailto:support@carbon.ms)
 
-Based on [https://supabase.com/.well-known/security.txt](https://supabase.com/.well-known/security.txt)
-
 At Carbon, we consider the security of our systems a top priority. But no
 matter how much effort we put into system security, there can still be
 vulnerabilities present.

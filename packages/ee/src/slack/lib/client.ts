@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   SLACK_CLIENT_ID,
   SLACK_CLIENT_SECRET,
@@ -114,7 +114,7 @@ export const getSlackInstallUrl = ({
   });
 };
 
-export async function verifySlackWebhook(req: Request) {
+export async function verifySlackRequest(req: Request) {
   if (!SLACK_SIGNING_SECRET) {
     throw new Error("SLACK_SIGNING_SECRET is not set");
   }
@@ -141,12 +141,22 @@ export async function verifySlackWebhook(req: Request) {
   const mySignature = createHmac("sha256", SLACK_SIGNING_SECRET)
     .update(sigBasestring)
     .digest("hex");
+  const expectedSignature = `${slackSignatureVersion}=${mySignature}`;
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const actualBuffer = Buffer.from(slackSignature);
 
-  if (`${slackSignatureVersion}=${mySignature}` !== slackSignature) {
+  if (
+    expectedBuffer.byteLength !== actualBuffer.byteLength ||
+    !timingSafeEqual(expectedBuffer, actualBuffer)
+  ) {
     throw new Error("Invalid Slack signature");
   }
 
-  return JSON.parse(body);
+  return body;
+}
+
+export async function verifySlackWebhook(req: Request) {
+  return JSON.parse(await verifySlackRequest(req));
 }
 
 /**

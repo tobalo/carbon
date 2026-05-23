@@ -23,8 +23,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const companyId = params.companyId;
+  if (!companyId) {
+    await destroyAuthSession(request);
+    throw redirect(path.to.authenticatedRoot);
+  }
+
   const matchedCompany = companies.data?.find(
-    (company) => company.id === companyId
+    (company: { id: string }) => company.id === companyId
   );
   if (!matchedCompany) {
     throw redirect(
@@ -33,24 +38,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  if (!companyId) {
-    await destroyAuthSession(request);
-  }
-
   const sessionCookie = await updateCompanySession(
     request,
-    companyId!,
+    companyId,
     matchedCompany.companyGroupId ?? ""
   );
-  const companyIdCookie = setCompanyId(companyId!);
+  const companyIdCookie = setCompanyId(companyId);
   const storedLocations = await getLocation(request, client, {
     userId,
-    companyId: companyId!
+    companyId
   });
 
   if (storedLocations.updated) {
     const locationCookie = await setLocation(
-      companyId!,
+      companyId,
       storedLocations.location
     );
 

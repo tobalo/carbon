@@ -287,7 +287,6 @@ export function ItemCard({ item, isOverlay, progressByItemId }: ItemCardProps) {
             <JobOperationStatus
               operation={{
                 id: item.id,
-                // @ts-expect-error TS2322 - TODO: fix type
                 status: status ?? "Todo",
                 jobId: item.jobId
               }}

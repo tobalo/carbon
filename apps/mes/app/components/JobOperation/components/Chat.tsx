@@ -7,8 +7,8 @@ import {
   Loading,
   ScrollArea,
   useDebounce,
+  useInterval,
   useMount,
-  useRealtimeChannel
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useLocale } from "@react-aria/i18n";
@@ -41,14 +41,15 @@ export function OperationChat({
   const [messages, setMessages] = useState<Message[]>([]);
 
   const [isLoading, setIsLoading] = useState(false);
-  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const { carbon, accessToken } = useCarbon();
+  const { carbon } = useCarbon();
 
-  const fetchChats = async () => {
+  const fetchChats = async (showLoading = true) => {
     if (!carbon) return;
-    flushSync(() => {
-      setIsLoading(true);
-    });
+    if (showLoading) {
+      flushSync(() => {
+        setIsLoading(true);
+      });
+    }
 
     const { data, error } = await carbon
       ?.from("jobOperationNote")
@@ -58,38 +59,24 @@ export function OperationChat({
 
     if (error) {
       console.error(error);
+      if (showLoading) {
+        setIsLoading(false);
+      }
       return;
     }
     setMessages(data);
-    setIsLoading(false);
+    if (showLoading) {
+      setIsLoading(false);
+    }
   };
 
   useMount(() => {
-    fetchChats();
+    void fetchChats();
   });
 
-  useRealtimeChannel({
-    topic: `job-operation-notes-${operation.id}`,
-    setup(channel) {
-      return channel.on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "jobOperationNote",
-          filter: `jobOperationId=eq.${operation.id}`
-        },
-        (payload) => {
-          setMessages((prev) => {
-            if (prev.some((note) => note.id === payload.new.id)) {
-              return prev;
-            }
-            return [...prev, payload.new as Message];
-          });
-        }
-      );
-    }
-  });
+  useInterval(() => {
+    void fetchChats(false);
+  }, carbon ? 10_000 : null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

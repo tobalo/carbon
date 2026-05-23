@@ -1,6 +1,5 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -15,11 +14,10 @@ import { setCustomFields } from "~/utils/form";
 
 export async function action({ request, params }: ActionFunctionArgs) {
   assertIsPost(request);
-  const { companyId, userId } = await requirePermissions(request, {
+  const { client, companyId, userId } = await requirePermissions(request, {
     create: "production"
   });
 
-  const serviceRole = getCarbonServiceRole();
   const { jobId } = params;
   if (!jobId) {
     throw new Error("jobId not found");
@@ -32,7 +30,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return validationError(validation.error);
   }
 
-  const insertJobOperation = await upsertJobOperation(serviceRole, {
+  const job = await client
+    .from("job")
+    .select("id")
+    .eq("id", jobId)
+    .eq("companyId", companyId)
+    .single();
+  if (job.error) {
+    return data(
+      { id: null },
+      await flash(request, error(job.error, "Job not found"))
+    );
+  }
+
+  const insertJobOperation = await upsertJobOperation(client, {
     ...validation.data,
     jobId,
     companyId,
@@ -65,12 +76,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const [recalculateResult, recalculateDependencies] = await Promise.all([
-    recalculateJobMakeMethodRequirements(serviceRole, {
+    recalculateJobMakeMethodRequirements(client, {
       id: validation.data.jobMakeMethodId,
       companyId,
       userId
     }),
-    recalculateJobOperationDependencies(serviceRole, {
+    recalculateJobOperationDependencies(client, {
       jobId,
       companyId,
       userId

@@ -54,7 +54,7 @@ import { LevelLine } from "~/components/TreeView";
 import {
   useOptimisticLocation,
   usePermissions,
-  useRealtime,
+  usePollingRevalidation,
   useRouteData,
   useUser
 } from "~/hooks";
@@ -112,7 +112,7 @@ function getRelatedItems(
       children: items.shipments
         .filter((shipment) =>
           shipment.shipmentLine.some(
-            (line) => line.lineId === lineId && line.shippedQuantity > 0
+            (line: any) => line.lineId === lineId && line.shippedQuantity > 0
           )
         )
         .map((shipment) => ({
@@ -161,7 +161,7 @@ export default function SalesOrderExplorer() {
     ? true
     : salesOrderData?.salesOrder?.status !== "Draft";
 
-  useRealtime(
+  usePollingRevalidation(
     "modelUpload",
     `modelPath=in.(${salesOrderData?.lines.map((d) => d.modelPath).join(",")})`
   );
@@ -426,7 +426,6 @@ function SalesOrderLineItem({
                   <DropdownMenuIcon icon={<LuTrash />} />
                   <Trans>Delete Line</Trans>
                 </DropdownMenuItem>
-                {/* @ts-expect-error */}
                 {methodItemType.includes(line?.salesOrderLineType ?? "") && (
                   <DropdownMenuItem
                     asChild

@@ -1,6 +1,5 @@
 import { assertIsPost, error, notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
@@ -47,7 +46,7 @@ import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { companyId } = await requirePermissions(request, {
+  const { client, companyId } = await requirePermissions(request, {
     view: "sales",
     bypassRls: true
   });
@@ -56,12 +55,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (!orderId) throw notFound("orderId not found");
   if (!lineId) throw notFound("lineId not found");
 
-  const serviceRole = await getCarbonServiceRole();
-
   const [line, jobs, shipments] = await Promise.all([
-    getSalesOrderLine(serviceRole, lineId),
-    getJobsBySalesOrderLine(serviceRole, lineId),
-    getSalesOrderLineShipments(serviceRole, lineId)
+    getSalesOrderLine(client, lineId),
+    getJobsBySalesOrderLine(client, lineId),
+    getSalesOrderLineShipments(client, lineId, companyId)
   ]);
 
   if (line.error) {
@@ -77,9 +74,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     line: line?.data ?? null,
     itemReplenishment:
       itemId && line.data.methodType === "Make to Order"
-        ? getItemReplenishment(serviceRole, itemId, companyId)
+        ? getItemReplenishment(client, itemId, companyId)
         : Promise.resolve({ data: null }),
-    files: getOpportunityLineDocuments(serviceRole, companyId, lineId, itemId),
+    files: getOpportunityLineDocuments(client, companyId, lineId, itemId),
     jobs: jobs?.data ?? [],
     shipments: shipments?.data ?? []
   };

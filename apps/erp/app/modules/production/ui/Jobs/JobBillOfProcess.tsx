@@ -1,6 +1,6 @@
 "use client";
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import { Array as ArrayInput, Input, ValidatedForm } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import {
@@ -43,8 +43,8 @@ import {
   toast,
   useDebounce,
   useDisclosure,
+  useInterval,
   useMount,
-  useRealtimeChannel,
   VStack
 } from "@carbon/react";
 import { Editor } from "@carbon/react/Editor";
@@ -148,6 +148,7 @@ import type { action as editJobOperationToolAction } from "~/routes/x+/job+/meth
 import type { action as newJobOperationToolAction } from "~/routes/x+/job+/methods+/operation.tool.new";
 import { useItems, usePeople, useTools } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadStorageObject } from "~/utils/storage";
 import {
   jobOperationValidator,
   jobOperationValidatorForReleasedJob,
@@ -172,7 +173,7 @@ type ItemWithData = Item & {
 
 type JobOperationStep = OperationStep & {
   jobOperationStepRecord?:
-    | Database["public"]["Tables"]["jobOperationStepRecord"]["Row"][]
+    | TableRow<"jobOperationStepRecord">[]
     | null;
 };
 
@@ -629,9 +630,11 @@ const JobBillOfProcess = ({
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${selectedItemId}/${nanoid()}.${fileType}`;
-    const result = await carbon?.storage
-      .from("private")
-      .upload(fileName, file, { upsert: true });
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       throw new Error(result.error.message);
@@ -645,57 +648,40 @@ const JobBillOfProcess = ({
   };
 
   const [productionEvents, setProductionEvents] = useState<
-    Database["public"]["Tables"]["productionEvent"]["Row"][]
+    TableRow<"productionEvent">[]
   >([]);
   const [page, setPage] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const addOperationButtonRef = useRef<HTMLButtonElement>(null);
 
-  useRealtimeChannel({
-    topic: `production-events:${selectedItemId}`,
-    enabled: !!selectedItemId && !temporaryItems[selectedItemId],
-    setup(channel) {
-      return channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "productionEvent",
-          filter: `jobOperationId=eq.${selectedItemId}`
-        },
-        (payload) => {
-          switch (payload.eventType) {
-            case "INSERT":
-              const { new: inserted } = payload;
-              setProductionEvents((prevEvents) => [
-                ...prevEvents,
-                inserted as Database["public"]["Tables"]["productionEvent"]["Row"]
-              ]);
-              break;
-            case "UPDATE":
-              const { new: updated } = payload;
-              setProductionEvents((prevEvents) =>
-                prevEvents.map((event) =>
-                  event.id === updated.id
-                    ? (updated as Database["public"]["Tables"]["productionEvent"]["Row"])
-                    : event
-                )
-              );
-              break;
-            case "DELETE":
-              const { old: deleted } = payload;
-              setProductionEvents((prevEvents) =>
-                prevEvents.filter((event) => event.id !== deleted.id)
-              );
-              break;
-            default:
-              break;
-          }
-        }
-      );
+  const refreshProductionEvents = useCallback(async () => {
+    if (!selectedItemId || temporaryItems[selectedItemId] || !carbon) return;
+
+    const refreshed = await getProductionEventsPage(
+      carbon,
+      selectedItemId,
+      companyId,
+      false,
+      1
+    );
+
+    if (refreshed.error) {
+      console.error(refreshed.error);
+      return;
     }
-  });
+
+    setProductionEvents(refreshed.data ?? []);
+    setPage(1);
+    setHasMore(refreshed.hasMore ?? false);
+  }, [carbon, companyId, selectedItemId, temporaryItems]);
+
+  useInterval(
+    () => {
+      void refreshProductionEvents();
+    },
+    selectedItemId && !temporaryItems[selectedItemId] ? 15_000 : null
+  );
 
   const loadMoreProductionEvents = useCallback(async () => {
     if (isLoading || !hasMore || !selectedItemId) return;
@@ -1154,7 +1140,6 @@ function StepsForm({
     []
   );
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -1181,7 +1166,11 @@ function StepsForm({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -1482,7 +1471,6 @@ function StepsListItem({
   const date = updatedAt ?? createdAt;
 
   const unitOfMeasures = useUnitOfMeasure();
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -1491,7 +1479,11 @@ function StepsListItem({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadStorageObject({
+      bucket: "private",
+      path: fileName,
+      file
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -2198,14 +2190,33 @@ function OperationForm({
       carbon.from("process").select("*").eq("id", processId).single(),
       carbon
         .from("workCenterProcess")
-        .select("workCenter(*)")
-        .eq("processId", processId)
-        .eq("workCenter.active", true),
+        .select("*")
+        .eq("processId", processId),
       carbon.from("supplierProcess").select("*").eq("processId", processId)
     ]);
 
+    const workCenterIds =
+      workCenters.data?.map((workCenter) => workCenter.workCenterId) ?? [];
+    const activeWorkCenterRows =
+      workCenterIds.length > 0
+        ? await carbon
+            .from("workCenter")
+            .select("*")
+            .in("id", workCenterIds)
+            .eq("active", true)
+        : { data: [] };
+    const workCentersById = new Map(
+      activeWorkCenterRows.data?.map(
+        (workCenter) => [workCenter.id, workCenter] as const
+      ) ?? []
+    );
     const activeWorkCenters =
-      workCenters?.data?.filter((wc) => Boolean(wc.workCenter)) ?? [];
+      workCenters?.data
+        ?.map((wc) => ({
+          ...wc,
+          workCenter: workCentersById.get(wc.workCenterId) ?? null
+        }))
+        .filter((wc) => Boolean(wc.workCenter)) ?? [];
 
     if (process.error) throw new Error(process.error.message);
 
@@ -2961,11 +2972,11 @@ function ProcedureSyncModal({
 }
 
 type ProductionEventActivityProps = {
-  item: Database["public"]["Tables"]["productionEvent"]["Row"];
+  item: TableRow<"productionEvent">;
 };
 
 const getActivityText = (
-  item: Database["public"]["Tables"]["productionEvent"]["Row"]
+  item: TableRow<"productionEvent">
 ) => {
   switch (item.type) {
     case "Setup":
@@ -3246,14 +3257,15 @@ function OperationChat({ jobOperationId }: { jobOperationId: string }) {
   const { t } = useLingui();
   const { locale } = useLocale();
   const [isLoading, setIsLoading] = useState(false);
-  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-  const { carbon, accessToken } = useCarbon();
+  const { carbon } = useCarbon();
 
-  const fetchChat = async () => {
+  const fetchChat = async (showLoading = true) => {
     if (!carbon) return;
-    flushSync(() => {
-      setIsLoading(true);
-    });
+    if (showLoading) {
+      flushSync(() => {
+        setIsLoading(true);
+      });
+    }
 
     const { data, error } = await carbon
       ?.from("jobOperationNote")
@@ -3263,38 +3275,24 @@ function OperationChat({ jobOperationId }: { jobOperationId: string }) {
 
     if (error) {
       console.error(error);
+      if (showLoading) {
+        setIsLoading(false);
+      }
       return;
     }
     setMessages(data);
-    setIsLoading(false);
+    if (showLoading) {
+      setIsLoading(false);
+    }
   };
 
   useMount(() => {
-    fetchChat();
+    void fetchChat();
   });
 
-  useRealtimeChannel({
-    topic: `job-operation-notes-${jobOperationId}`,
-    setup(channel) {
-      return channel.on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "jobOperationNote",
-          filter: `jobOperationId=eq.${jobOperationId}`
-        },
-        (payload) => {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.new.id)) {
-              return prev;
-            }
-            return [...prev, payload.new as Message];
-          });
-        }
-      );
-    }
-  });
+  useInterval(() => {
+    void fetchChat(false);
+  }, carbon ? 10_000 : null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

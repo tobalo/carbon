@@ -26,8 +26,7 @@ const main = defineCommand({
         regen: {
           type: "boolean",
           default: true,
-          description:
-            "Regenerate db types + swagger after migrations (use --no-regen to skip)"
+          description: "Validate schema types after migrations (use --no-regen to skip)"
         },
         apps: {
           type: "boolean",
@@ -85,8 +84,7 @@ const main = defineCommand({
         regen: {
           type: "boolean",
           default: true,
-          description:
-            "Regenerate db types + swagger after migrations (use --no-regen to skip)"
+          description: "Validate schema types after migrations (use --no-regen to skip)"
         }
       },
       run: ({ args }) => migrate({ regen: args.regen !== false })

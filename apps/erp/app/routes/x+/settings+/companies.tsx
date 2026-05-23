@@ -1,6 +1,5 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import {
   Heading,
@@ -28,14 +27,11 @@ export const handle: Handle = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { companyGroupId } = await requirePermissions(request, {
+  const { client, companyGroupId } = await requirePermissions(request, {
     view: "settings"
   });
 
-  const companies = await getSubsidiaries(
-    getCarbonServiceRole(),
-    companyGroupId
-  );
+  const companies = await getSubsidiaries(client, companyGroupId);
 
   if (companies.error) {
     throw redirect(
@@ -66,6 +62,7 @@ export default function SubsidiariesRoute() {
     },
     [navigate]
   );
+  const handleEdit = useCallback((_id: string) => {}, []);
 
   return (
     <Tabs defaultValue="tree" className="w-full">
@@ -88,6 +85,7 @@ export default function SubsidiariesRoute() {
         <CompaniesTreeView
           // @ts-ignore
           companies={companies}
+          onEdit={handleEdit}
           onDelete={handleDelete}
           onAddChild={handleAddChild}
         />

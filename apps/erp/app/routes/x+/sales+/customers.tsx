@@ -18,7 +18,12 @@ export const handle: Handle = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { client, companyId } = await requirePermissions(request, {
+  const {
+    client,
+    companyId,
+    customerId: scopedCustomerId,
+    role
+  } = await requirePermissions(request, {
     view: "sales",
     bypassRls: true
   });
@@ -33,6 +38,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const [customers, customerStatuses, tags] = await Promise.all([
     getCustomers(client, companyId, {
       search,
+      customerId: role === "customer" ? scopedCustomerId : null,
       limit,
       offset,
       sorts,

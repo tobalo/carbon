@@ -1,5 +1,5 @@
 import bwipjs from "@bwip-js/node";
-import type { Database } from "@carbon/database";
+import type { TableRow } from "@carbon/database/schema";
 import type { JSONContent } from "@carbon/react";
 import type { TrackedEntityAttributes } from "@carbon/utils";
 import { formatCityStatePostalCode, formatDate } from "@carbon/utils";
@@ -12,18 +12,18 @@ import { Header, Note, Template } from "./components";
 
 interface PackingSlipProps extends PDF {
   customer:
-    | Database["public"]["Tables"]["customer"]["Row"]
-    | Database["public"]["Tables"]["supplier"]["Row"];
+    | TableRow<"customer">
+    | TableRow<"supplier">;
   customerReference?: string;
   sourceDocument?: string;
   sourceDocumentId?: string;
-  shipment: Database["public"]["Tables"]["shipment"]["Row"];
-  shipmentLines: Database["public"]["Views"]["shipmentLines"]["Row"][];
-  shippingAddress: Database["public"]["Tables"]["address"]["Row"] | null;
+  shipment: TableRow<"shipment">;
+  shipmentLines: TableRow<"shipmentLines">[];
+  shippingAddress: TableRow<"address"> | null;
   paymentTerm: { id: string; name: string };
   shippingMethod: { id: string; name: string };
   terms: JSONContent;
-  trackedEntities: Database["public"]["Tables"]["trackedEntity"]["Row"][];
+  trackedEntities: TableRow<"trackedEntity">[];
   thumbnails?: Record<string, string | null>;
 }
 
@@ -292,19 +292,19 @@ const PackingSlipPDF = ({
 };
 
 function getLineQuantity(
-  line: Database["public"]["Views"]["shipmentLines"]["Row"]
+  line: TableRow<"shipmentLines">
 ) {
   return `${line.shippedQuantity} / ${line.orderQuantity} ${line.unitOfMeasure}`;
 }
 
 function getLineDescription(
-  line: Database["public"]["Views"]["shipmentLines"]["Row"]
+  line: TableRow<"shipmentLines">
 ) {
   return line.itemReadableId;
 }
 
 function getLineDescriptionDetails(
-  line: Database["public"]["Views"]["shipmentLines"]["Row"]
+  line: TableRow<"shipmentLines">
 ) {
   return line.description;
 }

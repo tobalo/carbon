@@ -32,10 +32,6 @@ catalog:
   '@shikijs/themes': 4.0.2
   '@shikijs/types': 4.0.2
   '@slack/web-api': 7.10.0
-  '@supabase/functions-js': 2.1.5
-  '@supabase/postgrest-js': 2.80.0
-  '@supabase/storage-js': 2.80.0
-  '@supabase/supabase-js': 2.80.0
   '@tailwindcss/container-queries': 0.2.2
   '@tailwindcss/typography': 0.5.19
   '@tailwindcss/vite': 4.3.0
@@ -82,7 +78,6 @@ catalog:
   remix-flat-routes: 0.8.5
   rimraf: 5.0.10
   sst: 4.6.9
-  supabase: 2.89.0
   tailwind-merge: 3.3.0
   tailwind-scrollbar: 4.0.2
   tailwind-scrollbar-hide: 4.0.0

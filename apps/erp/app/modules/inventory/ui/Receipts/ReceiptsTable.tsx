@@ -27,7 +27,7 @@ import { ConfirmDelete } from "~/components/Modals";
 import {
   useDateFormatter,
   usePermissions,
-  useRealtime,
+  usePollingRevalidation,
   useUrlParams
 } from "~/hooks";
 import { useCustomColumns } from "~/hooks/useCustomColumns";
@@ -62,7 +62,7 @@ type ReceiptsTableProps = {
 };
 
 const ReceiptsTable = memo(({ data, count }: ReceiptsTableProps) => {
-  useRealtime("receipt", `id=in.(${data.map((d) => d.id).join(",")})`);
+  usePollingRevalidation("receipt", `id=in.(${data.map((d) => d.id).join(",")})`);
 
   const [params] = useUrlParams();
   const { t } = useLingui();

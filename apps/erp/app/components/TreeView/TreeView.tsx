@@ -569,25 +569,27 @@ export function useTree<TData, TFilterValue>({
   };
 }
 
+type TreeData<TData> = unknown extends TData ? any : TData;
+
 /** An actual tree structure with custom data */
-export type Tree<TData> = {
+export type Tree<TData = any> = {
   id: string;
   children?: Tree<TData>[];
-  data: TData;
+  data: TreeData<TData>;
 };
 
 /** A tree but flattened so it can easily be used for DOM elements */
-export type FlatTreeItem<TData> = {
+export type FlatTreeItem<TData = any> = {
   id: string;
   parentId: string | undefined;
   children: string[];
   hasChildren: boolean;
   /** The indentation level, the root is 0 */
   level: number;
-  data: TData;
+  data: TreeData<TData>;
 };
 
-export type FlatTree<TData> = FlatTreeItem<TData>[];
+export type FlatTree<TData = any> = FlatTreeItem<TData>[];
 
 export function flattenTree<TData>(tree: Tree<TData>): FlatTree<TData> {
   const flatTree: FlatTree<TData> = [];

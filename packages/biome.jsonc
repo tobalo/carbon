@@ -3,10 +3,6 @@
   "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
   "extends": "//",
   "files": {
-    "includes": [
-      "./**/src/**/*.ts*",
-      "_./database/src/swagger-docs-schema.ts",
-      "_./database/src/types.ts"
-    ]
+    "includes": ["./**/src/**/*.ts*"]
   }
 }

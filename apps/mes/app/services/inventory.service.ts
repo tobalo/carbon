@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { z } from "zod";
 import { zfd } from "zod-form-data";
 
@@ -12,7 +11,7 @@ export const inventoryAdjustmentValidator = z.object({
 });
 
 export async function getBatchNumbersForItem(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     itemId: string;
     companyId: string;
@@ -46,7 +45,7 @@ export async function getBatchNumbersForItem(
 }
 
 export async function getCompanySettings(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   companyId: string
 ) {
   return client
@@ -57,7 +56,7 @@ export async function getCompanySettings(
 }
 
 export async function getSerialNumbersForItem(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   args: {
     itemId: string;
     companyId: string;
@@ -91,7 +90,7 @@ export async function getSerialNumbersForItem(
 }
 
 export async function insertManualInventoryAdjustment(
-  client: SupabaseClient<Database>,
+  client: DatabaseQueryClient,
   inventoryAdjustment: z.infer<typeof inventoryAdjustmentValidator> & {
     companyId: string;
     createdBy: string;
