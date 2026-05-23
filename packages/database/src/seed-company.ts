@@ -88,7 +88,8 @@ async function seedCompanyInTransaction(
     client,
     `SELECT id, name, "companyGroupId", "baseCurrencyCode", "countryCode"
      FROM "company"
-     WHERE id = $1`,
+     WHERE id = $1
+     FOR UPDATE`,
     [args.companyId]
   );
 
@@ -145,14 +146,20 @@ async function seedCompanyInTransaction(
   await seedCompanyGroups(client, args.companyId);
 
   const employeeTypeId = await seedAdminEmployeeType(client, args.companyId);
-  const modules = await seedAdminPermissions(client, employeeTypeId, args.companyId);
+  const modules = await seedAdminPermissions(
+    client,
+    employeeTypeId,
+    args.companyId
+  );
 
   await seedEmployee(client, args.companyId, args.userId, employeeTypeId);
   await seedCompanyLookups(client, args.companyId);
 
-  const accountIdByNumber = isNewGroup
-    ? await seedSharedAccountingData(client, companyGroupId, args.userId)
-    : await getExistingAccountIds(client, companyGroupId);
+  const accountIdByNumber = await ensureSharedAccountingData(
+    client,
+    companyGroupId,
+    args.userId
+  );
 
   await seedAccountDefaults(client, args.companyId, accountIdByNumber);
   await seedFiscalYearSettings(client, args.companyId);
@@ -279,7 +286,12 @@ async function seedAdminPermissions(
          "employeeTypeId", module, "create", "update", "delete", view,
          "createdAt", "updatedAt"
        )
-       VALUES ($1, $2::module, $3, $3, $3, $3, NOW(), NOW())`,
+       SELECT $1, $2::module, $3, $3, $3, $3, NOW(), NOW()
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM "employeeTypePermission"
+         WHERE "employeeTypeId" = $1 AND module = $2::module
+       )`,
       [employeeTypeId, module.name, [companyId]]
     );
   }
@@ -295,7 +307,8 @@ async function seedEmployee(
 ) {
   await client.query(
     `INSERT INTO "employee" (id, "employeeTypeId", "companyId", active)
-     VALUES ($1, $2, $3, true)`,
+     VALUES ($1, $2, $3, true)
+     ON CONFLICT (id) DO NOTHING`,
     [userId, employeeTypeId, companyId]
   );
 }
@@ -306,7 +319,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "customerStatus" (
          id, name, "companyId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, $3, NOW(), 'system')`,
+       SELECT $1, $2, $3, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "customerStatus"
+         WHERE "companyId" = $3 AND name = $2
+       )`,
       [nanoid(), name, companyId]
     );
   }
@@ -314,7 +331,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
   for (const name of scrapReasons) {
     await client.query(
       `INSERT INTO "scrapReason" (id, name, "companyId", "createdAt", "createdBy")
-       VALUES ($1, $2, $3, NOW(), 'system')`,
+       SELECT $1, $2, $3, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "scrapReason"
+         WHERE "companyId" = $3 AND name = $2
+       )`,
       [nanoid(), name, companyId]
     );
   }
@@ -325,7 +346,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
          id, name, "daysDue", "calculationMethod", "daysDiscount",
          "discountPercentage", active, "companyId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, $3, $4::"paymentTermCalculationMethod", $5, $6, true, $7, NOW(), 'system')`,
+       SELECT $1, $2, $3, $4::"paymentTermCalculationMethod", $5, $6, true, $7, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "paymentTerm"
+         WHERE "companyId" = $7 AND name = $2
+       )`,
       [
         nanoid(),
         term.name,
@@ -343,7 +368,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "unitOfMeasure" (
          id, name, code, active, "companyId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, $3, true, $4, NOW(), 'system')`,
+       SELECT $1, $2, $3, true, $4, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "unitOfMeasure"
+         WHERE "companyId" = $4 AND code = $3
+       )`,
       [nanoid(), unit.name, unit.code, companyId]
     );
   }
@@ -353,7 +382,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "gaugeType" (
          id, name, "companyId", "createdAt", "createdBy", "customFields"
        )
-       VALUES ($1, $2, $3, NOW(), 'system', '{}'::jsonb)`,
+       SELECT $1, $2, $3, NOW(), 'system', '{}'::jsonb
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "gaugeType"
+         WHERE "companyId" = $3 AND name = $2
+       )`,
       [nanoid(), name, companyId]
     );
   }
@@ -363,7 +396,13 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "maintenanceFailureMode" (
          id, name, type, "companyId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, 'Maintenance'::"maintenanceFailureModeType", $3, NOW(), 'system')`,
+       SELECT $1, $2, 'Maintenance'::"maintenanceFailureModeType", $3, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "maintenanceFailureMode"
+         WHERE "companyId" = $3
+           AND name = $2
+           AND type = 'Maintenance'::"maintenanceFailureModeType"
+       )`,
       [nanoid(), name, companyId]
     );
   }
@@ -373,7 +412,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "nonConformanceType" (
          id, name, "companyId", "createdAt", "createdBy", "customFields"
        )
-       VALUES ($1, $2, $3, NOW(), 'system', '{}'::jsonb)`,
+       SELECT $1, $2, $3, NOW(), 'system', '{}'::jsonb
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "nonConformanceType"
+         WHERE "companyId" = $3 AND name = $2
+       )`,
       [nanoid(), type.name, companyId]
     );
   }
@@ -384,7 +427,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "nonConformanceRequiredAction" (
          id, name, active, "systemType", "companyId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, true, $3::jsonb, $4, NOW(), 'system')`,
+       SELECT $1, $2, true, $3::jsonb, $4, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "nonConformanceRequiredAction"
+         WHERE "companyId" = $4 AND name = $2
+       )`,
       [
         nanoid(),
         action.name,
@@ -399,7 +446,11 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
       `INSERT INTO "sequence" (
          id, "table", name, prefix, suffix, next, size, step, "companyId"
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "sequence"
+         WHERE "companyId" = $9 AND "table" = $2 AND name = $3
+       )`,
       [
         nanoid(),
         sequence.table,
@@ -415,7 +466,7 @@ async function seedCompanyLookups(client: PoolClient, companyId: string) {
   }
 }
 
-async function seedSharedAccountingData(
+async function ensureSharedAccountingData(
   client: PoolClient,
   companyGroupId: string,
   userId: string
@@ -426,7 +477,11 @@ async function seedSharedAccountingData(
          id, code, "exchangeRate", "decimalPlaces", active,
          "companyGroupId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, $3, $4, true, $5, NOW(), 'system')`,
+       SELECT $1, $2, $3, $4, true, $5, NOW(), 'system'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "currency"
+         WHERE "companyGroupId" = $5 AND code = $2
+       )`,
       [
         nanoid(),
         currency.code,
@@ -443,38 +498,54 @@ async function seedSharedAccountingData(
   for (const account of accounts as readonly Record<string, unknown>[]) {
     const key = stringOrNull(account.key) ?? stringOrNull(account.number);
     const parentKey = stringOrNull(account.parentKey);
-    const id = nanoid();
     const number = stringOrNull(account.number);
-    const incomeBalance = requiredString(account.incomeBalance, "incomeBalance");
-    const accountClass = stringOrNull(account.class);
-
-    await client.query(
-      `INSERT INTO "account" (
-         id, number, name, active, "isGroup", "accountType", class,
-         "consolidatedRate", "incomeBalance", "parentId", "isSystem",
-         "companyGroupId", "createdAt", "createdBy"
-       )
-       VALUES (
-         $1, $2, $3, true, $4, $5::"accountType", $6::"glAccountClass",
-         $7::"glConsolidatedRate", $8::"glIncomeBalance", $9, $10,
-         $11, NOW(), $12
-       )`,
-      [
-        id,
-        number,
-        requiredString(account.name, "name"),
-        isGroupAccount(account),
-        stringOrNull(account.accountType) ?? stringOrNull(account.accountCategory),
-        accountClass,
-        stringOrNull(account.consolidatedRate) ??
-          inferConsolidatedRate(incomeBalance, accountClass),
-        incomeBalance,
-        parentKey ? (accountIdByKey[parentKey] ?? null) : null,
-        booleanOrDefault(account.isSystem, false),
-        companyGroupId,
-        userId
-      ]
+    const incomeBalance = requiredString(
+      account.incomeBalance,
+      "incomeBalance"
     );
+    const accountClass = stringOrNull(account.class);
+    const existing = number
+      ? await queryOne<{ id: string }>(
+          client,
+          `SELECT id
+           FROM "account"
+           WHERE "companyGroupId" = $1 AND number = $2
+           LIMIT 1`,
+          [companyGroupId, number]
+        )
+      : null;
+
+    const id = existing?.id ?? nanoid();
+    if (!existing) {
+      await client.query(
+        `INSERT INTO "account" (
+           id, number, name, active, "isGroup", "accountType", class,
+           "consolidatedRate", "incomeBalance", "parentId", "isSystem",
+           "companyGroupId", "createdAt", "createdBy"
+         )
+         VALUES (
+           $1, $2, $3, true, $4, $5::"accountType", $6::"glAccountClass",
+           $7::"glConsolidatedRate", $8::"glIncomeBalance", $9, $10,
+           $11, NOW(), $12
+         )`,
+        [
+          id,
+          number,
+          requiredString(account.name, "name"),
+          isGroupAccount(account),
+          stringOrNull(account.accountType) ??
+            stringOrNull(account.accountCategory),
+          accountClass,
+          stringOrNull(account.consolidatedRate) ??
+            inferConsolidatedRate(incomeBalance, accountClass),
+          incomeBalance,
+          parentKey ? (accountIdByKey[parentKey] ?? null) : null,
+          booleanOrDefault(account.isSystem, false),
+          companyGroupId,
+          userId
+        ]
+      );
+    }
 
     if (key) accountIdByKey[key] = id;
     if (number) accountIdByNumber[number] = id;
@@ -486,25 +557,18 @@ async function seedSharedAccountingData(
          id, name, "entityType", active, required,
          "companyGroupId", "createdAt", "createdBy"
        )
-       VALUES ($1, $2, $3::"dimensionEntityType", true, false, $4, NOW(), $5)`,
+       SELECT $1, $2, $3::"dimensionEntityType", true, false, $4, NOW(), $5
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "dimension"
+         WHERE "companyGroupId" = $4
+           AND name = $2
+           AND "entityType" = $3::"dimensionEntityType"
+       )`,
       [nanoid(), dimension.name, dimension.entityType, companyGroupId, userId]
     );
   }
 
   return accountIdByNumber;
-}
-
-async function getExistingAccountIds(client: PoolClient, companyGroupId: string) {
-  const rows = await queryMany<{ id: string; number: string | null }>(
-    client,
-    `SELECT id, number FROM "account" WHERE "companyGroupId" = $1`,
-    [companyGroupId]
-  );
-
-  return rows.reduce<Record<string, string>>((acc, row) => {
-    if (row.number) acc[row.number] = row.id;
-    return acc;
-  }, {});
 }
 
 async function seedAccountDefaults(
@@ -514,7 +578,8 @@ async function seedAccountDefaults(
 ) {
   const defaults = accountDefaults as Record<string, string | undefined>;
   const resolve = (column: string, number?: string) => {
-    if (!number) throw new Error(`Missing account default mapping for ${column}`);
+    if (!number)
+      throw new Error(`Missing account default mapping for ${column}`);
     const accountId = accountIdByNumber[number];
     if (!accountId) {
       throw new Error(`Missing seeded account ${number} for ${column}`);
@@ -523,7 +588,10 @@ async function seedAccountDefaults(
   };
 
   const values = [
-    resolve("accumulatedDepreciationAccount", defaults.accumulatedDepreciationAccount),
+    resolve(
+      "accumulatedDepreciationAccount",
+      defaults.accumulatedDepreciationAccount
+    ),
     resolve(
       "accumulatedDepreciationOnDisposalAccount",
       defaults.accumulatedDepreciationOnDisposalAccount
@@ -577,7 +645,8 @@ async function seedAccountDefaults(
       : resolve("laborAbsorptionAccount", defaults.directCostAppliedAccount),
     resolve(
       "laborAndMachineVarianceAccount",
-      defaults.laborAndMachineVarianceAccount ?? defaults.capacityVarianceAccount
+      defaults.laborAndMachineVarianceAccount ??
+        defaults.capacityVarianceAccount
     ),
     resolve(
       "lotSizeVarianceAccount",
@@ -658,7 +727,10 @@ async function seedAccountDefaults(
        "supplierPaymentDiscountAccount",
        "workInProgressAccount"
      )
-     VALUES (${values.map((_, index) => `$${index + 1}`).join(", ")})`,
+     SELECT ${values.map((_, index) => `$${index + 1}`).join(", ")}
+     WHERE NOT EXISTS (
+       SELECT 1 FROM "accountDefault" WHERE "companyId" = $10
+     )`,
     values
   );
 }
@@ -668,12 +740,11 @@ async function seedFiscalYearSettings(client: PoolClient, companyId: string) {
     `INSERT INTO "fiscalYearSettings" (
        "startMonth", "taxStartMonth", "companyId", "updatedBy"
      )
-     VALUES ($1::month, $2::month, $3, 'system')`,
-    [
-      fiscalYearSettings.startMonth,
-      fiscalYearSettings.taxStartMonth,
-      companyId
-    ]
+     SELECT $1::month, $2::month, $3, 'system'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM "fiscalYearSettings" WHERE "companyId" = $3
+     )`,
+    [fiscalYearSettings.startMonth, fiscalYearSettings.taxStartMonth, companyId]
   );
 }
 
@@ -683,11 +754,11 @@ async function updateUserPermissions(
   companyId: string,
   modules: ModuleRow[]
 ) {
-  const current = await queryOne<{ permissions: Record<string, string[]> | null }>(
-    client,
-    `SELECT permissions FROM "userPermission" WHERE id = $1`,
-    [userId]
-  );
+  const current = await queryOne<{
+    permissions: Record<string, string[]> | null;
+  }>(client, `SELECT permissions FROM "userPermission" WHERE id = $1`, [
+    userId
+  ]);
   const permissions = { ...(current?.permissions ?? {}) };
 
   for (const { name } of modules) {
@@ -784,7 +855,10 @@ function isGroupAccount(account: Record<string, unknown>) {
   return typeof directPosting === "boolean" ? !directPosting : false;
 }
 
-function inferConsolidatedRate(incomeBalance: string, accountClass: string | null) {
+function inferConsolidatedRate(
+  incomeBalance: string,
+  accountClass: string | null
+) {
   if (incomeBalance === "Income Statement") return "Average";
   if (accountClass === "Equity") return "Historical";
   return "Current";

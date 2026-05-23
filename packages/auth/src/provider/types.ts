@@ -29,7 +29,11 @@ export interface AuthProvider {
     email: string;
     password: string;
   }): Promise<Session>;
-  sendMagicLink(args: { email: string; redirectTo: string }): Promise<void>;
+  sendMagicLink(args: {
+    email: string;
+    redirectTo: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void>;
   generateMagicLink(args: {
     email: string;
     redirectTo: string;

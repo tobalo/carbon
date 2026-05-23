@@ -1,19 +1,21 @@
 import type { DatabaseQueryClient } from "@carbon/database/query-client";
 import { checkApiKeyRateLimit } from "@carbon/database/ratelimit";
+import { sendEmail } from "@carbon/lib/resend.server";
 import { Edition, Plan } from "@carbon/utils";
 import { createHash } from "crypto";
 import { redirect } from "react-router";
 import {
   CarbonEdition,
   REFRESH_ACCESS_TOKEN_THRESHOLD,
+  RESEND_DOMAIN,
   STRIPE_BYPASS_COMPANY_IDS,
   VERCEL_URL
 } from "../config/env";
 import { getCarbon } from "../lib/carbon";
 import { getCarbonAPIKeyClient } from "../lib/carbon/client";
 import { getCarbonServiceClient } from "../lib/carbon/client.server";
-import { authProvider } from "../provider";
 import type { Session as ProviderSession } from "../provider";
+import { authProvider } from "../provider";
 import type { AuthSession } from "../types";
 import { path } from "../utils/path";
 import { error } from "../utils/result";
@@ -26,19 +28,147 @@ import {
 import { getCompaniesForUser } from "./users";
 import { getUserClaims } from "./users.server";
 
+type CarbonUserSeed = {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+};
+
+function getDefaultUserName(seed?: Partial<CarbonUserSeed>) {
+  return {
+    firstName: seed?.firstName || "Carbon",
+    lastName: seed?.lastName || "Admin",
+    fullName:
+      seed?.firstName || seed?.lastName
+        ? [seed?.firstName, seed?.lastName].filter(Boolean).join(" ")
+        : "Carbon Admin"
+  };
+}
+
+export async function ensureCarbonUserRecord(seed: CarbonUserSeed) {
+  const serviceClient = getCarbonServiceClient();
+  const normalizedEmail = seed.email.toLowerCase();
+  const existing = await serviceClient
+    .from("user")
+    .select("id, email")
+    .eq("id", seed.id)
+    .maybeSingle();
+
+  if (existing.error) {
+    throw new Error(
+      `Failed to read Carbon user ${seed.id}: ${existing.error.message}`
+    );
+  }
+
+  if (existing.data) {
+    if (existing.data.email.toLowerCase() !== normalizedEmail) {
+      throw new Error(
+        `Carbon user ${seed.id} email ${existing.data.email} does not match Better Auth email ${normalizedEmail}`
+      );
+    }
+
+    return existing.data;
+  }
+
+  const existingByEmail = await serviceClient
+    .from("user")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (existingByEmail.error) {
+    throw new Error(
+      `Failed to read Carbon user ${normalizedEmail}: ${existingByEmail.error.message}`
+    );
+  }
+
+  if (existingByEmail.data) {
+    throw new Error(
+      `Carbon user email ${normalizedEmail} belongs to ${existingByEmail.data.id}, not Better Auth user ${seed.id}`
+    );
+  }
+
+  const name = getDefaultUserName(seed);
+  const now = new Date().toISOString();
+  const created = await serviceClient
+    .from("user")
+    .insert({
+      id: seed.id,
+      email: normalizedEmail,
+      firstName: name.firstName,
+      lastName: name.lastName,
+      fullName: name.fullName,
+      about: "",
+      acknowledgedITAR: false,
+      active: true,
+      admin: false,
+      avatarUrl: null,
+      createdAt: now,
+      developer: false,
+      flags: {},
+      isConsoleOperator: false,
+      updatedAt: now
+    })
+    .select("id")
+    .single();
+
+  if (created.error || !created.data) {
+    throw new Error(
+      `Failed to create Carbon user ${normalizedEmail}: ${
+        created.error?.message ?? "unknown error"
+      }`
+    );
+  }
+
+  return created.data;
+}
+
 export async function createEmailAuthAccount(
   email: string,
   password: string,
   meta?: Record<string, unknown>
 ) {
-  const user = await authProvider.createUser({
-    email,
-    password,
-    emailVerified: true,
-    metadata: meta
-  });
+  const normalizedEmail = email.toLowerCase();
+  const existingUser = await authProvider.getUserByEmail(normalizedEmail);
+  let authUserId = existingUser?.id;
+  let createdAuthUser = false;
 
-  return { id: user.userId, email };
+  if (!authUserId) {
+    const user = await authProvider.createUser({
+      email: normalizedEmail,
+      password,
+      emailVerified: true,
+      metadata: meta
+    });
+    authUserId = user.userId;
+    createdAuthUser = true;
+  } else {
+    await ensureCarbonUserRecord({
+      id: authUserId,
+      email: normalizedEmail,
+      firstName:
+        typeof meta?.firstName === "string" ? meta.firstName : undefined,
+      lastName: typeof meta?.lastName === "string" ? meta.lastName : undefined
+    });
+    await authProvider.adminSetPassword(authUserId, password);
+    return { id: authUserId, email: normalizedEmail };
+  }
+
+  try {
+    await ensureCarbonUserRecord({
+      id: authUserId,
+      email: normalizedEmail,
+      firstName:
+        typeof meta?.firstName === "string" ? meta.firstName : undefined,
+      lastName: typeof meta?.lastName === "string" ? meta.lastName : undefined
+    });
+  } catch (err) {
+    if (createdAuthUser) await authProvider.deleteUser(authUserId);
+    throw err;
+  }
+
+  return { id: authUserId, email: normalizedEmail };
 }
 
 export async function deleteAuthAccount(
@@ -149,17 +279,17 @@ async function getCompanyIdFromAPIKey(apiKey: string) {
 function makeAuthSession(
   providerSession: ProviderSession | null,
   companyId: string,
-  companyGroupId: string
+  companyGroupId: string,
+  userId?: string
 ): AuthSession | null {
   if (!providerSession) return null;
 
-  const sessionToken = providerSession.refreshToken || providerSession.accessToken;
+  const sessionToken =
+    providerSession.refreshToken || providerSession.accessToken;
 
-  if (!sessionToken)
-    throw new Error("User should have a session token");
+  if (!sessionToken) throw new Error("User should have a session token");
 
-  if (!providerSession.email)
-    throw new Error("User should have an email");
+  if (!providerSession.email) throw new Error("User should have an email");
 
   const expiresAt = Math.floor(providerSession.expiresAt.getTime() / 1000);
 
@@ -168,10 +298,12 @@ function makeAuthSession(
     companyId,
     companyGroupId,
     refreshToken: sessionToken,
-    userId: providerSession.userId,
+    userId: userId ?? providerSession.userId,
     email: providerSession.email,
     expiresIn: Math.max(
-      expiresAt - Math.floor(Date.now() / 1000) - REFRESH_ACCESS_TOKEN_THRESHOLD,
+      expiresAt -
+        Math.floor(Date.now() / 1000) -
+        REFRESH_ACCESS_TOKEN_THRESHOLD,
       0
     ),
     expiresAt
@@ -442,7 +574,10 @@ export async function requirePermissions(
       client:
         requiredPermissions.bypassRls && myClaims.role === "employee"
           ? getCarbonServiceClient()
-          : (getCarbon(accessToken, effectiveUserId) as unknown as DatabaseQueryClient),
+          : (getCarbon(
+              accessToken,
+              effectiveUserId
+            ) as unknown as DatabaseQueryClient),
       companyId,
       companyGroupId,
       email,
@@ -501,7 +636,10 @@ export async function requirePermissions(
     client:
       !!requiredPermissions.bypassRls && myClaims.role === "employee"
         ? getCarbonServiceClient()
-        : (getCarbon(accessToken, effectiveUserId) as unknown as DatabaseQueryClient),
+        : (getCarbon(
+            accessToken,
+            effectiveUserId
+          ) as unknown as DatabaseQueryClient),
     companyId,
     companyGroupId,
     email,
@@ -527,14 +665,84 @@ export async function sendInviteByEmail(
     redirectTo: `${VERCEL_URL}`
   });
 
-  return { data: { properties: { action_link: url }, user: data }, error: null };
+  return {
+    data: { properties: { action_link: url }, user: data },
+    error: null
+  };
 }
 
-export async function sendMagicLink(email: string) {
-  await authProvider.sendMagicLink({
-    email,
-    redirectTo: `${VERCEL_URL}`
+type MagicLinkOptions = {
+  callbackUrl?: string;
+  redirectTo?: string;
+  userId?: string;
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function makeAppMagicLinkUrl(
+  generatedUrl: string,
+  options: MagicLinkOptions = {}
+) {
+  if (!options.callbackUrl) return generatedUrl;
+
+  const token = new URL(generatedUrl).searchParams.get("token");
+  if (!token) throw new Error("Magic link token was not generated");
+
+  const url = new URL(options.callbackUrl);
+  url.searchParams.set("token", token);
+  if (options.redirectTo)
+    url.searchParams.set("redirectTo", options.redirectTo);
+  return url.toString();
+}
+
+export async function sendMagicLink(
+  email: string,
+  options: MagicLinkOptions = {}
+) {
+  const normalizedEmail = email.toLowerCase();
+  const existingAuthUser = await authProvider.getUserByEmail(normalizedEmail);
+  if (
+    existingAuthUser &&
+    options.userId &&
+    existingAuthUser.id !== options.userId
+  ) {
+    return {
+      data: null,
+      error: new Error(
+        `Better Auth user ${existingAuthUser.id} does not match Carbon user ${options.userId}`
+      )
+    };
+  }
+
+  if (!existingAuthUser && options.userId) {
+    await authProvider.createUser({
+      id: options.userId,
+      email: normalizedEmail,
+      password: crypto.randomUUID(),
+      emailVerified: true
+    });
+  }
+
+  const { url } = await authProvider.generateMagicLink({
+    email: normalizedEmail,
+    redirectTo: options.redirectTo ?? `${VERCEL_URL}`
   });
+  const actionLink = makeAppMagicLinkUrl(url, options);
+  const escapedLink = escapeHtml(actionLink);
+  const result = await sendEmail({
+    from: `Carbon <no-reply@${RESEND_DOMAIN}>`,
+    to: normalizedEmail,
+    subject: "Sign in to Carbon",
+    html: `<p>Use this link to sign in to Carbon.</p><p><a href="${escapedLink}">Sign in to Carbon</a></p><p>This link expires soon and can only be used once.</p>`
+  });
+
+  if (result.error) return { data: null, error: result.error };
 
   return { data: null, error: null };
 }
@@ -551,6 +759,10 @@ export async function signInWithBypassEmail(
   if (!token) return null;
 
   const providerSession = await authProvider.verifyMagicLinkToken(token);
+  const carbonUser = await ensureCarbonUserRecord({
+    id: providerSession.userId,
+    email: providerSession.email
+  });
   const companies = await getCompaniesForUser(client, providerSession.userId);
   const { data: companyRecord } = await client
     .from("company")
@@ -561,7 +773,8 @@ export async function signInWithBypassEmail(
   return makeAuthSession(
     providerSession,
     companies?.[0] ?? "",
-    companyRecord?.companyGroupId ?? ""
+    companyRecord?.companyGroupId ?? "",
+    carbonUser.id
   );
 }
 
@@ -570,7 +783,11 @@ export async function signInWithMagicLinkToken(
 ): Promise<AuthSession | null> {
   const client = getCarbonServiceClient();
   const providerSession = await authProvider.verifyMagicLinkToken(token);
-  const companies = await getCompaniesForUser(client, providerSession.userId);
+  const carbonUser = await ensureCarbonUserRecord({
+    id: providerSession.userId,
+    email: providerSession.email
+  });
+  const companies = await getCompaniesForUser(client, carbonUser.id);
   const companyId = companies?.[0] ?? "";
 
   const { data: companyRecord } = await client
@@ -582,7 +799,8 @@ export async function signInWithMagicLinkToken(
   return makeAuthSession(
     providerSession,
     companyId,
-    companyRecord?.companyGroupId ?? ""
+    companyRecord?.companyGroupId ?? "",
+    carbonUser.id
   );
 }
 
@@ -594,7 +812,11 @@ export async function signInWithRequest(
   const providerSession = await authProvider.getSessionFromRequest(request);
   if (!providerSession) return null;
 
-  const companies = await getCompaniesForUser(client, providerSession.userId);
+  const carbonUser = await ensureCarbonUserRecord({
+    id: providerSession.userId,
+    email: providerSession.email
+  });
+  const companies = await getCompaniesForUser(client, carbonUser.id);
   const companyId =
     preferredCompanyId && companies?.includes(preferredCompanyId)
       ? preferredCompanyId
@@ -609,7 +831,8 @@ export async function signInWithRequest(
   return makeAuthSession(
     providerSession,
     companyId,
-    companyRecord?.companyGroupId ?? ""
+    companyRecord?.companyGroupId ?? "",
+    carbonUser.id
   );
 }
 
@@ -620,7 +843,11 @@ export async function signInWithEmail(email: string, password: string) {
     password
   });
 
-  const companies = await getCompaniesForUser(client, providerSession.userId);
+  const carbonUser = await ensureCarbonUserRecord({
+    id: providerSession.userId,
+    email: providerSession.email
+  });
+  const companies = await getCompaniesForUser(client, carbonUser.id);
 
   const { data: companyRecord } = await client
     .from("company")
@@ -631,7 +858,8 @@ export async function signInWithEmail(email: string, password: string) {
   return makeAuthSession(
     providerSession,
     companies?.[0] ?? "",
-    companyRecord?.companyGroupId ?? ""
+    companyRecord?.companyGroupId ?? "",
+    carbonUser.id
   );
 }
 
@@ -644,6 +872,10 @@ export async function refreshAccessToken(
 
   const providerSession = await authProvider.refreshSession(refreshToken);
   const client = getCarbonServiceClient();
+  await ensureCarbonUserRecord({
+    id: providerSession.userId,
+    email: providerSession.email
+  });
   const companies = await getCompaniesForUser(client, providerSession.userId);
   const refreshedCompanyId =
     companyId && companies.includes(companyId)

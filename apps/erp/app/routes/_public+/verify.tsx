@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { assertIsPost, error, RATE_LIMIT } from "@carbon/auth";
+import { assertIsPost, error, RATE_LIMIT, safeRedirect } from "@carbon/auth";
 import {
   createEmailAuthAccount,
   signInWithEmail
@@ -124,7 +124,7 @@ export async function action({ request }: ActionFunctionArgs) {
   });
 
   // Set the authentication session
-  const onboardingUrl = redirectTo || path.to.onboarding.root;
+  const onboardingUrl = safeRedirect(redirectTo, path.to.onboarding.root);
 
   return redirect(onboardingUrl, {
     headers: [["Set-Cookie", sessionCookie]]

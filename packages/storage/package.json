@@ -10,7 +10,8 @@
     "rimraf": "catalog:",
     "tsx": "catalog:",
     "tsup": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -23,6 +24,7 @@
     "dev": "tsup --watch",
     "lint": "biome lint --write ",
     "smoke:minio": "tsx scripts/smoke-minio.ts",
+    "test": "vitest run",
     "typecheck": "tsgo --noEmit"
   },
   "sideEffects": false,

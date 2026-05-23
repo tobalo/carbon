@@ -1,8 +1,15 @@
 import { dbService } from "@carbon/database/drizzle";
-import { authSchema } from "@carbon/database/schema";
+import {
+  authAccountTable,
+  authSchema,
+  authSessionTable,
+  authUserTable
+} from "@carbon/database/schema";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { hashPassword } from "better-auth/crypto";
 import { admin, bearer, magicLink } from "better-auth/plugins";
+import { and, eq } from "drizzle-orm";
 import {
   AZURE_CLIENT_ID,
   AZURE_CLIENT_SECRET,
@@ -12,6 +19,7 @@ import {
   GOOGLE_CLIENT_SECRET,
   SESSION_MAX_AGE
 } from "../config/env";
+import { getCarbonServiceClient } from "../lib/carbon/client.server";
 import type { AuthProvider, Session, User } from "./types";
 
 type BetterAuthSession = {
@@ -26,7 +34,47 @@ type BetterAuthSession = {
   expiresAt?: string | Date;
 };
 
+const MAGIC_LINK_REQUEST_ID_KEY = "magicLinkRequestId";
 const generatedMagicLinks = new Map<string, string>();
+
+type AuthUserRow = typeof authUserTable.$inferSelect;
+
+function toProviderUser(user: AuthUserRow | undefined): User | null {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    emailVerified: user.emailVerified,
+    metadata: {}
+  };
+}
+
+function getGeneratedMagicLinkKey(
+  email: string,
+  metadata?: Record<string, unknown>
+) {
+  const requestId = metadata?.[MAGIC_LINK_REQUEST_ID_KEY];
+  return typeof requestId === "string" && requestId
+    ? requestId
+    : email.toLowerCase();
+}
+
+async function getExistingCarbonUserIdByEmail(email: string) {
+  const normalizedEmail = email.toLowerCase();
+  const existing = await getCarbonServiceClient()
+    .from("user")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (existing.error) {
+    throw new Error(
+      `Failed to read Carbon user ${normalizedEmail}: ${existing.error.message}`
+    );
+  }
+
+  return existing.data?.id ?? null;
+}
 
 export const betterAuthServer = betterAuth({
   database: drizzleAdapter(dbService, {
@@ -44,6 +92,22 @@ export const betterAuthServer = betterAuth({
   },
   verification: {
     modelName: "authVerification"
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (typeof user.email !== "string") return;
+
+          const existingCarbonUserId = await getExistingCarbonUserIdByEmail(
+            user.email
+          );
+          if (!existingCarbonUserId) return;
+
+          return { data: { id: existingCarbonUserId } };
+        }
+      }
+    }
   },
   secret: BETTER_AUTH_SECRET,
   baseURL: ERP_URL,
@@ -69,18 +133,22 @@ export const betterAuthServer = betterAuth({
     admin(),
     bearer(),
     magicLink({
-      sendMagicLink: async ({ email, url }) => {
-        generatedMagicLinks.set(email, url);
+      sendMagicLink: async ({ email, url, metadata }) => {
+        generatedMagicLinks.set(getGeneratedMagicLinkKey(email, metadata), url);
       }
     })
   ]
 });
 
-const authApi = betterAuthServer.api as Record<string, ((args?: any) => any) | undefined>;
+const authApi = betterAuthServer.api as Record<
+  string,
+  ((args?: any) => any) | undefined
+>;
 
 function callAuthApi<T>(name: string, args?: unknown): Promise<T> {
   const endpoint = authApi[name];
-  if (!endpoint) throw new Error(`Better Auth endpoint is unavailable: ${name}`);
+  if (!endpoint)
+    throw new Error(`Better Auth endpoint is unavailable: ${name}`);
   return endpoint(args) as Promise<T>;
 }
 
@@ -133,34 +201,70 @@ export class BetterAuthProvider implements AuthProvider {
       throw new Error(`Failed to create Better Auth user for ${args.email}`);
     }
 
+    if (args.id && result.user.id !== args.id) {
+      await this.deleteUser(result.user.id).catch(() => undefined);
+      throw new Error(
+        `Better Auth created user ${result.user.id} instead of requested user ${args.id}`
+      );
+    }
+
     return { userId: result.user.id };
   }
 
   async deleteUser(userId: string) {
-    await callAuthApi("removeUser", {
-      body: { userId }
-    });
+    await dbService.delete(authUserTable).where(eq(authUserTable.id, userId));
   }
 
   async getUserById(userId: string): Promise<User | null> {
-    const result = await callAuthApi<User | null>("getUser", {
-      query: { id: userId }
-    });
+    const [user] = await dbService
+      .select()
+      .from(authUserTable)
+      .where(eq(authUserTable.id, userId))
+      .limit(1);
 
-    return result;
+    return toProviderUser(user);
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
-    const result = await callAuthApi<{ users?: User[] }>("listUsers", {
-      query: { searchField: "email", searchValue: email, searchOperator: "eq" }
-    });
+    const [user] = await dbService
+      .select()
+      .from(authUserTable)
+      .where(eq(authUserTable.email, email.toLowerCase()))
+      .limit(1);
 
-    return result.users?.[0] ?? null;
+    return toProviderUser(user);
   }
 
   async adminSetPassword(userId: string, password: string) {
-    await callAuthApi("setUserPassword", {
-      body: { userId, newPassword: password }
+    const hashedPassword = await hashPassword(password);
+    const now = new Date();
+    const [account] = await dbService
+      .select({ id: authAccountTable.id })
+      .from(authAccountTable)
+      .where(
+        and(
+          eq(authAccountTable.userId, userId),
+          eq(authAccountTable.providerId, "credential")
+        )
+      )
+      .limit(1);
+
+    if (account) {
+      await dbService
+        .update(authAccountTable)
+        .set({ password: hashedPassword, updatedAt: now })
+        .where(eq(authAccountTable.id, account.id));
+      return;
+    }
+
+    await dbService.insert(authAccountTable).values({
+      id: crypto.randomUUID(),
+      accountId: userId,
+      providerId: "credential",
+      userId,
+      password: hashedPassword,
+      createdAt: now,
+      updatedAt: now
     });
   }
 
@@ -175,21 +279,30 @@ export class BetterAuthProvider implements AuthProvider {
     return session;
   }
 
-  async sendMagicLink(args: { email: string; redirectTo: string }) {
+  async sendMagicLink(args: {
+    email: string;
+    redirectTo: string;
+    metadata?: Record<string, unknown>;
+  }) {
     await callAuthApi("signInMagicLink", {
       headers: new Headers(),
       body: {
-        email: args.email,
-        callbackURL: args.redirectTo
+        email: args.email.toLowerCase(),
+        callbackURL: args.redirectTo,
+        metadata: args.metadata
       }
     });
   }
 
   async generateMagicLink(args: { email: string; redirectTo: string }) {
-    await this.sendMagicLink(args);
-    const url = generatedMagicLinks.get(args.email);
+    const requestId = crypto.randomUUID();
+    await this.sendMagicLink({
+      ...args,
+      metadata: { [MAGIC_LINK_REQUEST_ID_KEY]: requestId }
+    });
+    const url = generatedMagicLinks.get(requestId);
     if (!url) throw new Error("Better Auth did not generate a magic link");
-    generatedMagicLinks.delete(args.email);
+    generatedMagicLinks.delete(requestId);
     return { url };
   }
 
@@ -229,17 +342,14 @@ export class BetterAuthProvider implements AuthProvider {
   }
 
   async revokeSession(accessToken: string) {
-    await callAuthApi("revokeSession", {
-      headers: new Headers({ Authorization: `Bearer ${accessToken}` }),
-      body: { token: accessToken }
-    });
+    await dbService
+      .delete(authSessionTable)
+      .where(eq(authSessionTable.token, accessToken));
   }
 
   async updatePassword(args: { accessToken: string; newPassword: string }) {
-    await callAuthApi("changePassword", {
-      body: { newPassword: args.newPassword },
-      headers: new Headers({ Authorization: `Bearer ${args.accessToken}` })
-    });
+    const session = await this.getSessionByAccessToken(args.accessToken);
+    if (!session) throw new Error("Invalid access token");
+    await this.adminSetPassword(session.userId, args.newPassword);
   }
-
 }

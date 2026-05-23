@@ -32,12 +32,12 @@ msgstr "{0} disponible(s)"
 msgid "{0} of {1}"
 msgstr "{0} sur {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} sur {1} terminé(s)"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} sur {1} terminé(s)"
@@ -121,9 +121,6 @@ msgstr "Bloqué par {0}"
 
 msgid "Blocking"
 msgstr "Bloquant"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "Mais ne vous inquiétez pas. Vous pouvez utiliser la procédure de réinitialisation de mot de passe pour demander un nouveau lien magique."
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "En vous connectant, vous acceptez les <0>Conditions d'utilisation</0> et la <1>Politique de confidentialité.</1>"
@@ -302,9 +299,6 @@ msgstr "Arrêter les opérations"
 msgid "Enter PIN for {0}"
 msgstr "Saisir le NIP pour {0}"
 
-msgid "Error"
-msgstr "Erreur"
-
 msgid "Estimated"
 msgstr "Estimé"
 
@@ -430,6 +424,9 @@ msgstr "Enregistrer la production"
 msgid "Log completed for {0}"
 msgstr "Enregistrer la production pour {0}"
 
+msgid "Log In"
+msgstr ""
+
 msgid "Log Rework"
 msgstr "Enregistrer la reprise"
 
@@ -443,9 +440,6 @@ msgstr "Enregistrer le rebut"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "Enregistrer le rebut pour {0}"
-
-msgid "Login"
-msgstr "Connexion"
 
 msgid "Machine"
 msgstr "Machine"

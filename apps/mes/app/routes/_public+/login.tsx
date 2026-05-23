@@ -15,6 +15,7 @@ import {
   getAuthSession
 } from "@carbon/auth/session.server";
 import { getUserByEmail } from "@carbon/auth/users.server";
+import { sendVerificationCode } from "@carbon/auth/verification.server";
 import { Hidden, Input, Submit, ValidatedForm, validator } from "@carbon/form";
 import { Ratelimit, redis } from "@carbon/kv";
 import {
@@ -30,6 +31,7 @@ import {
 } from "@carbon/react";
 import { Edition } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { useEffect } from "react";
 import { LuCircleAlert } from "react-icons/lu";
 import type {
   ActionFunctionArgs,
@@ -44,7 +46,7 @@ import {
   useSearchParams
 } from "react-router";
 
-import { path } from "~/utils/path";
+import { ERP_URL, path } from "~/utils/path";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Carbon | Login" }];
@@ -91,26 +93,42 @@ export async function action({ request }: ActionFunctionArgs) {
     return error(validation.error, "Invalid email address");
   }
 
-  const { email } = validation.data;
+  const { email, redirectTo } = validation.data;
   const user = await getUserByEmail(email);
 
   if (user.data && user.data.active) {
-    const magicLink = await sendMagicLink(email);
+    const requestUrl = new URL(request.url);
+    const magicLink = await sendMagicLink(email, {
+      callbackUrl: `${requestUrl.origin}/magic-link`,
+      redirectTo,
+      userId: user.data.id
+    });
 
-    if (!magicLink) {
+    if (magicLink.error) {
       return data(
         error(magicLink, "Failed to send magic link"),
         await flash(request, error(magicLink, "Failed to send magic link"))
       );
     }
-  } else {
+  } else if (CarbonEdition === Edition.Enterprise) {
     return data(
-      { success: false, message: "Invalid email/password combination" },
+      { success: false, message: "User record not found" },
       await flash(request, error(null, "Failed to sign in"))
     );
+  } else {
+    const verificationSent = await sendVerificationCode(email);
+
+    if (!verificationSent) {
+      return data(
+        error(null, "Failed to send verification code"),
+        await flash(request, error(null, "Failed to send verification code"))
+      );
+    }
+
+    return { success: true, mode: "signup", email };
   }
 
-  return { success: true };
+  return { success: true, mode: "login" };
 }
 
 export default function LoginRoute() {
@@ -123,8 +141,21 @@ export default function LoginRoute() {
   const redirectTo = searchParams.get("redirectTo") ?? undefined;
 
   const fetcher = useFetcher<
-    { success: true } | { success: false; message: string }
+    | { success: true; mode: "login" }
+    | { success: true; mode: "signup"; email: string }
+    | { success: false; message: string }
   >();
+
+  useEffect(() => {
+    if (fetcher.data?.success !== true || fetcher.data.mode !== "signup") {
+      return;
+    }
+
+    const verifyUrl = new URL("/verify", ERP_URL);
+    verifyUrl.searchParams.set("email", fetcher.data.email);
+    verifyUrl.searchParams.set("redirectTo", path.to.onboarding);
+    window.location.href = verifyUrl.toString();
+  }, [fetcher.data]);
 
   const onSignInWithGoogle = async () => {
     const { error } = await startOAuthSignIn({
@@ -163,7 +194,7 @@ export default function LoginRoute() {
         />
       </div>
       <div className="rounded-lg md:bg-card md:border md:border-border md:shadow-lg p-8 w-[380px]">
-        {fetcher.data?.success === true ? (
+        {fetcher.data?.success === true && fetcher.data.mode === "login" ? (
           <>
             <VStack spacing={4} className="items-center justify-center">
               <Heading size="h3">

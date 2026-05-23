@@ -1,4 +1,4 @@
-import { assertIsPost, CarbonEdition } from "@carbon/auth";
+import { assertIsPost, CarbonEdition, safeRedirect } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getCarbonServiceClient } from "@carbon/auth/client.server";
 import { setCompanyId } from "@carbon/auth/company.server";
@@ -56,6 +56,7 @@ export async function loader({ request }: ActionFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   assertIsPost(request);
   const { client, userId } = await requirePermissions(request, {});
+  const serviceClient = getCarbonServiceClient();
 
   // there are no entries in the userToCompany table which
   // dictates RLS for the company table
@@ -72,104 +73,113 @@ export async function action({ request }: ActionFunctionArgs) {
 
   let companyId: string | undefined;
   let companyLookupClient = client;
+  let setupClient = client;
+  let createdCompany = false;
 
   const companies = await getCompanies(client, userId);
+  if (companies.error) {
+    console.error(companies.error);
+    throw new Error("Fatal: failed to get companies");
+  }
   const company = companies?.data?.[0];
+  companyId = company?.id;
 
-  const locations = await getLocationsList(client, company?.id ?? "");
-  const location = locations?.data?.[0];
-
-  if (company && location) {
-    if (!company.id) {
-      throw new Error("Fatal: failed to get company ID");
-    }
-    const existingCompanyId = company.id;
-    companyId = existingCompanyId;
-    const [companyUpdate, locationUpdate] = await Promise.all([
-      updateCompany(client, existingCompanyId, {
-        ...d,
-        updatedBy: userId
-      }),
-      upsertLocation(client, {
-        ...location,
-        ...d,
-        companyId: existingCompanyId,
-        timezone: getLocalTimeZone(),
-        updatedBy: userId
-      })
-    ]);
+  if (companyId) {
+    const companyUpdate = await updateCompany(client, companyId, {
+      ...d,
+      updatedBy: userId
+    });
     if (companyUpdate.error) {
       console.error(companyUpdate.error);
       throw new Error("Fatal: failed to update company");
     }
-    if (locationUpdate.error) {
-      console.error(locationUpdate.error);
-      throw new Error("Fatal: failed to update location");
-    }
   } else {
-    const serviceClient = getCarbonServiceClient();
-    companyLookupClient = serviceClient;
-    if (!companyId) {
-      const [companyInsert] = await Promise.all([
-        insertCompany(serviceClient, d)
-      ]);
-      if (companyInsert.error) {
-        console.error(companyInsert.error);
-        throw new Error("Fatal: failed to insert company");
-      }
-
-      companyId = companyInsert.data?.id;
+    const companyInsert = await insertCompany(serviceClient, d);
+    if (companyInsert.error) {
+      console.error(companyInsert.error);
+      throw new Error("Fatal: failed to insert company");
     }
+
+    companyId = companyInsert.data?.id;
+    createdCompany = true;
 
     if (!companyId) {
       throw new Error("Fatal: failed to get company ID");
     }
+    companyLookupClient = serviceClient;
+    setupClient = serviceClient;
+  }
 
-    const seed = await seedCompany(serviceClient, companyId, userId);
-    if (seed.error) {
-      console.error(seed.error);
-      throw new Error("Fatal: failed to seed company");
-    }
+  if (!companyId) {
+    throw new Error("Fatal: failed to get company ID");
+  }
 
-    if (CarbonEdition === Edition.Cloud) {
-      trigger("onboard", {
-        type: "lead",
+  const seed = await seedCompany(serviceClient, companyId, userId);
+  if (seed.error) {
+    console.error(seed.error);
+    throw new Error("Fatal: failed to seed company");
+  }
+
+  if (createdCompany && CarbonEdition === Edition.Cloud) {
+    trigger("onboard", {
+      type: "lead",
+      companyId,
+      userId
+    });
+  }
+
+  // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
+  const { baseCurrencyCode, website, ...locationData } = d;
+  const locations = await getLocationsList(setupClient, companyId);
+  if (locations.error) {
+    console.error(locations.error);
+    throw new Error("Fatal: failed to get locations");
+  }
+
+  const location = locations.data?.[0];
+  const locationResult = location
+    ? await upsertLocation(setupClient, {
+        ...location,
+        ...locationData,
         companyId,
-        userId
-      });
-    }
-
-    // biome-ignore lint/correctness/noUnusedVariables: suppressed due to migration
-    const { baseCurrencyCode, website, ...locationData } = d;
-
-    // TODO: move all of this to transaction
-    const [locationInsert] = await Promise.all([
-      upsertLocation(serviceClient, {
+        timezone: getLocalTimeZone(),
+        updatedBy: userId
+      })
+    : await upsertLocation(setupClient, {
         ...locationData,
         name: "Headquarters",
         companyId,
         timezone: getLocalTimeZone(),
         createdBy: userId
-      })
-    ]);
+      });
 
-    if (locationInsert.error) {
-      console.error(locationInsert.error);
-      throw new Error("Fatal: failed to insert location");
-    }
+  if (locationResult.error) {
+    console.error(locationResult.error);
+    throw new Error("Fatal: failed to upsert location");
+  }
 
-    const locationId = locationInsert.data?.id;
-    if (!locationId) {
-      throw new Error("Fatal: failed to get location ID");
-    }
+  const locationId = location?.id ?? locationResult.data?.id;
+  if (!locationId) {
+    throw new Error("Fatal: failed to get location ID");
+  }
 
-    const [job] = await Promise.all([
-      insertEmployeeJob(serviceClient, {
-        id: userId,
-        companyId,
-        locationId
-      })
-    ]);
+  const existingJob = await setupClient
+    .from("employeeJob")
+    .select("id")
+    .eq("id", userId)
+    .eq("companyId", companyId)
+    .maybeSingle();
+  if (existingJob.error) {
+    console.error(existingJob.error);
+    throw new Error("Fatal: failed to get employee job");
+  }
+
+  if (!existingJob.data) {
+    const job = await insertEmployeeJob(setupClient, {
+      id: userId,
+      companyId,
+      locationId
+    });
 
     if (job.error) {
       console.error(job.error);
@@ -190,7 +200,7 @@ export async function action({ request }: ActionFunctionArgs) {
   );
   const companyIdCookie = setCompanyId(companyId!);
 
-  throw redirect(next, {
+  throw redirect(safeRedirect(next), {
     headers: [
       ["Set-Cookie", sessionCookie],
       ["Set-Cookie", companyIdCookie]

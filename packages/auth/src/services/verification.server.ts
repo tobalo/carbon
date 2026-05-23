@@ -1,3 +1,4 @@
+import { randomInt, timingSafeEqual } from "node:crypto";
 import { VerificationEmail } from "@carbon/documents/email";
 import { redis } from "@carbon/kv";
 import { sendEmail } from "@carbon/lib/resend.server";
@@ -5,48 +6,58 @@ import { render } from "@react-email/components";
 import { RESEND_DOMAIN } from "../config/env";
 
 export async function sendVerificationCode(email: string) {
+  let key: string | undefined;
+
   try {
-    // Generate 6-digit verification code
-    const verificationCode = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    const normalizedEmail = email.toLowerCase();
+    const verificationCode = randomInt(100000, 1000000).toString();
+    key = `verification:${normalizedEmail}`;
 
-    // Store in Redis with 10-minute expiration
-    await redis.set(
-      `verification:${email.toLowerCase()}`,
-      verificationCode,
-      "EX",
-      600
-    );
+    await redis.set(key, verificationCode, "EX", 600);
 
-    // Send email with verification code using React template
     const html = await render(
       VerificationEmail({
-        email,
+        email: normalizedEmail,
         verificationCode
       })
     );
 
     const result = await sendEmail({
       from: `Carbon <no-reply@${RESEND_DOMAIN}>`,
-      to: email,
+      to: normalizedEmail,
       subject: "Verify your email address",
       html
     });
-    console.log(result);
 
-    return !result.error;
+    if (result.error) {
+      await redis.del(key).catch(() => undefined);
+      return false;
+    }
+
+    return true;
   } catch (error) {
+    if (key) await redis.del(key).catch(() => undefined);
     console.error("Failed to send verification code:", error);
     return false;
   }
+}
+
+function codeMatches(storedCode: unknown, code: string) {
+  const stored = Buffer.from(String(storedCode));
+  const provided = Buffer.from(code);
+
+  if (stored.length !== provided.length) {
+    return false;
+  }
+
+  return timingSafeEqual(stored, provided);
 }
 
 export async function verifyEmailCode(email: string, code: string) {
   try {
     const storedCode = await redis.get(`verification:${email.toLowerCase()}`);
 
-    if (!storedCode || String(storedCode).trim() !== String(code).trim()) {
+    if (!storedCode || !codeMatches(storedCode, code)) {
       return false;
     }
 

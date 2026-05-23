@@ -32,12 +32,12 @@ msgstr "{0} verfügbar"
 msgid "{0} of {1}"
 msgstr "{0} von {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} von {1} abgeschlossen"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} von {1} abgeschlossen"
@@ -121,9 +121,6 @@ msgstr "Blockiert durch {0}"
 
 msgid "Blocking"
 msgstr "Blockierend"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "Aber machen Sie sich keine Sorgen. Sie können den Passwort-Zurücksetzen-Ablauf verwenden, um einen neuen Magic Link anzufordern."
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "Mit der Anmeldung stimmen Sie den <0>Nutzungsbedingungen</0> und der <1>Datenschutzrichtlinie</1> zu."
@@ -302,9 +299,6 @@ msgstr "Arbeitsgänge beenden"
 msgid "Enter PIN for {0}"
 msgstr "PIN für {0} eingeben"
 
-msgid "Error"
-msgstr "Fehler"
-
 msgid "Estimated"
 msgstr "Soll"
 
@@ -430,6 +424,9 @@ msgstr "Fertigmeldung"
 msgid "Log completed for {0}"
 msgstr "Fertigmeldung für {0}"
 
+msgid "Log In"
+msgstr ""
+
 msgid "Log Rework"
 msgstr "Nacharbeit erfassen"
 
@@ -443,9 +440,6 @@ msgstr "Ausschuss erfassen"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "Ausschuss erfassen für {0}"
-
-msgid "Login"
-msgstr "Anmelden"
 
 msgid "Machine"
 msgstr "Maschine"

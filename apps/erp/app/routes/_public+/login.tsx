@@ -102,7 +102,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return error(validation.error, "Invalid email address");
   }
 
-  const { email, turnstileToken } = validation.data;
+  const { email, redirectTo, turnstileToken } = validation.data;
 
   if (
     CarbonEdition === Edition.Cloud &&
@@ -153,7 +153,12 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (user.data && user.data.active) {
-    const magicLink = await sendMagicLink(email);
+    const requestUrl = new URL(request.url);
+    const magicLink = await sendMagicLink(email, {
+      callbackUrl: `${requestUrl.origin}/magic-link`,
+      redirectTo,
+      userId: user.data.id
+    });
 
     if (magicLink.error) {
       return data(

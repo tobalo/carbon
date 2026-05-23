@@ -11,6 +11,8 @@ const legacyHostedPackageScope = `@${legacyHostedVendor}/`;
 
 checkBetterAuthEntrypoint();
 checkBetterAuthAdapter();
+checkCarbonIdentityInvariant();
+checkVerificationCodeDurability();
 checkGeneratedAuthSchema();
 checkAuthPackageDependencies();
 checkProviderEnv();
@@ -67,14 +69,44 @@ function checkBetterAuthAdapter() {
     ["maps accounts to authAccount", 'modelName: "authAccount"'],
     ["maps verifications to authVerification", 'modelName: "authVerification"'],
     ["uses BETTER_AUTH_SECRET", "secret: BETTER_AUTH_SECRET"],
+    ["aligns Better Auth user creation to existing Carbon users", "databaseHooks:"],
+    ["looks up existing Carbon users before auth user insert", "getExistingCarbonUserIdByEmail"],
     ["enables email/password auth", "emailAndPassword:"],
     ["enables Better Auth bearer session tokens", "bearer()"],
     ["enables Better Auth magic links", "magicLink({"],
+    ["correlates generated magic links by request id", "MAGIC_LINK_REQUEST_ID_KEY"],
+    ["passes magic-link metadata through Better Auth", "metadata: args.metadata"],
+    ["reads magic-link metadata in send callback", "sendMagicLink: async ({ email, url, metadata })"],
     ["implements createUser through Better Auth", '"createUser"'],
+    ["verifies requested Better Auth user id was honored", "result.user.id !== args.id"],
     ["implements session lookup through Better Auth", '"getSession"'],
     ["implements magic-link verification through Better Auth", '"magicLinkVerify"'],
     ["refreshes Carbon sessions from Better Auth session lookup", "getSessionByAccessToken(refreshToken)"]
   ]);
+}
+
+function checkCarbonIdentityInvariant() {
+  const source = read("packages/auth/src/services/auth.server.ts");
+  expectAll(source, "packages/auth/src/services/auth.server.ts", [
+    ["rejects Carbon id/email mismatches", "does not match Better Auth email"],
+    ["rejects Carbon email/id mismatches", "not Better Auth user"],
+    ["checks magic-link auth user id against Carbon user id", "existingAuthUser.id !== options.userId"]
+  ]);
+}
+
+function checkVerificationCodeDurability() {
+  const source = read("packages/auth/src/services/verification.server.ts");
+  expectAll(source, "packages/auth/src/services/verification.server.ts", [
+    ["uses cryptographic verification-code randomness", "randomInt(100000, 1000000)"],
+    ["cleans up stored code when email delivery fails", "await redis.del(key).catch(() => undefined)"],
+    ["compares verification codes with timingSafeEqual", "timingSafeEqual(stored, provided)"]
+  ]);
+
+  if (/Math\.random|console\.log\(result\)/.test(source)) {
+    failures.push(
+      "packages/auth/src/services/verification.server.ts must not use Math.random or log email provider results for verification codes."
+    );
+  }
 }
 
 function checkGeneratedAuthSchema() {

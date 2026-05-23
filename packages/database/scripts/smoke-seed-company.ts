@@ -68,13 +68,14 @@ async function main() {
 
     await setupCompany(pool);
     await seedCompany({ companyId, userId });
+    await seedCompany({ companyId, userId });
     await verifySeed(pool);
 
     console.log("Seed company smoke passed");
     console.log("- pg18-trixie Docker migration apply succeeded");
     console.log("- seed-company Node/Postgres route service verified");
     console.log(
-      "- company defaults, permissions, accounting seeds, and lookups verified"
+      "- company defaults, permissions, accounting seeds, lookups, and retry idempotency verified"
     );
   } finally {
     await closeSeedCompanyPool();

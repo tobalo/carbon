@@ -1,6 +1,6 @@
 import {
-  assertIsPost,
   AZURE_CLIENT_ID,
+  assertIsPost,
   error,
   GOOGLE_CLIENT_ID,
   magicLinkValidator,
@@ -85,10 +85,13 @@ export async function action({ request }: ActionFunctionArgs) {
   if (user.data && user.data.active) {
     const magicLink = await sendMagicLink(email);
 
-    if (!magicLink) {
+    if (magicLink.error) {
       return data(
-        error(magicLink, "Failed to send magic link"),
-        await flash(request, error(magicLink, "Failed to send magic link"))
+        error(magicLink.error, "Failed to send magic link"),
+        await flash(
+          request,
+          error(magicLink.error, "Failed to send magic link")
+        )
       );
     }
   } else {

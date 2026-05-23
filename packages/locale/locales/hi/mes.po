@@ -32,12 +32,12 @@ msgstr "{0} उपलब्ध"
 msgid "{0} of {1}"
 msgstr "{0} में से {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} में से {1} पूर्ण"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} में से {1} पूर्ण"
@@ -121,9 +121,6 @@ msgstr "{0} द्वारा अवरुद्ध"
 
 msgid "Blocking"
 msgstr "अवरुद्ध"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "लेकिन चिंता न करें। आप नया जादुई लिंक अनुरोध करने के लिए भूल गए पासवर्ड प्रवाह का उपयोग कर सकते हैं।"
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "साइन इन करके, आप <0>सेवा की शर्तें</0> और <1>गोपनीयता नीति</1> से सहमत हैं।"
@@ -302,9 +299,6 @@ msgstr "संचालन समाप्त करें"
 msgid "Enter PIN for {0}"
 msgstr "{0} के लिए PIN दर्ज करें"
 
-msgid "Error"
-msgstr "त्रुटि"
-
 msgid "Estimated"
 msgstr "अनुमानित"
 
@@ -430,6 +424,9 @@ msgstr "पूर्ण लॉग करें"
 msgid "Log completed for {0}"
 msgstr "{0} के लिए पूर्ण लॉग करें"
 
+msgid "Log In"
+msgstr ""
+
 msgid "Log Rework"
 msgstr "रीवर्क लॉग करें"
 
@@ -443,9 +440,6 @@ msgstr "स्क्रैप लॉग करें"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "{0} के लिए स्क्रैप लॉग करें"
-
-msgid "Login"
-msgstr "लॉगिन"
 
 msgid "Machine"
 msgstr "मशीन"

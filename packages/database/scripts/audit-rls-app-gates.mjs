@@ -8978,6 +8978,10 @@ function onboardingRouteRequestScopeFailures() {
     resolve(repoRoot, "apps/erp/app/routes/onboarding+/company.tsx"),
     "utf8"
   );
+  const themeRoute = readFileSync(
+    resolve(repoRoot, "apps/erp/app/routes/onboarding+/theme.tsx"),
+    "utf8"
+  );
   const resourcesService = readFileSync(
     resolve(repoRoot, "apps/erp/app/modules/resources/resources.service.ts"),
     "utf8"
@@ -8999,11 +9003,34 @@ function onboardingRouteRequestScopeFailures() {
   }
 
   if (
+    !/redirect\(\s*safeRedirect\(\s*next\s*\)/.test(userRoute) ||
+    !/redirect\(\s*safeRedirect\(\s*next\s*\)/.test(companyRoute) ||
+    !/redirect\(\s*safeRedirect\(\s*next\s*\)/.test(themeRoute)
+  ) {
+    missing.push(
+      "Onboarding routes must sanitize hidden next redirects before redirecting."
+    );
+  }
+
+  if (
     !/let\s+companyLookupClient\s*=\s*client/.test(companyRoute) ||
-    !/if\s*\(\s*company\s*&&\s*location\s*\)\s*\{[\s\S]*const\s+existingCompanyId\s*=\s*company\.id[\s\S]*companyId\s*=\s*existingCompanyId[\s\S]*updateCompany\(\s*client,\s*existingCompanyId[\s\S]*upsertLocation\(\s*client,\s*\{[\s\S]*companyId:\s*existingCompanyId,[\s\S]*updatedBy:\s*userId/.test(
+    !/let\s+setupClient\s*=\s*client/.test(companyRoute) ||
+    !/if\s*\(\s*companyId\s*\)\s*\{[\s\S]*updateCompany\(\s*client,\s*companyId[\s\S]*updatedBy:\s*userId/.test(
       companyRoute
     ) ||
-    !/\}\s*else\s*\{[\s\S]*const\s+serviceClient\s*=\s*getCarbonServiceClient\(\)[\s\S]*companyLookupClient\s*=\s*serviceClient[\s\S]*insertCompany\(\s*serviceClient[\s\S]*seedCompany\(\s*serviceClient,\s*companyId,\s*userId[\s\S]*upsertLocation\(\s*serviceClient[\s\S]*insertEmployeeJob\(\s*serviceClient/.test(
+    !/\}\s*else\s*\{[\s\S]*insertCompany\(\s*serviceClient[\s\S]*companyLookupClient\s*=\s*serviceClient[\s\S]*setupClient\s*=\s*serviceClient/.test(
+      companyRoute
+    ) ||
+    !/seedCompany\(\s*serviceClient,\s*companyId,\s*userId/.test(
+      companyRoute
+    ) ||
+    !/getLocationsList\(\s*setupClient,\s*companyId\s*\)/.test(
+      companyRoute
+    ) ||
+    !/upsertLocation\(\s*setupClient,\s*\{[\s\S]*companyId,[\s\S]*(updatedBy|createdBy):\s*userId/.test(
+      companyRoute
+    ) ||
+    !/insertEmployeeJob\(\s*setupClient/.test(
       companyRoute
     ) ||
     !/await\s+companyLookupClient[\s\S]*\.from\("company"\)[\s\S]*\.eq\("id",\s*companyId!\)/.test(

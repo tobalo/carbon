@@ -8,6 +8,7 @@ const repoRoot = resolve(scriptDir, "../../..");
 const failures = [];
 
 checkStoragePathHelpers();
+checkStoragePathUnitTests();
 checkStorageSigningHelpers();
 checkStorageMinioSmoke();
 checkQueryClientHasNoStorageAdapter();
@@ -31,6 +32,7 @@ if (failures.length > 0) {
 
 console.log("Storage audit passed");
 console.log("- path helper contract checked");
+console.log("- path helper unit tests checked");
 console.log("- S3 signing/download helper contract checked");
 console.log("- MinIO storage smoke checked");
 console.log("- direct query storage facade removal checked");
@@ -57,6 +59,24 @@ function checkStoragePathHelpers() {
     ["rejects bare company-prefix object keys", "normalizedKey === normalizedCompanyId"],
     ["provides companyKey for prefixing tenant object paths", "export function companyKey"],
     ["provides companyPrefix for prefixing tenant object lists", "export function companyPrefix"]
+  ]);
+}
+
+function checkStoragePathUnitTests() {
+  const packageJson = JSON.parse(read("packages/storage/package.json"));
+  if (packageJson.scripts?.test !== "vitest run") {
+    failures.push("packages/storage/package.json must expose test for storage path unit checks.");
+  }
+
+  const source = read("packages/storage/src/path.test.ts");
+  expectAll(source, "packages/storage/src/path.test.ts", [
+    ["tests tenant object path assertion", "assertCompanyPath"],
+    ["tests tenant prefix assertion", "assertCompanyPrefix"],
+    ["tests encoded traversal rejection", "company-a/%2e%2e/file.txt"],
+    ["tests encoded slash rejection", "company-a/documents%2ffile.txt"],
+    ["tests cross-tenant path rejection", "company-b/documents/file.txt"],
+    ["tests company path prefixing", "companyKey(\"company-a\", \"documents/file.txt\")"],
+    ["tests company list prefixing", "companyPrefix(\"company-a\", \"documents\")"]
   ]);
 }
 

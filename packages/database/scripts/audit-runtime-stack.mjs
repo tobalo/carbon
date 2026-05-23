@@ -30,6 +30,7 @@ checkExampleEnv();
 checkPostgresInit();
 checkDatabaseRoleUrlStrictness();
 checkPg18SmokeScripts();
+checkSeedCompanyDurability();
 checkPg18MigrationDocs();
 checkWorkflows();
 
@@ -53,6 +54,7 @@ console.log("- legacy hosted REST schema generator/API docs surface checked");
 console.log(`- legacy runtime service scan files checked: ${runtimeFiles.length}`);
 console.log("- legacy realtime client shape checked");
 console.log("- PG18/pgvector database smoke scripts checked");
+console.log("- seed-company retry/concurrency guards checked");
 console.log("- migration docs PG18 default checked");
 
 function checkNoLegacyRuntimeServices() {
@@ -431,6 +433,18 @@ function checkPg18SmokeScripts() {
       }
     }
   }
+}
+
+function checkSeedCompanyDurability() {
+  const source = read("packages/database/src/seed-company.ts");
+  expectAll(source, "packages/database/src/seed-company.ts", [
+    ["locks the company row before assigning companyGroupId", "FOR UPDATE"],
+    ["seeds shared accounting data on every run", "ensureSharedAccountingData("],
+    ["reuses existing chart of account numbers", 'WHERE "companyGroupId" = $1 AND number = $2'],
+    ["keeps account defaults idempotent", 'SELECT 1 FROM "accountDefault" WHERE "companyId"'],
+    ["keeps fiscal-year settings idempotent", 'SELECT 1 FROM "fiscalYearSettings" WHERE "companyId"'],
+    ["upserts user permissions", "ON CONFLICT (id) DO UPDATE SET permissions = EXCLUDED.permissions"]
+  ]);
 }
 
 function checkPg18MigrationDocs() {

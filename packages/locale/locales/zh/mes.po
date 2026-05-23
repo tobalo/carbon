@@ -32,12 +32,12 @@ msgstr "{0} 可用"
 msgid "{0} of {1}"
 msgstr "{0} / {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} / {1} 已完成"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} / {1} 已完成"
@@ -121,9 +121,6 @@ msgstr "被 {0} 阻塞"
 
 msgid "Blocking"
 msgstr "阻塞中"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "但别担心。您可以使用忘记密码流程来请求新的魔法链接。"
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "登录即表示您同意<0>服务条款</0>和<1>隐私政策。</1>"
@@ -302,9 +299,6 @@ msgstr "结束工序"
 msgid "Enter PIN for {0}"
 msgstr "输入 {0} 的 PIN 码"
 
-msgid "Error"
-msgstr "错误"
-
 msgid "Estimated"
 msgstr "估计"
 
@@ -430,6 +424,9 @@ msgstr "记录完成数量"
 msgid "Log completed for {0}"
 msgstr "记录 {0} 的完成数量"
 
+msgid "Log In"
+msgstr ""
+
 msgid "Log Rework"
 msgstr "记录返工"
 
@@ -443,9 +440,6 @@ msgstr "记录报废"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "记录 {0} 的报废"
-
-msgid "Login"
-msgstr "登录"
 
 msgid "Machine"
 msgstr "机器"

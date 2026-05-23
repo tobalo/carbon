@@ -1175,6 +1175,9 @@ msgstr "Carbon column"
 msgid "Carbon Logo"
 msgstr "Carbon Logo"
 
+msgid "Carbon provides a wide range of filters."
+msgstr "Carbon provides a wide range of filters."
+
 msgid "Carbon Value"
 msgstr "Carbon Value"
 
@@ -4100,9 +4103,6 @@ msgstr "Lead Time Updates"
 msgid "Lead Time:"
 msgstr "Lead Time:"
 
-msgid "Learn more"
-msgstr "Learn more"
-
 msgid "Leave any related receipts untouched"
 msgstr "Leave any related receipts untouched"
 
@@ -6945,9 +6945,6 @@ msgstr "Skip scheduled maintenance on company holidays"
 msgid "Skipped"
 msgstr "Skipped"
 
-msgid "Something went wrong. Please try again."
-msgstr "Something went wrong. Please try again."
-
 msgid "Soonest expiry across every material sets the finished good."
 msgstr "Soonest expiry across every material sets the finished good."
 
@@ -7193,9 +7190,6 @@ msgstr "Suggestions"
 
 msgid "Sunday"
 msgstr "Sunday"
-
-msgid "Carbon provides a wide range of filters."
-msgstr "Carbon provides a wide range of filters."
 
 msgid "Supplier"
 msgstr "Supplier"

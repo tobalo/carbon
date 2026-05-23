@@ -1175,6 +1175,9 @@ msgstr "Colonna Carbon"
 msgid "Carbon Logo"
 msgstr "Logo Carbon"
 
+msgid "Carbon provides a wide range of filters."
+msgstr "Carbon fornisce un'ampia gamma di filtri."
+
 msgid "Carbon Value"
 msgstr "Valore Carbon"
 
@@ -4100,9 +4103,6 @@ msgstr "Aggiornamenti Tempi di Consegna"
 msgid "Lead Time:"
 msgstr "Tempo di consegna:"
 
-msgid "Learn more"
-msgstr "Scopri di piÃƒÆ’Ã‚Â¹"
-
 msgid "Leave any related receipts untouched"
 msgstr "Lasciare le ricevute correlate intatte"
 
@@ -6945,9 +6945,6 @@ msgstr "Salta la manutenzione programmata durante le festivitÃƒÆ’Ã‚Â  
 msgid "Skipped"
 msgstr "Saltato"
 
-msgid "Something went wrong. Please try again."
-msgstr "Qualcosa ÃƒÆ’Ã‚Â¨ andato storto. Riprova."
-
 msgid "Soonest expiry across every material sets the finished good."
 msgstr "La scadenza piÃƒÆ’Ã‚Â¹ prossima tra tutti i materiali determina il prodotto finito."
 
@@ -7193,9 +7190,6 @@ msgstr "Suggerimenti"
 
 msgid "Sunday"
 msgstr "Domenica"
-
-msgid "Carbon provides a wide range of filters."
-msgstr "Carbon fornisce un'ampia gamma di filtri."
 
 msgid "Supplier"
 msgstr "Fornitore"

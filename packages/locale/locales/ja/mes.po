@@ -32,12 +32,12 @@ msgstr "{0} 利用可能"
 msgid "{0} of {1}"
 msgstr "{0} / {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} / {1} 完了"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} / {1} 完了済み"
@@ -121,9 +121,6 @@ msgstr "{0} によりブロック中"
 
 msgid "Blocking"
 msgstr "ブロック中"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "ご心配なく。パスワード忘却フローを使用して新しいマジックリンクをリクエストできます。"
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "サインインすることにより、<0>利用規約</0>および<1>プライバシーポリシー</1>に同意したものとみなされます。"
@@ -302,9 +299,6 @@ msgstr "工程を終了"
 msgid "Enter PIN for {0}"
 msgstr "{0} のPINを入力"
 
-msgid "Error"
-msgstr "エラー"
-
 msgid "Estimated"
 msgstr "見積"
 
@@ -430,6 +424,9 @@ msgstr "完了を記録"
 msgid "Log completed for {0}"
 msgstr "{0} の完了を記録"
 
+msgid "Log In"
+msgstr ""
+
 msgid "Log Rework"
 msgstr "手直しを記録"
 
@@ -443,9 +440,6 @@ msgstr "スクラップを記録"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "{0} のスクラップを記録"
-
-msgid "Login"
-msgstr "ログイン"
 
 msgid "Machine"
 msgstr "機械"

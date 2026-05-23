@@ -1,4 +1,4 @@
-import { assertIsPost } from "@carbon/auth";
+import { assertIsPost, safeRedirect } from "@carbon/auth";
 import { validationError, validator } from "@carbon/form";
 import {
   Button,
@@ -64,7 +64,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const { next, theme } = validation.data;
   if (!next) throw new Error("Fatal: next is required");
 
-  throw redirect(next, {
+  throw redirect(safeRedirect(next), {
     headers: { "Set-Cookie": setTheme(theme) }
   });
 }

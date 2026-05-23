@@ -32,12 +32,12 @@ msgstr "{0} доступно"
 msgid "{0} of {1}"
 msgstr "{0} из {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} из {1} завершено"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} из {1} завершено"
@@ -121,9 +121,6 @@ msgstr "Заблокировано {0}"
 
 msgid "Blocking"
 msgstr "Блокирующие"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "Но не волнуйтесь. Вы можете использовать функцию восстановления пароля, чтобы запросить новую волшебную ссылку."
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "Выполняя вход, вы соглашаетесь с <0>Условиями использования</0> и <1>Политикой конфиденциальности.</1>"
@@ -302,9 +299,6 @@ msgstr "Завершить операции"
 msgid "Enter PIN for {0}"
 msgstr "Введите PIN для {0}"
 
-msgid "Error"
-msgstr "Ошибка"
-
 msgid "Estimated"
 msgstr "План"
 
@@ -430,6 +424,9 @@ msgstr "Записать готовые"
 msgid "Log completed for {0}"
 msgstr "Записать готовые для {0}"
 
+msgid "Log In"
+msgstr ""
+
 msgid "Log Rework"
 msgstr "Записать доработку"
 
@@ -443,9 +440,6 @@ msgstr "Записать брак"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "Записать брак для {0}"
-
-msgid "Login"
-msgstr "Вход"
 
 msgid "Machine"
 msgstr "Станок"

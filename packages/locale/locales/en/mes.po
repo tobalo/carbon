@@ -32,12 +32,12 @@ msgstr "{0} available"
 msgid "{0} of {1}"
 msgstr "{0} of {1}"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} complete"
 msgstr "{0} of {1} complete"
 
-#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r) => r.index === activeStep ) ).length
+#. placeholder {0}: attributes.filter((a) => a.jobOperationStepRecord.some( (r: any) => r.index === activeStep ) ).length
 #. placeholder {1}: attributes.length
 msgid "{0} of {1} completed"
 msgstr "{0} of {1} completed"
@@ -121,9 +121,6 @@ msgstr "Blocked by {0}"
 
 msgid "Blocking"
 msgstr "Blocking"
-
-msgid "But don't worry. You can use the forgot password flow to request a new magic link."
-msgstr "But don't worry. You can use the forgot password flow to request a new magic link."
 
 msgid "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
 msgstr "By signing in, you agree to the <0>Terms of Service</0> and <1>Privacy Policy.</1>"
@@ -302,9 +299,6 @@ msgstr "End Operations"
 msgid "Enter PIN for {0}"
 msgstr "Enter PIN for {0}"
 
-msgid "Error"
-msgstr "Error"
-
 msgid "Estimated"
 msgstr "Estimated"
 
@@ -430,6 +424,9 @@ msgstr "Log Completed"
 msgid "Log completed for {0}"
 msgstr "Log completed for {0}"
 
+msgid "Log In"
+msgstr "Log In"
+
 msgid "Log Rework"
 msgstr "Log Rework"
 
@@ -443,9 +440,6 @@ msgstr "Log Scrap"
 #. placeholder {0}: operation.itemReadableId
 msgid "Log scrap for {0}"
 msgstr "Log scrap for {0}"
-
-msgid "Login"
-msgstr "Login"
 
 msgid "Machine"
 msgstr "Machine"

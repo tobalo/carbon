@@ -1,4 +1,4 @@
-import { assertIsPost } from "@carbon/auth";
+import { assertIsPost, safeRedirect } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { destroyAuthSession } from "@carbon/auth/session.server";
 import { ValidatedForm, validationError, validator } from "@carbon/form";
@@ -61,7 +61,7 @@ export async function action({ request }: ActionFunctionArgs) {
     throw new Error("Fatal: failed to update account");
   }
 
-  throw redirect(next);
+  throw redirect(safeRedirect(next));
 }
 
 export default function OnboardingUser() {

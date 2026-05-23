@@ -8,13 +8,9 @@ import {
   deactivateEmployee,
   deactivateSupplier
 } from "@carbon/auth/users.server";
-import type {
-  Json,
-  QueryDatabase
-} from "@carbon/database/schema";
-import { redis } from "@carbon/kv";
-
 import type { CarbonDatabaseClient } from "@carbon/database/query-client";
+import type { Json, QueryDatabase } from "@carbon/database/schema";
+import { redis } from "@carbon/kv";
 import { redirect } from "react-router";
 import { getSupplierContact } from "~/modules/purchasing";
 import { getCustomerContact } from "~/modules/sales";
@@ -38,8 +34,20 @@ async function createAuthUser(args: {
   id?: string;
 }) {
   try {
+    const email = args.email.toLowerCase();
+    const existingUser = await authProvider.getUserByEmail(email);
+    if (existingUser) {
+      if (args.id && existingUser.id !== args.id) {
+        throw new Error("Email already has a provider account");
+      }
+      if (args.password) {
+        await authProvider.adminSetPassword(existingUser.id, args.password);
+      }
+      return { data: { user: { id: existingUser.id } }, error: null };
+    }
+
     const user = await authProvider.createUser({
-      email: args.email.toLowerCase(),
+      email,
       password: args.password ?? crypto.randomUUID(),
       emailVerified: true,
       id: args.id
@@ -669,7 +677,10 @@ export function getLegacyPermissionCacheKey(userId: string) {
   return `permissions:${userId}`;
 }
 
-export async function getUser(client: CarbonDatabaseClient<QueryDatabase>, id: string) {
+export async function getUser(
+  client: CarbonDatabaseClient<QueryDatabase>,
+  id: string
+) {
   return client
     .from("user")
     .select("*")
@@ -843,7 +854,37 @@ async function insertUser(
   client: CarbonDatabaseClient<QueryDatabase>,
   user: Omit<User, "fullName" | "createdAt">
 ) {
-  return client.from("user").upsert([user]).select("*");
+  const now = new Date().toISOString();
+  const persistedUser = user as typeof user & {
+    about?: string;
+    acknowledgedITAR?: boolean;
+    active?: boolean;
+    admin?: boolean;
+    developer?: boolean;
+    flags?: Json;
+    isConsoleOperator?: boolean;
+    updatedAt?: string | null;
+  };
+
+  return client
+    .from("user")
+    .upsert([
+      {
+        ...user,
+        email: user.email.toLowerCase(),
+        fullName: `${user.firstName} ${user.lastName}`.trim(),
+        about: persistedUser.about ?? "",
+        acknowledgedITAR: persistedUser.acknowledgedITAR ?? false,
+        active: persistedUser.active ?? true,
+        admin: persistedUser.admin ?? false,
+        createdAt: now,
+        developer: persistedUser.developer ?? false,
+        flags: persistedUser.flags ?? {},
+        isConsoleOperator: persistedUser.isConsoleOperator ?? false,
+        updatedAt: persistedUser.updatedAt ?? now
+      } as any
+    ])
+    .select("*");
 }
 
 /**
@@ -888,8 +929,15 @@ export async function createConsoleOperator(
       email: syntheticEmail,
       firstName,
       lastName,
+      fullName: `${firstName} ${lastName}`.trim(),
+      about: "",
+      acknowledgedITAR: false,
       avatarUrl: null,
       active: true,
+      admin: false,
+      createdAt: new Date().toISOString(),
+      developer: false,
+      flags: {},
       isConsoleOperator: true
     } as any)
     .select("*")
