@@ -72,7 +72,7 @@ export async function getWorktreeRoot(): Promise<string> {
 }
 
 export function projectName(slug: string): string {
-  return `carbon-${slug}`;
+  return `crbn_${slug}`;
 }
 
 // Resolve symlinks + normalize separators / trailing slashes so two strings
@@ -247,9 +247,9 @@ function parsePortMap(v: unknown): PortMap | null {
   for (const name of PORT_NAMES) {
     const value =
       name === "PORT_STORAGE"
-        ? o.PORT_STORAGE ?? o[`PORT_${"API"}`]
+        ? (o.PORT_STORAGE ?? o[`PORT_${"API"}`])
         : name === "PORT_CONSOLE"
-          ? o.PORT_CONSOLE ?? o[`PORT_${"STUDIO"}`]
+          ? (o.PORT_CONSOLE ?? o[`PORT_${"STUDIO"}`])
           : o[name];
     if (typeof value !== "number" || !Number.isInteger(value)) return null;
     ports[name] = value;

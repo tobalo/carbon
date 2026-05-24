@@ -60,4 +60,4 @@ By default, `crbn up` uses [portless](https://github.com/nicholasgasior/portless
 
 ## Project naming
 
-Compose projects are prefixed `carbon-<slug>` (e.g. `carbon-feature-foo`). The slug is derived from the worktree directory name and persisted in `.carbon-worktree`.
+Compose projects are prefixed `crbn_<slug>` (e.g. `crbn_feature-foo`). The slug is derived from the worktree directory name and persisted in `.carbon-worktree`. The shared host-wide stack uses project `crbn_shared` with explicit container names (`crbn_postgres`, `crbn_redis`, `crbn_minio`).

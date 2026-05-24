@@ -113,12 +113,18 @@ export async function stopStack(
   await execa("docker", args, { cwd: root, stdio: "ignore", reject: false });
 }
 
-// One redis per host; recover from stale `carbon-redis` leftovers.
+// One redis per host. Proactively rm the pre-rename `carbon-redis` container —
+// if it exists it would hold port 6379 and starve the new `crbn_redis`. Then
+// recover from any other stale leftover that still binds the port.
 export async function bootSharedRedis(root: string) {
+  await execa("docker", ["rm", "-f", "carbon-redis"], {
+    reject: false,
+    stdio: "ignore"
+  });
   const args = ["compose", "-f", COMPOSE_SHARED_FILE, "up", "-d", "redis"];
   let r = await execa("docker", args, { cwd: root, reject: false });
-  if (r.exitCode !== 0 && /already in use/i.test(r.stderr ?? "")) {
-    await execa("docker", ["rm", "-f", "carbon-redis"], {
+  if (r.exitCode !== 0 && /already (in use|allocated)/i.test(r.stderr ?? "")) {
+    await execa("docker", ["rm", "-f", "crbn_redis", "carbon-redis"], {
       reject: false,
       stdio: "ignore"
     });
@@ -265,7 +271,7 @@ export async function dockerProjectStates(): Promise<Map<string, string>> {
 export async function flushDb(db: number) {
   const r = await execa(
     "docker",
-    ["exec", "carbon-redis", "redis-cli", "-n", String(db), "FLUSHDB"],
+    ["exec", "crbn_redis", "redis-cli", "-n", String(db), "FLUSHDB"],
     { reject: false, stdio: "ignore", timeout: 10_000 }
   ).catch(() => null);
   if (!r || r.exitCode !== 0) {
