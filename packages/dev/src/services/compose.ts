@@ -76,11 +76,10 @@ export async function devComposeImageRefs(
   root: string,
   slug: string
 ): Promise<string[] | null> {
-  const r = await execa(
-    "docker",
-    devArgs(root, slug, "config", "--images"),
-    { cwd: root, reject: false }
-  );
+  const r = await execa("docker", devArgs(root, slug, "config", "--images"), {
+    cwd: root,
+    reject: false
+  });
   if (r.exitCode !== 0) return null;
   const refs = (r.stdout ?? "")
     .split("\n")
@@ -132,11 +131,11 @@ export async function bootSharedRedis(root: string) {
 }
 
 export async function destroyProjectVolumes(cwd: string, project: string) {
-  await execa(
-    "docker",
-    projectArgs(cwd, project, "down", "-v"),
-    { cwd, stdio: "ignore", reject: false }
-  );
+  await execa("docker", projectArgs(cwd, project, "down", "-v"), {
+    cwd,
+    stdio: "ignore",
+    reject: false
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -208,11 +207,10 @@ export async function listComposeServices(
   root: string,
   slug: string
 ): Promise<string[]> {
-  const r = await execa(
-    "docker",
-    devArgs(root, slug, "config", "--services"),
-    { cwd: root, reject: false }
-  );
+  const r = await execa("docker", devArgs(root, slug, "config", "--services"), {
+    cwd: root,
+    reject: false
+  });
   if (r.exitCode !== 0) return [];
   return (r.stdout ?? "")
     .split("\n")
@@ -268,9 +266,9 @@ export async function flushDb(db: number) {
   const r = await execa(
     "docker",
     ["exec", "carbon-redis", "redis-cli", "-n", String(db), "FLUSHDB"],
-    { reject: false, stdio: "ignore" }
-  );
-  if (r.exitCode !== 0) {
+    { reject: false, stdio: "ignore", timeout: 10_000 }
+  ).catch(() => null);
+  if (!r || r.exitCode !== 0) {
     log.warn(`redis flush of db ${db} failed (skipped)`);
   }
 }
@@ -279,7 +277,11 @@ export async function flushDb(db: number) {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-function projectArgs(root: string, project: string, ...rest: string[]): string[] {
+function projectArgs(
+  root: string,
+  project: string,
+  ...rest: string[]
+): string[] {
   const args = ["compose", "-f", COMPOSE_DEV_FILE, "-p", project];
   if (existsSync(`${root}/.env.local`)) args.push("--env-file", ".env.local");
   return [...args, ...rest];
