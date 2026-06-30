@@ -1,11 +1,10 @@
+import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
-import { createClient } from "@supabase/supabase-js";
+import { objectExists, uploadObject } from "@carbon/object-storage/server";
 import * as dotenv from "dotenv";
-
-import { client } from "./client";
 
 dotenv.config();
 
@@ -28,31 +27,34 @@ const TEMPLATE_ASSET_PREFIX = "_templates";
 // cheap no-op. Pass `--force` to overwrite (republish an updated template).
 const FORCE = process.argv.includes("--force");
 
-type StorageApi = ReturnType<typeof createClient>["storage"];
-
 /**
  * Upload one object, idempotently. Without `--force`, an object that already
- * exists is left untouched and reported as "skipped" (the storage API returns a
- * 409 "Duplicate" we treat as success). With `--force`, it is overwritten.
+ * exists is left untouched and reported as "skipped". With `--force`, it is
+ * overwritten.
  */
 async function publishObject(
-  storage: StorageApi,
   bucket: string,
   path: string,
   bytes: Buffer,
   contentType?: string
 ): Promise<"uploaded" | "skipped" | { error: string }> {
-  const { error } = await storage
-    .from(bucket)
-    .upload(path, bytes, { upsert: FORCE, contentType });
-  if (!error) return "uploaded";
+  try {
+    if (!FORCE && (await objectExists({ bucket, key: path }))) {
+      return "skipped";
+    }
 
-  const alreadyExists =
-    (error as { statusCode?: string }).statusCode === "409" ||
-    /already exists|duplicate/i.test(error.message);
-  if (!FORCE && alreadyExists) return "skipped";
-
-  return { error: error.message };
+    await uploadObject({
+      bucket,
+      key: path,
+      body: bytes,
+      contentType
+    });
+    return "uploaded";
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 // Repo-committed onboarding demo templates. Authored manually (export a
@@ -65,15 +67,8 @@ const BACKUPS_DIR = join(
   "..",
   "packages",
   "database",
-  "supabase",
   "backups"
 );
-
-type Workspace = {
-  id: number;
-  database_url: string | null;
-  service_role_key: string | null;
-};
 
 type TemplateAsset = { path: string; bytes: Buffer };
 type Template = {
@@ -107,7 +102,7 @@ async function loadTemplates(): Promise<Template[]> {
 
 /** Every file under a directory, recursing into subfolders (absolute paths). */
 async function walkFiles(dir: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  let entries: Dirent[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {
@@ -164,12 +159,9 @@ async function extractTemplateAssets(
 
 // Manual publish step (NOT run on every deploy — see the "Publish backup
 // templates" workflow). Templates change rarely and are large, so they're
-// published deliberately. Multi-tenant: each workspace is its own Supabase
-// project (its own url + service-role key in the workspaces table), so we upload
-// the repo templates into every workspace's company-templates bucket and fan
-// their assets into the shared `_templates/` prefix. Onboarding then provisions
-// a new company from the matching <industryId> template. Idempotent: existing
-// objects are skipped unless `--force` is passed.
+// published deliberately to the configured Carbon object store. Onboarding then
+// provisions a new company from the matching <industryId> template. Idempotent:
+// existing objects are skipped unless `--force` is passed.
 async function main(): Promise<void> {
   const templates = await loadTemplates();
   if (templates.length === 0) {
@@ -182,68 +174,40 @@ async function main(): Promise<void> {
     }: ${templates.map((t) => t.fileName).join(", ")}`
   );
 
-  const { data: workspaces, error } = await client
-    .from("workspaces")
-    .select("id, database_url, service_role_key");
-
-  if (error) {
-    console.error("🔴 Failed to fetch workspaces", error);
-    process.exit(1);
-  }
-
   let hasErrors = false;
 
-  for (const ws of (workspaces ?? []) as Workspace[]) {
-    if (!ws.database_url || !ws.service_role_key) {
-      console.log(`⏭️ Skipping workspace ${ws.id} — missing url/service key`);
-      continue;
+  for (const { fileName, bytes, assets } of templates) {
+    const gz = await publishObject(
+      TEMPLATE_BUCKET,
+      `templates/${fileName}`,
+      bytes,
+      "application/gzip"
+    );
+    if (typeof gz === "object") {
+      console.error(`🔴 Failed to upload templates/${fileName}`, gz.error);
+      hasErrors = true;
     }
 
-    const storage = createClient(ws.database_url, ws.service_role_key).storage;
-    for (const { fileName, bytes, assets } of templates) {
-      const gz = await publishObject(
-        storage,
-        TEMPLATE_BUCKET,
-        `templates/${fileName}`,
-        bytes,
-        "application/gzip"
-      );
-      if (typeof gz === "object") {
-        console.error(
-          `🔴 Workspace ${ws.id}: failed to upload templates/${fileName}`,
-          gz.error
-        );
+    // Fan the template's storage assets into the shared `_templates/` prefix
+    // so onboarding-from-template can reference them instead of copying files
+    // into every company's bucket.
+    let uploaded = gz === "uploaded" ? 1 : 0;
+    let skipped = gz === "skipped" ? 1 : 0;
+    for (const asset of assets) {
+      const result = await publishObject(PRIVATE_BUCKET, asset.path, asset.bytes);
+      if (typeof result === "object") {
+        console.error(`🔴 Failed to upload ${asset.path}`, result.error);
         hasErrors = true;
+      } else if (result === "uploaded") {
+        uploaded++;
+      } else {
+        skipped++;
       }
-
-      // Fan the template's storage assets into the shared `_templates/` prefix
-      // so onboarding-from-template can reference them instead of copying files
-      // into every company's bucket.
-      let uploaded = gz === "uploaded" ? 1 : 0;
-      let skipped = gz === "skipped" ? 1 : 0;
-      for (const asset of assets) {
-        const result = await publishObject(
-          storage,
-          PRIVATE_BUCKET,
-          asset.path,
-          asset.bytes
-        );
-        if (typeof result === "object") {
-          console.error(
-            `🔴 Workspace ${ws.id}: failed to upload ${asset.path}`,
-            result.error
-          );
-          hasErrors = true;
-        } else if (result === "uploaded") {
-          uploaded++;
-        } else {
-          skipped++;
-        }
-      }
-      console.log(
-        `✅ Workspace ${ws.id}: ${fileName} — ${uploaded} uploaded, ${skipped} skipped`
-      );
     }
+
+    console.log(
+      `✅ ${fileName} — ${uploaded} uploaded, ${skipped} skipped`
+    );
   }
 
   if (hasErrors) {
@@ -251,10 +215,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log("✅ Uploaded backup templates to all workspaces");
+  console.log("✅ Uploaded backup templates");
 }
 
-main().catch((err) => {
-  console.error("🔴 upload-backup-templates failed", err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error("🔴 upload-backup-templates failed", err);
+    process.exitCode = 1;
+  });

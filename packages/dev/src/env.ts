@@ -46,32 +46,16 @@ export function renderEnv(opts: {
   );
   if (portless) lines.push(`GTM_URL=https://${host("starter")}`);
   lines.push("");
-  lines.push(
-    "# Supabase (per-worktree dev keys, minted from random JWT_SECRET)"
-  );
-  lines.push(
-    `SUPABASE_URL=${portless ? `https://${host("api")}` : local(ports.PORT_API)}`
-  );
-  lines.push(
-    `SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:${ports.PORT_DB}/postgres`
-  );
-  lines.push("PGSSLMODE=disable");
-  lines.push(`SUPABASE_JWT_SECRET=${jwt.secret}`);
-  lines.push(`SUPABASE_ANON_KEY=${jwt.anonKey}`);
-  lines.push(`SUPABASE_SERVICE_ROLE_KEY=${jwt.serviceKey}`);
-  // OAuth callback: portless uses the shared api.carbon.dev alias; localhost
-  // mode uses the well-known Supabase default port so the redirect URI is
-  // predictable and can be registered in Google/Azure console once.
-  const oauthBase = portless
-    ? "https://api.carbon.dev"
-    : "http://localhost:54321";
-  lines.push(
-    `SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI=${oauthBase}/auth/v1/callback`
-  );
-  lines.push(
-    `SUPABASE_AUTH_EXTERNAL_AZURE_REDIRECT_URI=${oauthBase}/auth/v1/callback`
-  );
+  lines.push("# Carbon API/auth/database aliases");
+  const apiUrl = portless ? `https://${host("api")}` : local(ports.PORT_API);
+  const databaseUrl = `postgresql://postgres:postgres@localhost:${ports.PORT_DB}/postgres`;
+  lines.push(`CARBON_API_URL=${apiUrl}`);
+  lines.push(`CARBON_DATABASE_URL=${databaseUrl}`);
+  lines.push(`CARBON_AUTH_JWT_SECRET=${jwt.secret}`);
+  lines.push(`CARBON_PUBLIC_KEY=${jwt.anonKey}`);
+  lines.push(`CARBON_SERVICE_ROLE_KEY=${jwt.serviceKey}`);
   lines.push("");
+  lines.push("PGSSLMODE=disable");
   lines.push("# Aux services");
   lines.push(`REDIS_URL=redis://localhost:${SHARED_REDIS_PORT}/${redisDb}`);
   lines.push("INNGEST_DEV=1");

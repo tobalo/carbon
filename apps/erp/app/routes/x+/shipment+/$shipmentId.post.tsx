@@ -1,6 +1,9 @@
 import { error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import {
   dedupeViolations,
@@ -8,6 +11,7 @@ import {
   isBlocked
 } from "@carbon/ee/storage-rules.server";
 import { trigger } from "@carbon/jobs";
+import { uploadObject } from "@carbon/object-storage/server";
 import { getCachedPrinterConfig } from "@carbon/printing/printing.server";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import type { ActionFunctionArgs } from "react-router";
@@ -216,16 +220,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
             const documentFilePath = `${companyId}/opportunity/${salesOrder.opportunityId}/${fileName}`;
 
-            // Upload the PDF to storage
-            const documentFileUpload = await serviceRole.storage
-              .from("private")
-              .upload(documentFilePath, file, {
+            let documentFileUploaded = false;
+            try {
+              await uploadObject({
+                bucket: "private",
+                key: documentFilePath,
+                body: file,
                 cacheControl: `${12 * 60 * 60}`,
-                contentType: "application/pdf",
-                upsert: true
+                contentType: "application/pdf"
               });
+              documentFileUploaded = true;
+            } catch (err) {
+              console.error("Failed to upload shipment PDF", err);
+            }
 
-            if (!documentFileUpload.error) {
+            if (documentFileUploaded) {
               // Create document record
               await upsertDocument(serviceRole, {
                 path: documentFilePath,
@@ -247,7 +256,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     }
 
-    const postShipment = await serviceRole.functions.invoke("post-shipment", {
+    const postShipment = await invokeCarbonServiceFunction("post-shipment", {
       body: {
         type: "post",
         shipmentId: shipmentId,

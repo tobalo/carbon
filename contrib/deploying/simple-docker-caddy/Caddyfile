@@ -38,23 +38,15 @@
 	reverse_proxy mes:3000
 }
 
-# ─────────── Supabase API gateway (kong): auth, REST, storage, realtime, fns ──
+# ───────────────────────── Object Storage (S3 API) ──────────────────────────
+{$STORAGE_HOST} {
+	import common
+	reverse_proxy minio:9000
+}
+
+# ─────────────────────── Carbon API gateway: auth, REST, realtime, fns ───────
 # Realtime uses WebSockets — Caddy's reverse_proxy upgrades them transparently.
-{$SUPABASE_HOST} {
+{$CARBON_API_HOST} {
 	import common
 	reverse_proxy kong:8000
 }
-
-# ───────────────────── Supabase Studio (DB admin UI) — OPTIONAL ──────────────
-# Studio has no auth of its own. Keep it OFF by default; reach the database via
-# `ssh` + `docker exec ... psql`. If you must expose it, set STUDIO_HOST in .env,
-# generate a bcrypt hash with `docker run --rm caddy:2-alpine caddy hash-password`,
-# paste it below, and uncomment this block. Prefer also restricting by source IP.
-#
-# {$STUDIO_HOST} {
-# 	import common
-# 	basic_auth {
-# 		admin <PASTE_BCRYPT_HASH_HERE>
-# 	}
-# 	reverse_proxy studio:3000
-# }

@@ -1,62 +1,72 @@
-// import type { User } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
+import { getPostgresConnectionPool } from "./client.ts";
 import { devPrices } from "./seed/index.ts";
-import type { Database } from "./types.ts";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
 
-const supabaseAdmin = createClient<Database>(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
-
 async function seed() {
-  const upsertConfig = await supabaseAdmin.from("config").upsert([
-    {
-      id: true,
-      apiUrl: resolveApiUrl(),
-      anonKey: process.env.SUPABASE_ANON_KEY!
+  const pgPool = getPostgresConnectionPool(1);
+
+  try {
+    await pgPool.query(
+      `
+      INSERT INTO config (id, "apiUrl", "anonKey")
+      VALUES ($1, $2, $3)
+      ON CONFLICT (id)
+      DO UPDATE SET
+        "apiUrl" = EXCLUDED."apiUrl",
+        "anonKey" = EXCLUDED."anonKey"
+      `,
+      [true, resolveApiUrl(), resolvePublicKey()]
+    );
+
+    for (const [id, { stripePriceId, name }] of Object.entries(devPrices)) {
+      await pgPool.query(
+        `
+        INSERT INTO "plan" (id, "stripePriceId", name)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (id)
+        DO UPDATE SET
+          "stripePriceId" = EXCLUDED."stripePriceId",
+          name = EXCLUDED.name
+        `,
+        [id, stripePriceId, name]
+      );
     }
-  ]);
-  if (upsertConfig.error) throw upsertConfig.error;
-
-  const upsertPlans = await supabaseAdmin.from("plan").upsert(
-    Object.entries(devPrices).map(([id, { stripePriceId, name }]) => ({
-      id,
-      stripePriceId,
-      name
-    })),
-    { onConflict: "id" }
-  );
-
-  if (upsertPlans.error) throw upsertPlans.error;
+  } finally {
+    await pgPool.end();
+  }
 }
 
 // Postgres triggers + edge functions call back to the API from inside the
 // docker network, so the public portless hostname (https://<branch>.api.dev)
 // won't resolve. Use host.docker.internal with the worktree's PORT_API
 // (written to .env.local by `crbn up`). Cloud runs (e.g. CI seeding a fresh
-// workspace) have no PORT_API and a `*.supabase.co` URL — return as-is.
+// workspace) have no PORT_API and an external API URL — return as-is.
 function resolveApiUrl(): string {
-  const supabaseUrl = process.env.SUPABASE_URL!;
+  const apiUrl = process.env.CARBON_API_URL;
+  if (!apiUrl) {
+    throw new Error("seed: CARBON_API_URL is required");
+  }
   const port = process.env.PORT_API;
   const isCrbnDevHost =
-    /\.api\.dev(\/|$)/.test(supabaseUrl) || supabaseUrl.includes("localhost");
-  if (!isCrbnDevHost) return supabaseUrl;
+    /\.api\.dev(\/|$)/.test(apiUrl) || apiUrl.includes("localhost");
+  if (!isCrbnDevHost) return apiUrl;
   if (!port) {
     throw new Error(
-      "seed: SUPABASE_URL looks like a crbn dev host but PORT_API is unset — run via `crbn` so .env.local is loaded."
+      "seed: CARBON_API_URL looks like a crbn dev host but PORT_API is unset — run via `crbn` so .env.local is loaded."
     );
   }
   return `http://host.docker.internal:${port}`;
+}
+
+function resolvePublicKey(): string {
+  const publicKey = process.env.CARBON_PUBLIC_KEY;
+  if (!publicKey) {
+    throw new Error("seed: CARBON_PUBLIC_KEY is required");
+  }
+  return publicKey;
 }
 
 seed().catch((e) => {

@@ -1,5 +1,4 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import { BINDERY_PRESS_API_KEY } from "@carbon/env";
 import type { DocumentTypeId } from "@carbon/printing";
 import {
@@ -11,9 +10,9 @@ import {
   updatePrintJobStatus
 } from "@carbon/printing";
 import { getCachedPrinterConfig } from "@carbon/printing/printing.server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { NonRetriableError } from "inngest";
 import { inngest } from "../../../client";
+import type { LegacyPostgrestFunctionsClient } from "../../legacy-client";
 import type { GeneratedContent, PrintableDocumentItem } from "./renderers";
 import { renderItemBuiltIn, renderItemWithTemplate } from "./renderers";
 import {
@@ -123,7 +122,7 @@ export const printJobFunction = inngest.createFunction(
 );
 
 async function resolveDocumentItems(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   documentTypeId: DocumentTypeId,
   sourceDocument: string,
   sourceDocumentId: string,
@@ -194,7 +193,7 @@ function describeDocument(
 }
 
 async function processDocumentType(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   step: {
     sendEvent: (
       id: string,

@@ -4,7 +4,7 @@ paths:
   - "apps/erp/app/modules/items/items.service.ts"
   - "apps/erp/app/routes/x+/items+/update.tsx"
   - "apps/erp/app/modules/items/ui/Item/BillOfMaterial.tsx"
-  - "packages/database/supabase/migrations/**"
+  - "packages/database/migrations/**"
 ---
 
 # Method Material Sourcing & Method Type (item-level)

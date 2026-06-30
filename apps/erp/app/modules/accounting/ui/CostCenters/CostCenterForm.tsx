@@ -12,7 +12,6 @@ import {
   toast,
   VStack
 } from "@carbon/react";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -25,6 +24,7 @@ import {
   Submit
 } from "~/components/Form";
 import { usePermissions, useRouteData } from "~/hooks";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import { costCenterValidator } from "../../accounting.models";
 

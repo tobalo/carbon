@@ -126,6 +126,7 @@ import type { action as editMethodOperationToolAction } from "~/routes/x+/items+
 import type { action as newMethodOperationToolAction } from "~/routes/x+/items+/methods+/operation.tool.new";
 import { useItems, useTools } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import { methodOperationValidator } from "../../items.models";
 import type {
   ConfigurationParameter,
@@ -338,12 +339,10 @@ const BillOfProcess = ({
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${selectedItemId}/${nanoid()}.${fileType}`;
-    const result = await carbon?.storage
-      .from("private")
-      .upload(fileName, file, {
-        upsert: true,
-        cacheControl: "3600"
-      });
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "parts",
+      cacheControl: "3600"
+    });
 
     if (result?.error) {
       throw new Error(result.error.message);
@@ -1800,7 +1799,6 @@ function AttributesForm({
     []
   );
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -1809,7 +1807,9 @@ function AttributesForm({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "parts"
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -2108,7 +2108,6 @@ function AttributesListItem({
     attribute.description ?? {}
   );
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -2117,7 +2116,9 @@ function AttributesListItem({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "parts"
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

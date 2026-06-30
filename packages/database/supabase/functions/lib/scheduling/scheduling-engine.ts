@@ -1,7 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Kysely } from "kysely";
 import type { DB } from "../database.ts";
-import type { Database } from "../types.ts";
+import type { LegacyPostgrestClient } from "../legacy-client.ts";
 import {
   AssemblyHandler,
   buildMakeMethodDependencies,
@@ -39,7 +38,7 @@ import {
  * Orchestrates all scheduling operations for both initial scheduling and rescheduling
  */
 export class SchedulingEngine {
-  private client: SupabaseClient<Database>;
+  private client: LegacyPostgrestClient;
   private db: Kysely<DB>;
   private jobId: string;
   private companyId: string;
@@ -61,7 +60,7 @@ export class SchedulingEngine {
 
   constructor(
     options: SchedulingOptions & {
-      client: SupabaseClient<Database>;
+      client: LegacyPostgrestClient;
       db: Kysely<DB>;
     }
   ) {

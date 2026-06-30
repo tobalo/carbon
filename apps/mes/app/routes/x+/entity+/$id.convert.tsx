@@ -1,6 +1,6 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { convertEntityValidator } from "~/services/models";
@@ -35,8 +35,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
     quantity: newQuantity
   } = validation.data;
 
-  const serviceRole = await getCarbonServiceRole();
-  const convert = await serviceRole.functions.invoke("issue", {
+  const convert = await invokeCarbonServiceFunction<{
+    success: boolean;
+    message: string;
+    convertedEntity?: {
+      trackedEntityId: string;
+      readableId: string;
+      quantity: number;
+    };
+  }>("issue", {
     body: {
       type: "convertEntity",
       trackedEntityId,
@@ -55,19 +62,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const converted = convert.data as {
-    success: boolean;
-    message: string;
-    convertedEntity?: {
-      trackedEntityId: string;
-      readableId: string;
-      quantity: number;
-    };
-  };
-
   return {
     success: true,
     message: "Entity converted successfully",
-    convertedEntity: converted.convertedEntity
+    convertedEntity: convert.data?.convertedEntity
   };
 }

@@ -4658,12 +4658,6 @@ msgstr "Fehler beim Erstellen des Webhooks: {0}"
 msgid "Failed to create work center: {0}"
 msgstr "Fehler beim Erstellen des Arbeitszentrums: {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "Fehler beim Löschen der Datei vom alten Speicherort"
-
-msgid "Failed to download file for moving"
-msgstr "Fehler beim Herunterladen der Datei zum Verschieben"
-
 msgid "Failed to fetch item costs"
 msgstr "Fehler beim Abrufen der Artikelkosten"
 
@@ -4739,6 +4733,9 @@ msgstr "Fehler beim Laden der Lieferantenteildetails"
 msgid "Failed to load tracked entities"
 msgstr "Fehler beim Laden von verfolgten Entitäten"
 
+msgid "Failed to move file"
+msgstr ""
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "Fehler beim Entfernen des Bildes: {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "CSV-Datei konnte nicht hochgeladen werden."
 
 msgid "Failed to upload file"
 msgstr "Datei-Upload fehlgeschlagen"
-
-msgid "Failed to upload file to new location"
-msgstr "Fehler beim Hochladen der Datei an den neuen Speicherort"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "Ausverkauft"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "Bestellungen nach diesem Datum nicht mehr aufgeben"
-
-msgid "Storage client not available"
-msgstr "Speicherclient nicht verfügbar"
 
 msgid "Storage Rules"
 msgstr "Lagerungsregeln"

@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import type {
   Activity,
   ActivityInput,
@@ -46,7 +45,7 @@ function newLineageState(): LineageState {
 }
 
 async function expandActivitySiblings(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   state: LineageState,
   activityIds: string[]
 ): Promise<void> {
@@ -126,7 +125,7 @@ async function expandActivitySiblings(
  * activity nodes attached to their entity (no new genealogy edges).
  */
 async function expandEntityActivities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   state: LineageState
 ): Promise<void> {
   const entityIds = Array.from(state.entities.keys());
@@ -159,7 +158,7 @@ async function expandEntityActivities(
 }
 
 async function runLineageBfs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   state: LineageState,
   initialFrontier: string[],
   direction: LineageDirection,
@@ -291,7 +290,7 @@ async function runLineageBfs(
 }
 
 export async function fetchLineageSubgraph(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   rootEntityId: string,
   depth: number,
   direction: LineageDirection = "both"
@@ -323,7 +322,7 @@ export async function fetchLineageSubgraph(
 }
 
 export async function fetchJobStepRecords(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobId: string
 ): Promise<StepRecord[]> {
   const res = await client.rpc("get_job_operation_step_records", {
@@ -353,7 +352,7 @@ export async function fetchJobStepRecords(
 }
 
 export async function fetchContainmentsForEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   entityIds: string[]
 ): Promise<IssueContainment[]> {
   if (entityIds.length === 0) return [];
@@ -394,7 +393,7 @@ export async function fetchContainmentsForEntities(
 }
 
 export async function fetchJobScopedLineage(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobId: string,
   depth: number
 ): Promise<LineagePayload> {

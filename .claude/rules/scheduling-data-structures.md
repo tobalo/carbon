@@ -3,7 +3,7 @@ paths:
   - "packages/database/supabase/functions/lib/scheduling/**"
   - "apps/erp/app/routes/x+/schedule+/**"
   - "apps/mes/app/routes/x+/operations.tsx"
-  - "packages/database/supabase/migrations/*schedul*.sql"
+  - "packages/database/migrations/*schedul*.sql"
 ---
 
 # Production Scheduling: data structures + flow

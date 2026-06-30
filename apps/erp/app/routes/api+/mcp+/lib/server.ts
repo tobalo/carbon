@@ -158,22 +158,22 @@ export function createMcpServer(ctx: McpContext): McpServer {
         // Format successful response
         let output = "";
         
-        // Check if the result.data is a Supabase response format
+        // Check if result.data is a PostgREST-style response format
         if (result.data && typeof result.data === 'object' && 'data' in result.data) {
-          // Supabase format: { data: [...], error: null, count: ... }
-          const supabaseData = result.data.data;
-          console.log("[MCP Server] Detected Supabase response format");
-          console.log("[MCP Server] Data array length:", Array.isArray(supabaseData) ? supabaseData.length : 'not array');
+          // PostgREST format: { data: [...], error: null, count: ... }
+          const postgrestData = result.data.data;
+          console.log("[MCP Server] Detected PostgREST response format");
+          console.log("[MCP Server] Data array length:", Array.isArray(postgrestData) ? postgrestData.length : 'not array');
           
           if (result.data.error) {
-            console.error("[MCP Server] Supabase error:", result.data.error);
+            console.error("[MCP Server] PostgREST error:", result.data.error);
             return {
               content: [{ type: "text" as const, text: `Database error: ${JSON.stringify(result.data.error)}` }],
               isError: true
             };
           }
           
-          output = JSON.stringify(supabaseData, null, 2);
+          output = JSON.stringify(postgrestData, null, 2);
         } else if (result.data) {
           output = JSON.stringify(result.data, null, 2);
           console.log("[MCP Server] Using result.data for output");

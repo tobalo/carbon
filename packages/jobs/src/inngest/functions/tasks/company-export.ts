@@ -1,4 +1,9 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  isListedFileObject,
+  listObjects,
+  uploadObject
+} from "@carbon/object-storage/server";
 import { sql } from "kysely";
 import { inngest } from "../../client";
 import type { Manifest } from "./company-backup";
@@ -165,13 +170,12 @@ export async function buildCompanyBackup(
       return encoded;
     });
     const buf = await serializeTable(rows);
-    const up = await client.storage
-      .from(companyId)
-      .upload(backupTablePath(name, table.name), buf, {
-        contentType: "application/gzip",
-        upsert: true
-      });
-    if (up.error) throw new Error(`table ${table.name}: ${up.error.message}`);
+    await uploadObject({
+      bucket: companyId,
+      key: backupTablePath(name, table.name),
+      body: buf,
+      contentType: "application/gzip"
+    });
 
     tableManifest.push({
       name: table.name,
@@ -196,11 +200,7 @@ export async function buildCompanyBackup(
 
   if (includeStorage === "all") {
     let totalBytes = 0;
-    const paths = await listBucketFilesRecursive(
-      client,
-      STORAGE_BUCKET,
-      companyId
-    );
+    const paths = await listBucketFilesRecursive(STORAGE_BUCKET, companyId);
     for (const file of paths) {
       const included = totalBytes + file.size <= MAX_STORAGE_TOTAL_BYTES;
       if (included) {
@@ -338,7 +338,6 @@ export const companyExportFunction = inngest.createFunction(
           total: assetSourcePaths.length
         });
         const assets = await copyAssetsToBackup(
-          client,
           {
             sourcePaths: assetSourcePaths,
             destBucket: companyId,
@@ -349,7 +348,7 @@ export const companyExportFunction = inngest.createFunction(
 
         // Manifest LAST — its presence marks the backup complete, so the list
         // never shows a half-written backup as ready.
-        await writeBackupManifest(client, companyId, name, manifest);
+        await writeBackupManifest(companyId, name, manifest);
 
         console.log("Company export complete", {
           companyId,
@@ -369,27 +368,18 @@ export const companyExportFunction = inngest.createFunction(
 );
 
 async function listBucketFilesRecursive(
-  client: ServiceRole,
   bucket: string,
   prefix = ""
 ): Promise<Array<{ path: string; size: number }>> {
-  const files: Array<{ path: string; size: number }> = [];
-  const { data, error } = await client.storage.from(bucket).list(prefix, {
-    limit: 1000
-  });
-  if (error || !data) return files;
-
-  for (const entry of data) {
-    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.id === null) {
-      // folder
-      files.push(...(await listBucketFilesRecursive(client, bucket, path)));
-    } else {
-      files.push({
-        path,
-        size: (entry.metadata as { size?: number } | null)?.size ?? 0
-      });
-    }
-  }
-  return files;
+  return (await listObjects(bucket, prefix, { recursive: true }))
+    .filter(isListedFileObject)
+    .map((entry) => ({
+      path:
+        typeof entry.metadata.key === "string"
+          ? entry.metadata.key
+          : prefix
+            ? `${prefix}/${entry.name}`
+            : entry.name,
+      size: typeof entry.metadata.size === "number" ? entry.metadata.size : 0
+    }));
 }

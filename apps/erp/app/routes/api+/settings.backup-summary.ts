@@ -1,6 +1,5 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { isInternalEmail } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 
 // Recognizable entities a backup carries, grouped for the "what's in a backup"
@@ -10,6 +9,9 @@ import type { LoaderFunctionArgs } from "react-router";
 // chart of accounts / currencies / dimensions).
 type Scope = "company" | "group";
 type Entity = [label: string, table: string, scope?: Scope];
+type DynamicPostgrestClient = {
+  from(table: string): any;
+};
 
 const GROUPS: { title: string; entities: Entity[] }[] = [
   {
@@ -69,7 +71,7 @@ const GROUPS: { title: string; entities: Entity[] }[] = [
 ];
 
 async function countEntity(
-  client: SupabaseClient,
+  client: DynamicPostgrestClient,
   table: string,
   column: string,
   value: string | null

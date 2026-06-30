@@ -1,16 +1,17 @@
+import type { CarbonClient } from "@carbon/auth";
 import type { Database, Json } from "@carbon/database";
 import {
   getDateNYearsAgo,
+  sanitize,
   toDisplayCredit,
   toDisplayDebit,
   toStoredAmount
 } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
 import { getNextSequence } from "~/modules/settings";
+import type { PostgrestError } from "~/types";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import type {
   accountValidator,
   costCenterValidator,
@@ -115,7 +116,7 @@ function applyRootSignCorrection<
 }
 
 export async function getTrialBalance(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   companyId: string | null,
   args: {
@@ -133,7 +134,7 @@ export async function getTrialBalance(
 }
 
 export async function getFinancialStatementBalances(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   companyId: string | null,
   args: {
@@ -192,7 +193,7 @@ export async function getFinancialStatementBalances(
 }
 
 export async function getCompaniesInGroup(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string
 ) {
   return client
@@ -204,15 +205,12 @@ export async function getCompaniesInGroup(
     .order("name", { ascending: true });
 }
 
-export async function deleteAccount(
-  client: SupabaseClient<Database>,
-  accountId: string
-) {
+export async function deleteAccount(client: CarbonClient, accountId: string) {
   return client.from("account").delete().eq("id", accountId);
 }
 
 export async function deletePaymentTerm(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   paymentTermId: string
 ) {
   return client
@@ -221,15 +219,12 @@ export async function deletePaymentTerm(
     .eq("id", paymentTermId);
 }
 
-export async function getAccount(
-  client: SupabaseClient<Database>,
-  accountId: string
-) {
+export async function getAccount(client: CarbonClient, accountId: string) {
   return client.from("account").select("*").eq("id", accountId).single();
 }
 
 export async function getAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -254,7 +249,7 @@ export async function getAccounts(
 }
 
 export async function getAccountsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   args?: {
     isGroup?: boolean | null;
@@ -285,7 +280,7 @@ export async function getAccountsList(
 }
 
 export async function getGroupAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string
 ) {
   return client
@@ -297,10 +292,7 @@ export async function getGroupAccounts(
     .order("name", { ascending: true });
 }
 
-export async function getBaseCurrency(
-  client: SupabaseClient<Database>,
-  companyId: string
-) {
+export async function getBaseCurrency(client: CarbonClient, companyId: string) {
   const { data: company, error } = await client
     .from("company")
     .select("baseCurrencyCode, companyGroupId")
@@ -324,7 +316,7 @@ export async function getBaseCurrency(
 }
 
 export async function getChartOfAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   args: {
     incomeBalance: "Income Statement" | "Balance Sheet" | null;
@@ -385,10 +377,7 @@ export async function getChartOfAccounts(
   };
 }
 
-export async function getCurrency(
-  client: SupabaseClient<Database>,
-  currencyId: string
-) {
+export async function getCurrency(client: CarbonClient, currencyId: string) {
   return client
     .from("currency")
     .select("*, currencyCode!inner(name)")
@@ -397,7 +386,7 @@ export async function getCurrency(
 }
 
 export async function getCurrencyByCode(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   currencyCode: string
 ) {
@@ -410,7 +399,7 @@ export async function getCurrencyByCode(
 }
 
 export async function getCurrencies(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -431,7 +420,7 @@ export async function getCurrencies(
   return query;
 }
 
-export async function getCurrenciesList(client: SupabaseClient<Database>) {
+export async function getCurrenciesList(client: CarbonClient) {
   return client
     .from("currencyCode")
     .select("code, name")
@@ -439,7 +428,7 @@ export async function getCurrenciesList(client: SupabaseClient<Database>) {
 }
 
 export async function getCurrentAccountingPeriod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   date: string
 ) {
@@ -453,7 +442,7 @@ export async function getCurrentAccountingPeriod(
 }
 
 export async function getOrCreateAccountingPeriod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   date: string
 ): Promise<{ data: string | null; error: { message: string } | null }> {
@@ -520,7 +509,7 @@ export async function getOrCreateAccountingPeriod(
 }
 
 export async function getDefaultAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -531,7 +520,7 @@ export async function getDefaultAccounts(
 }
 
 export async function getFiscalYearSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -542,7 +531,7 @@ export async function getFiscalYearSettings(
 }
 
 export async function getPaymentTerm(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   paymentTermId: string
 ) {
   return client
@@ -553,7 +542,7 @@ export async function getPaymentTerm(
 }
 
 export async function getPaymentTerms(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -578,7 +567,7 @@ export async function getPaymentTerms(
 }
 
 export async function getPaymentTermsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -590,7 +579,7 @@ export async function getPaymentTermsList(
 }
 
 export async function updateDefaultBalanceSheetAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   defaultAccounts: z.infer<typeof defaultBalanceSheetAccountValidator> & {
     companyId: string;
     updatedBy: string;
@@ -603,7 +592,7 @@ export async function updateDefaultBalanceSheetAccounts(
 }
 
 export async function updateDefaultIncomeAccounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   defaultAccounts: z.infer<typeof defaultIncomeAcountValidator> & {
     companyId: string;
     updatedBy: string;
@@ -616,7 +605,7 @@ export async function updateDefaultIncomeAccounts(
 }
 
 export async function updateFiscalYearSettings(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   fiscalYearSettings: z.infer<typeof fiscalYearSettingsValidator> & {
     companyId: string;
     updatedBy: string;
@@ -629,7 +618,7 @@ export async function updateFiscalYearSettings(
 }
 
 export async function upsertAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   account:
     | (Omit<z.infer<typeof accountValidator>, "id"> & {
         companyGroupId: string;
@@ -654,7 +643,7 @@ export async function upsertAccount(
 }
 
 export async function upsertCurrency(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   currency:
     | (Omit<z.infer<typeof currencyValidator>, "id"> & {
         companyGroupId: string;
@@ -680,7 +669,7 @@ export async function upsertCurrency(
 }
 
 export async function upsertPaymentTerm(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   paymentTerm:
     | (Omit<z.infer<typeof paymentTermValidator>, "id"> & {
         companyId: string;
@@ -709,21 +698,21 @@ export async function upsertPaymentTerm(
 }
 
 export async function deleteCostCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   costCenterId: string
 ) {
   return client.from("costCenter").delete().eq("id", costCenterId);
 }
 
 export async function getCostCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   costCenterId: string
 ) {
   return client.from("costCenter").select("*").eq("id", costCenterId).single();
 }
 
 export async function getCostCenters(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -746,7 +735,7 @@ export async function getCostCenters(
 }
 
 export async function getCostCentersList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -757,7 +746,7 @@ export async function getCostCentersList(
 }
 
 export async function getCostCentersTree(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -770,7 +759,7 @@ export async function getCostCentersTree(
 }
 
 export async function upsertCostCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   costCenter:
     | (Omit<z.infer<typeof costCenterValidator>, "id"> & {
         companyId: string;
@@ -795,7 +784,7 @@ export async function upsertCostCenter(
 }
 
 export async function getDimensions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -819,10 +808,7 @@ export async function getDimensions(
   return query;
 }
 
-export async function getDimension(
-  client: SupabaseClient<Database>,
-  dimensionId: string
-) {
+export async function getDimension(client: CarbonClient, dimensionId: string) {
   return client
     .from("dimension")
     .select("*, dimensionValue(id, name)")
@@ -831,7 +817,7 @@ export async function getDimension(
 }
 
 export async function upsertDimension(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   dimension:
     | (Omit<z.infer<typeof dimensionValidator>, "id" | "dimensionValues"> & {
         companyGroupId: string;
@@ -908,7 +894,7 @@ export async function upsertDimension(
 }
 
 export async function deleteDimension(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   dimensionId: string
 ) {
   return client
@@ -918,7 +904,7 @@ export async function deleteDimension(
 }
 
 export async function getActiveDimensionsWithValues(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   companyId: string
 ) {
@@ -994,7 +980,7 @@ export async function getActiveDimensionsWithValues(
 }
 
 function getEntityDimensionValues(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   entityType: string,
   companyId: string
 ) {
@@ -1056,7 +1042,7 @@ function getEntityDimensionValues(
 }
 
 export async function getJournalLineDimensions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   journalLineIds: string[]
 ) {
   if (journalLineIds.length === 0) {
@@ -1146,7 +1132,7 @@ export async function getJournalLineDimensions(
 }
 
 function getEntityValuesByIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   entityType: string,
   ids: string[]
 ) {
@@ -1176,7 +1162,7 @@ function getEntityValuesByIds(
 }
 
 export async function saveJournalLineDimensions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   journalLineId: string,
   companyId: string,
   dimensions: Array<{ dimensionId: string; valueId: string }>
@@ -1201,7 +1187,7 @@ export async function saveJournalLineDimensions(
 }
 
 export async function translateCompanyBalances(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   companyId: string,
   targetCurrency: string,
@@ -1257,7 +1243,7 @@ export async function translateCompanyBalances(
 }
 
 export async function getConsolidatedBalances(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   companyIds: string[],
   targetCurrency: string,
@@ -1412,7 +1398,7 @@ export async function getConsolidatedBalances(
 // -- Intercompany --
 
 export async function getIntercompanyTransactions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   args: GenericQueryFilters & { status: string | null }
 ) {
@@ -1435,7 +1421,7 @@ export async function getIntercompanyTransactions(
 }
 
 export async function createIntercompanyTransaction(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: z.infer<typeof intercompanyTransactionValidator> & {
     companyGroupId: string;
     userId: string;
@@ -1515,7 +1501,7 @@ export async function createIntercompanyTransaction(
 }
 
 export async function runIntercompanyMatching(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string
 ) {
   return client.rpc("matchIntercompanyTransactions", {
@@ -1524,7 +1510,7 @@ export async function runIntercompanyMatching(
 }
 
 export async function generateEliminations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   userId: string
 ) {
@@ -1535,7 +1521,7 @@ export async function generateEliminations(
 }
 
 export async function getIntercompanyBalance(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string
 ) {
   return client.rpc("getIntercompanyBalance", {
@@ -1544,7 +1530,7 @@ export async function getIntercompanyBalance(
 }
 
 export async function getExchangeRateHistory(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyGroupId: string,
   currencyCode: string
 ) {
@@ -1566,7 +1552,7 @@ export async function getExchangeRateHistory(
 // amount > 0 = debit, amount < 0 = credit.
 
 export async function getJournalEntries(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & { search: string | null; status: string | null }
 ) {
@@ -1592,10 +1578,7 @@ export async function getJournalEntries(
   return query;
 }
 
-export async function getJournalEntry(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getJournalEntry(client: CarbonClient, id: string) {
   return client
     .from("journal")
     .select("*, journalLine(*, account!journalLine_accountId_fkey(class))")
@@ -1604,7 +1587,7 @@ export async function getJournalEntry(
 }
 
 export async function createJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: z.infer<typeof journalEntryValidator> & {
     journalEntryId: string;
     sourceType: Database["public"]["Enums"]["journalEntrySourceType"];
@@ -1624,7 +1607,7 @@ export async function createJournalEntry(
 }
 
 export async function updateJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   data: z.infer<typeof journalEntryValidator> & {
     updatedBy: string;
@@ -1638,15 +1621,12 @@ export async function updateJournalEntry(
     .eq("status", "Draft");
 }
 
-export async function deleteJournalEntry(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteJournalEntry(client: CarbonClient, id: string) {
   return client.from("journal").delete().eq("id", id).eq("status", "Draft");
 }
 
 export async function upsertJournalEntryLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data:
     | (z.infer<typeof journalEntryLineValidator> & {
         journalId: string;
@@ -1705,15 +1685,12 @@ export async function upsertJournalEntryLine(
   }
 }
 
-export async function deleteJournalEntryLine(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteJournalEntryLine(client: CarbonClient, id: string) {
   return client.from("journalLine").delete().eq("id", id);
 }
 
 export async function saveJournalEntryWithLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     journalEntryId: string;
     postingDate: string;
@@ -1824,7 +1801,7 @@ export async function saveJournalEntryWithLines(
 }
 
 export async function postJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string
 ) {
@@ -1883,7 +1860,7 @@ export async function postJournalEntry(
 }
 
 export async function reverseJournalEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   data: {
     journalEntryId?: string;
@@ -1974,7 +1951,7 @@ export async function reverseJournalEntry(
 // -- Asset Classes --
 
 export async function getFixedAssetClasses(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -1996,15 +1973,12 @@ export async function getFixedAssetClasses(
   return query;
 }
 
-export async function getFixedAssetClass(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getFixedAssetClass(client: CarbonClient, id: string) {
   return client.from("fixedAssetClass").select("*").eq("id", id).single();
 }
 
 export async function getFixedAssetClassesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -2017,7 +1991,7 @@ export async function getFixedAssetClassesList(
 }
 
 export async function upsertFixedAssetClass(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data:
     | (Record<string, any> & { companyId: string; createdBy: string })
     | (Record<string, any> & { id: string; updatedBy: string })
@@ -2038,17 +2012,14 @@ export async function upsertFixedAssetClass(
     .single();
 }
 
-export async function deleteFixedAssetClass(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteFixedAssetClass(client: CarbonClient, id: string) {
   return client.from("fixedAssetClass").delete().eq("id", id);
 }
 
 // -- Fixed Assets --
 
 export async function getFixedAssets(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -2079,10 +2050,7 @@ export async function getFixedAssets(
   return query;
 }
 
-export async function getFixedAsset(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getFixedAsset(client: CarbonClient, id: string) {
   return client
     .from("fixedAsset")
     .select(
@@ -2093,7 +2061,7 @@ export async function getFixedAsset(
 }
 
 export async function getFixedAssetsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -2105,7 +2073,7 @@ export async function getFixedAssetsList(
 }
 
 export async function getFixedAssetsListForSale(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -2117,7 +2085,7 @@ export async function getFixedAssetsListForSale(
 }
 
 export async function insertFixedAsset(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     companyId: string;
     createdBy: string;
@@ -2141,7 +2109,7 @@ export async function insertFixedAsset(
   }
 ): Promise<{
   data: { id: string; fixedAssetId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let fixedAssetId: string;
   if (input.fixedAssetId) {
@@ -2158,7 +2126,7 @@ export async function insertFixedAsset(
           seq.error ??
           ({
             message: "Failed to generate fixedAsset sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     fixedAssetId = seq.data;
@@ -2200,7 +2168,7 @@ export async function insertFixedAsset(
 }
 
 export async function updateFixedAsset(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -2222,7 +2190,7 @@ export async function updateFixedAsset(
   }
 ): Promise<{
   data: { id: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const { id, ...rest } = input;
   const result = await client
@@ -2238,7 +2206,7 @@ export async function updateFixedAsset(
 
 /** @deprecated Use insertFixedAsset for new assets, updateFixedAsset for existing assets */
 export async function upsertFixedAsset(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data:
     | (Record<string, any> & {
         fixedAssetId: string;
@@ -2263,15 +2231,12 @@ export async function upsertFixedAsset(
     .single();
 }
 
-export async function deleteFixedAsset(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteFixedAsset(client: CarbonClient, id: string) {
   return client.from("fixedAsset").delete().eq("id", id).eq("status", "Draft");
 }
 
 export async function insertDepreciationRun(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     companyId: string;
     createdBy: string;
@@ -2285,7 +2250,7 @@ export async function insertDepreciationRun(
   }
 ): Promise<{
   data: { id: string; depreciationRunId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let depreciationRunId: string;
   if (input.depreciationRunId) {
@@ -2302,7 +2267,7 @@ export async function insertDepreciationRun(
           seq.error ??
           ({
             message: "Failed to generate depreciationRun sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     depreciationRunId = seq.data;
@@ -2350,10 +2315,7 @@ export async function insertDepreciationRun(
   };
 }
 
-export async function deleteDepreciationRun(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteDepreciationRun(client: CarbonClient, id: string) {
   return client
     .from("depreciationRun")
     .delete()
@@ -2364,7 +2326,7 @@ export async function deleteDepreciationRun(
 // -- Depreciation --
 
 export async function getDepreciationRuns(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -2385,15 +2347,12 @@ export async function getDepreciationRuns(
   return query;
 }
 
-export async function getDepreciationRun(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getDepreciationRun(client: CarbonClient, id: string) {
   return client.from("depreciationRun").select("*").eq("id", id).single();
 }
 
 export async function getDepreciationRunLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   depreciationRunId: string
 ) {
   return client
@@ -2407,7 +2366,7 @@ export async function getDepreciationRunLines(
 // -- Depreciation History for a single asset --
 
 export async function getAssetDepreciationHistory(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   fixedAssetId: string
 ) {
   return client
@@ -2422,7 +2381,7 @@ export async function getAssetDepreciationHistory(
 // -- Disposals --
 
 export async function getFixedAssetDisposal(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   fixedAssetId: string
 ) {
   return client
@@ -2435,7 +2394,7 @@ export async function getFixedAssetDisposal(
 // -- Usage Logs --
 
 export async function getFixedAssetUsageLogs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   fixedAssetId: string
 ) {
   return client
@@ -2446,7 +2405,7 @@ export async function getFixedAssetUsageLogs(
 }
 
 export async function upsertFixedAssetUsageLog(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: Record<string, any> & { companyId: string; createdBy: string }
 ) {
   return client

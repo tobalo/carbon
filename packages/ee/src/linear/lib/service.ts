@@ -1,13 +1,12 @@
+import type { CarbonClient } from "@carbon/auth";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type z from "zod";
 import { markdownToTiptap } from "./richtext";
 import { LinearIssueSchema } from "./types";
 import { mapLinearStatusToCarbonStatus } from "./utils";
 
 export async function getLinearIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return await client
@@ -19,7 +18,7 @@ export async function getLinearIntegration(
 }
 
 export async function linkActionToLinearIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   input: {
     actionId: string;
@@ -84,7 +83,7 @@ export async function linkActionToLinearIssue(
 }
 
 export const getCompanyEmployees = async (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   emails: string[]
 ) => {
@@ -99,7 +98,7 @@ export const getCompanyEmployees = async (
 };
 
 export async function unlinkActionFromLinearIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   input: {
     actionId: string;
@@ -124,7 +123,7 @@ export async function unlinkActionFromLinearIssue(
 }
 
 export const getLinearIssueFromExternalId = async (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   actionId: string
 ) => {

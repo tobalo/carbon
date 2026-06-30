@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import { XeroProvider } from "../providers/xero";
 import type { ProviderID } from "./models";
 import {
@@ -9,7 +8,7 @@ import {
 import type { ProviderCredentials, ProviderIntegrationMetadata } from "./types";
 
 export const getAccountingIntegration = async <T extends ProviderID>(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyOrTenantId: string,
   provider: T
 ) => {
@@ -53,7 +52,7 @@ export const getAccountingIntegration = async <T extends ProviderID>(
 };
 
 export const getProviderIntegration = (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   provider: ProviderID,
   config?: ProviderIntegrationMetadata

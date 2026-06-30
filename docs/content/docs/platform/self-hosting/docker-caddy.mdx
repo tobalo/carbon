@@ -3,7 +3,7 @@ title: Docker with Caddy
 description: Self-host the full Carbon stack on a single Linux VPS with a Docker Swarm and an automatic-HTTPS Caddy reverse proxy.
 ---
 
-Run all of Carbon on **one Linux VPS**: a single-node [Docker Swarm](https://docs.docker.com/engine/swarm/) running the ERP and MES apps, the full Supabase data plane, Redis, and Inngest, behind a [Caddy](https://caddyserver.com/docs/) reverse proxy that handles TLS for you. Secrets are real **Docker Swarm secrets**, and only ports **80/443** are exposed. Everything else stays on a private overlay network.
+Run all of Carbon on **one Linux VPS**: a single-node [Docker Swarm](https://docs.docker.com/engine/swarm/) running the ERP and MES apps, Postgres/Auth/Realtime, MinIO object storage, Redis, and Inngest, behind a [Caddy](https://caddyserver.com/docs/) reverse proxy that handles TLS for you. Secrets are real **Docker Swarm secrets**, and only ports **80/443** are exposed. Everything else stays on a private overlay network.
 
 Everything for this recipe lives in [`contrib/deploying/simple-docker-caddy`](https://github.com/crbnos/carbon/tree/main/contrib/deploying/simple-docker-caddy). The `deploy.sh` script wraps the whole lifecycle.
 
@@ -17,9 +17,9 @@ Everything for this recipe lives in [`contrib/deploying/simple-docker-caddy`](ht
 | --- | --- |
 | `caddy` | Reverse proxy + automatic HTTPS. The only service that publishes ports (80/443). |
 | `erp`, `mes` | The Carbon apps, built from the repo. Reached at `erp.<domain>` and `mes.<domain>`. |
-| `postgres` | Supabase Postgres, tuned on first boot (`pg_stat_statements`, connection limits). |
-| `gotrue`, `postgrest`, `realtime`, `storage`, `meta`, `kong` | The Supabase data plane, fronted by Kong at `api.<domain>`. |
-| `studio` | Supabase Studio (DB admin), internal-only by default. |
+| `postgres` | Postgres, tuned on first boot (`pg_stat_statements`, connection limits). |
+| `postgrest`, `realtime`, `kong` | The API/realtime plane, fronted by Kong at `api.<domain>`. Auth is handled by Better Auth inside the Carbon apps. |
+| `minio` | S3-compatible object storage, exposed at `storage.<domain>` for signed URLs. |
 | `edge-runtime` | Supabase Edge Functions. |
 | `redis` | Cache, rate limiting, session state. |
 | `inngest` | Background jobs for both apps. |
@@ -31,7 +31,7 @@ Everything for this recipe lives in [`contrib/deploying/simple-docker-caddy`](ht
 | VPS | Ubuntu 22.04+, **≥ 4 GB RAM** to run the stack. Building images on the host needs **~8 GB**. Add swap or build elsewhere. |
 | Docker | Docker Engine with the Compose plugin. |
 | OpenSSL | `deploy.sh` uses `openssl` to generate secrets and the Supabase JWT keys (usually already present). |
-| DNS | `A`/`AAAA` records for your ERP, MES, and Supabase hosts pointing at the VPS (needed for Let's Encrypt). |
+| DNS | `A`/`AAAA` records for your ERP, MES, storage, and API hosts pointing at the VPS (needed for Let's Encrypt). |
 | Repo | The Carbon repo checked out on the VPS (default `/opt/carbon`). |
 
 ## Install
@@ -59,7 +59,7 @@ Everything for this recipe lives in [`contrib/deploying/simple-docker-caddy`](ht
   <Step>
   ### Configure
 
-  Edit `.env`: set `CARBON_REPO`, your `*_HOST` / `*_URL` hostnames, `ACME_EMAIL`, and SMTP settings.
+  Edit `.env`: set `CARBON_REPO`, your `ERP_HOST`, `MES_HOST`, `CARBON_API_HOST`, `STORAGE_HOST`, public `*_URL` values, `CARBON_STORAGE_ENDPOINT`, `ACME_EMAIL`, and SMTP settings.
 
   ```bash
   $EDITOR .env
@@ -78,7 +78,7 @@ Everything for this recipe lives in [`contrib/deploying/simple-docker-caddy`](ht
   <Step>
   ### Deploy
 
-  Builds the images, deploys the stack, waits for the database, and applies migrations.
+  Builds the images, deploys the stack, creates the MinIO bucket, waits for the database, and applies migrations.
 
   ```bash
   ./deploy.sh up
@@ -105,10 +105,10 @@ Swarm delivers secrets as files under `/run/secrets/`, but the images read confi
 
 ```yaml
 PGRST_DB_URI: postgres://authenticator:__POSTGRES_PASSWORD__@postgres:5432/postgres
-GOTRUE_JWT_SECRET: __JWT_SECRET__
+PGRST_JWT_SECRET: __JWT_SECRET__
 ```
 
-`deploy.sh init` generates `postgres_password`, `session_secret`, the Inngest keys, and the Supabase key trio (`jwt_secret`, `anon_key`, `service_role_key`). You supply `resend_api_key` and `smtp_password`.
+`deploy.sh init` generates `postgres_password`, `session_secret`, the Inngest keys, the MinIO object storage keys, and the Supabase-compatible key trio (`jwt_secret`, `anon_key`, `service_role_key`). You supply `resend_api_key` and `smtp_password`.
 
 <Callout type="warn">
 `inngest_signing_key` must be **plain hex**. The self-hosted Inngest server rejects the `signkey-` prefix. `init` generates it correctly.
@@ -121,16 +121,16 @@ GOTRUE_JWT_SECRET: __JWT_SECRET__
 | Status | `./deploy.sh status` |
 | Follow logs | `./deploy.sh logs <service>` (e.g. `erp`, `caddy`) |
 | Update to a new release | `git pull && ./deploy.sh build && ./deploy.sh deploy && ./deploy.sh migrate` |
-| Back up | `./scripts/backup.sh` (Postgres dump + storage archive) |
+| Back up | `./scripts/backup.sh` (Postgres dump + MinIO object storage archive) |
 | Stop | `./deploy.sh down` (add `--volumes` to also wipe data) |
 
-**Database admin.** Studio is internal-only by default. Reach the database over SSH with:
+**Database admin.** Reach the database over SSH with:
 
 ```bash
 docker exec -it $(docker ps -qf name=carbon_postgres.1) psql -U postgres
 ```
 
-The `.1` avoids also matching `carbon_postgrest`. Or expose Studio behind HTTP basic-auth by setting `STUDIO_HOST` and uncommenting the studio block in the `Caddyfile`.
+The `.1` avoids also matching `carbon_postgrest`.
 
 **Rotate a secret.** Swarm secrets are immutable while in use, so bring the stack down first:
 
@@ -149,8 +149,8 @@ A local backup on the same VPS is not a backup. Schedule `backup.sh` and ship it
 - Host hardened (`harden.sh`): firewall limited to SSH + 80/443, fail2ban, swap.
 - HTTPS issuing cleanly — `./deploy.sh logs caddy`.
 - Real `resend_api_key` and working SMTP set (Auth needs SMTP for invites and magic links).
+- Storage host resolves and `./deploy.sh storage-init` succeeds.
 - Postgres tuning sized to the box (the `PG_*` values in `.env`).
 - Backups scheduled and shipped offsite.
-- Studio not publicly exposed (or behind basic-auth).
 
 See [Environment variables](/docs/platform/self-hosting/environment-variables) for the full configuration surface, or [AWS with SST](/docs/platform/self-hosting/aws-sst) for an AWS setup.

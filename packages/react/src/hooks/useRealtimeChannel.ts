@@ -1,9 +1,18 @@
 import { NODE_ENV } from "@carbon/env";
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef } from "react";
 import { useCarbon } from "../CarbonContext";
+import type {
+  LegacyCarbonClient,
+  LegacyRealtimeChannel
+} from "../legacy-client";
 import { toast } from "../Toast";
+
+const REALTIME_SUBSCRIBE_STATES = {
+  SUBSCRIBED: "SUBSCRIBED",
+  TIMED_OUT: "TIMED_OUT",
+  CLOSED: "CLOSED",
+  CHANNEL_ERROR: "CHANNEL_ERROR"
+} as const;
 
 function formatSubscribeErr(err: unknown): string {
   if (err == null) return "No error details";
@@ -23,10 +32,10 @@ function formatSubscribeErr(err: unknown): string {
 interface UseRealtimeChannelOptions<TDeps extends any[]> {
   topic: string;
   setup: (
-    channel: RealtimeChannel,
-    carbon: SupabaseClient,
+    channel: LegacyRealtimeChannel,
+    carbon: LegacyCarbonClient,
     deps: TDeps
-  ) => RealtimeChannel;
+  ) => LegacyRealtimeChannel;
   enabled?: boolean;
   dependencies?: TDeps;
   /** When true, CHANNEL_ERROR / TIMED_OUT open a toast. Defaults to true in dev, false in prod. */
@@ -43,7 +52,7 @@ export const useRealtimeChannel = <TDeps extends any[]>(
     dependencies = [],
     notifyOnSubscribeError = NODE_ENV === "development"
   } = options;
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelRef = useRef<LegacyRealtimeChannel | null>(null);
   const isTearingDownRef = useRef(false);
   const lastErrorToastAtRef = useRef<number>(0);
   const lastErrorToastIdRef = useRef<string | number | null>(null);
@@ -102,7 +111,7 @@ export const useRealtimeChannel = <TDeps extends any[]>(
       }
 
       try {
-        const channel = carbon.channel(topic);
+        const channel = carbon.channel(topic) as LegacyRealtimeChannel;
         const configuredChannel = memoSetup(
           channel,
           carbon,

@@ -1,3 +1,4 @@
+import net from "node:net";
 import { box, intro, log, outro, progress, tasks } from "@clack/prompts";
 import { config as loadDotenv } from "dotenv";
 import { type ExecaChildProcess, execa } from "execa";
@@ -17,21 +18,15 @@ import {
   allImagesPresentLocally,
   bootSharedRedis,
   bootStack,
-  type Container,
   devComposeImageRefs,
   ensureDockerRunning,
   listComposeServices,
-  listContainers,
-  pullStack,
-  restartServices,
-  tailServiceLogs
+  pullStack
 } from "../services/compose.js";
 import {
-  applyBootstrapSql,
   applyMigrations,
   ensureSmokeTestUser,
   waitForPostgres,
-  waitForStorageReady,
   waitForTcp
 } from "../services/migrations.js";
 import {
@@ -92,13 +87,19 @@ type Ctx = {
   branchPrefix: string;
 };
 
+const LOCALHOST_FIXED_PORTS: Partial<Record<keyof PortMap, number>> = {
+  PORT_API: 54321,
+  PORT_ERP: 3000,
+  PORT_MES: 3001
+};
+
 export async function up(opts: UpOpts = {}) {
   const shouldMigrate = opts.migrate ?? true;
   // Type/swagger regen depends on a freshly-migrated schema. If migrations
   // were skipped, schema is unchanged — skip regen too.
   const shouldRegen = shouldMigrate && (opts.regen ?? true);
   const shouldBorrow = opts.borrow === true;
-  // Services-only mode: boot compose stack + portless aliases (api/studio/
+  // Services-only mode: boot compose stack + portless aliases (api/
   // mail/inngest URLs still useful), skip spawnApps + auto-`down` on Ctrl+C.
   // Triggered by --no-apps OR by deselecting everything in the picker.
   const appsRequested = opts.apps ?? true;
@@ -179,6 +180,7 @@ export async function up(opts: UpOpts = {}) {
   }
   await runDatabaseMigrations(ctx, { shouldMigrate, shouldRegen });
   await seedSmokeTestUser(ctx);
+  await ensureSelectedAppPortsAvailable(ctx, selectedApps, portless);
   if (portless) {
     await setupPortless(ctx, selectedApps);
     await ensureHostsFile();
@@ -287,16 +289,16 @@ async function provisionSlot(
         // Always resolve own slot so PORT_ERP/PORT_MES are claimed for this
         // worktree and won't collide with the borrowed stack's running dev servers.
         const ownSlot = await resolveSlot(slug, root);
-        // Pin well-known ports in localhost mode so URLs are predictable and
-        // OAuth redirect URIs can be registered once in Google/Azure console.
+        // Prefer well-known ports in localhost mode so OAuth redirect URIs can
+        // be registered once, but keep the allocated dynamic port if a local
+        // process already owns the default.
+        let fallbackPorts: string[] = [];
         if (!portless && !borrowedEntry) {
-          ownSlot.ports.PORT_API = 54321;
-          ownSlot.ports.PORT_ERP = 3000;
-          ownSlot.ports.PORT_MES = 3001;
+          fallbackPorts = await pinAvailableLocalhostPorts(ownSlot.ports);
         }
         const slot = borrowedEntry
           ? {
-              // Backend ports (DB, API, Studio, Inbucket, Inngest) come from the
+              // Backend ports (DB, API, Inbucket, Inngest) come from the
               // borrowed stack — apps talk to those running containers.
               // App ports (ERP, MES) come from our own slot — dev servers bind here,
               // so they don't conflict with the borrowed stack's dev servers.
@@ -324,7 +326,9 @@ async function provisionSlot(
           ? `borrowed backend ports, own app ports (ERP :${slot.ports.PORT_ERP} MES :${slot.ports.PORT_MES}), redis db ${slot.redisDb}`
           : portless
             ? `prefix "${branchPrefix}", redis db ${slot.redisDb}`
-            : `localhost mode, redis db ${slot.redisDb}`;
+            : fallbackPorts.length > 0
+              ? `localhost mode, redis db ${slot.redisDb}; busy defaults: ${fallbackPorts.join(", ")}`
+              : `localhost mode, redis db ${slot.redisDb}`;
       }
     },
     {
@@ -343,6 +347,115 @@ async function provisionSlot(
     }
   ]);
   return ctx;
+}
+
+async function pinAvailableLocalhostPorts(ports: PortMap): Promise<string[]> {
+  const fallbackPorts: string[] = [];
+  for (const [name, fixedPort] of Object.entries(LOCALHOST_FIXED_PORTS) as [
+    keyof PortMap,
+    number
+  ][]) {
+    if (await isLocalhostPortAvailable(fixedPort)) {
+      ports[name] = fixedPort;
+    } else {
+      fallbackPorts.push(
+        `${name.replace("PORT_", "").toLowerCase()} :${fixedPort}`
+      );
+    }
+  }
+  return fallbackPorts;
+}
+
+async function isLocalhostPortAvailable(port: number): Promise<boolean> {
+  if (await canConnectToLocalhost(port)) return false;
+
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+function canConnectToLocalhost(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    socket.unref();
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function ensureSelectedAppPortsAvailable(
+  ctx: Ctx,
+  selectedApps: AppId[],
+  portless: boolean
+) {
+  if (portless || selectedApps.length === 0) return;
+
+  const taken = new Set(Object.values(ctx.ports));
+  let changed = false;
+
+  for (const appId of selectedApps) {
+    const portKey = APP_PORT_KEY[appId];
+    if (!portKey) continue;
+
+    const currentPort = ctx.ports[portKey];
+    if (await isLocalhostPortAvailable(currentPort)) continue;
+
+    const nextPort = await pickFreeLocalhostPort(taken);
+    ctx.ports[portKey] = nextPort;
+    taken.add(nextPort);
+    changed = true;
+    log.warn(`${appId} port :${currentPort} is busy — using :${nextPort}`);
+  }
+
+  if (!changed) return;
+
+  writeEnv(
+    ctx.root,
+    renderEnv({
+      slug: ctx.slug,
+      portless,
+      branchPrefix: ctx.branchPrefix,
+      ports: ctx.ports,
+      redisDb: ctx.redisDb,
+      jwt: ctx.jwt
+    })
+  );
+  loadDotenv({ path: join(ctx.root, ".env.local"), override: true });
+}
+
+function pickFreeLocalhostPort(taken: Set<number>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (typeof addr === "object" && addr) {
+        const port = addr.port;
+        if (taken.has(port)) {
+          server.close(() => {
+            pickFreeLocalhostPort(taken).then(resolve, reject);
+          });
+        } else {
+          server.close(() => resolve(port));
+        }
+      } else {
+        server.close();
+        reject(new Error("could not determine port"));
+      }
+    });
+  });
 }
 
 // Pull images outside `tasks()` so we can use clack's progress bar (one
@@ -378,7 +491,7 @@ async function bootDockerStack(ctx: Ctx) {
     {
       title: "Boot docker compose stack",
       task: async (msg) => {
-        msg("starting 12 services");
+        msg("starting docker services");
         await bootStack(ctx.root, ctx.slug);
         return "containers up";
       }
@@ -387,10 +500,9 @@ async function bootDockerStack(ctx: Ctx) {
 }
 
 // Wait for services via clack progress bar:
-//   3× TCP ports → +1 postgres ready → +1 storage.buckets = 5 ticks.
-// `waitForStorageReady` owns the storage heal path internally.
+//   3× TCP ports → +1 postgres ready = 4 ticks.
 async function waitForServices(ctx: Ctx) {
-  const bar = progress({ style: "heavy", max: 5 });
+  const bar = progress({ style: "heavy", max: 4 });
   bar.start("Waiting for services");
   try {
     await waitForTcp(
@@ -405,22 +517,6 @@ async function waitForServices(ctx: Ctx) {
     bar.message("waiting for postgres to accept queries");
     await waitForPostgres(ctx.ports.PORT_DB);
     bar.advance(1, "postgres ready");
-
-    await waitForStorageReady(ctx.ports.PORT_DB, {
-      onProgress: (line) => bar.message(line.slice(0, 80)),
-      onHeal: async () => {
-        bar.message("storage stuck — re-applying init.sql");
-        await applyBootstrapSql(ctx.root, ctx.ports.PORT_DB);
-        bar.message("restarting storage / gotrue / postgrest");
-        await restartServices(ctx.root, ctx.slug, [
-          "storage",
-          "gotrue",
-          "postgrest"
-        ]);
-      },
-      onTimeout: () => dumpStorageDiagnostics(ctx)
-    });
-    bar.advance(1, "storage.buckets ready");
     bar.stop("all services responding");
   } catch (err) {
     bar.stop("services not ready");
@@ -651,28 +747,4 @@ async function runAppsThenCommand(
     detach();
   }
   process.exitCode = exitCode;
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostics
-// ---------------------------------------------------------------------------
-
-async function dumpStorageDiagnostics(ctx: Ctx) {
-  const containers = await listContainers(ctx.root, ctx.slug);
-  const out: string[] = ["", "--- container state ---"];
-  for (const name of ["postgres", "storage"]) {
-    out.push(formatContainerLine(name, containers));
-  }
-  out.push("", "--- storage logs (last 50) ---");
-  out.push(await tailServiceLogs(ctx.root, ctx.slug, "storage", 50));
-  out.push("", "--- postgres logs (last 20) ---");
-  out.push(await tailServiceLogs(ctx.root, ctx.slug, "postgres", 20));
-  out.push("");
-  process.stderr.write(out.join("\n") + "\n");
-}
-
-function formatContainerLine(name: string, containers: Container[]): string {
-  const c = containers.find((x) => x.Service === name);
-  if (!c) return `${name.padEnd(10)} (not found)`;
-  return `${name.padEnd(10)} state=${c.State} health=${c.Health ?? "n/a"}  ${c.Status}`;
 }

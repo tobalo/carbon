@@ -1,6 +1,7 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
+import { isListedFileObject, listObjects } from "@carbon/object-storage/server";
 import type { JSONContent } from "@carbon/react";
 import { VStack } from "@carbon/react";
 import { msg } from "@lingui/core/macro";
@@ -32,14 +33,14 @@ export const handle: Handle = {
 };
 
 async function getMaintenanceDispatchFiles(
-  client: Parameters<typeof getMaintenanceDispatch>[0],
   companyId: string,
   dispatchId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/maintenance/${dispatchId}`);
-  return result.data || [];
+  const files = await listObjects(
+    "private",
+    `${companyId}/maintenance/${dispatchId}`
+  );
+  return files.filter(isListedFileObject);
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -74,7 +75,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     items: items.data ?? [],
     comments: comments.data ?? [],
     failureModes: failureModes.data ?? [],
-    files: getMaintenanceDispatchFiles(client, companyId, dispatchId)
+    files: getMaintenanceDispatchFiles(companyId, dispatchId)
   };
 }
 

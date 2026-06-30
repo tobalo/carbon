@@ -1,6 +1,9 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
@@ -31,7 +34,10 @@ export async function action({ request }: ActionFunctionArgs) {
   } = validation.data;
 
   const serviceRole = await getCarbonServiceRole();
-  const issue = await serviceRole.functions.invoke("issue", {
+  const issue = await invokeCarbonServiceFunction<{
+    splitEntities?: Array<{ newId: string }>;
+    warning?: string;
+  }>("issue", {
     body: {
       type: "trackedEntitiesToOperation",
       materialId,
@@ -48,9 +54,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (issue.error) {
     console.error(issue.error);
-    // Supabase wraps non-2xx edge-fn responses in FunctionsHttpError where
-    // the actual body lives on `context`. Try to pull our { message } out;
-    // fall back to the wrapper's own message if parsing fails.
+    // The current functions client puts non-2xx response bodies on `context`.
+    // Try to pull our { message } out; fall back to the wrapper's own message.
     let message = "Failed to issue material";
     const ctx = (issue.error as { context?: Response })?.context;
     if (ctx && typeof ctx.json === "function") {

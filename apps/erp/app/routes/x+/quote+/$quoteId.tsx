@@ -5,8 +5,6 @@ import { VStack } from "@carbon/react";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { DndContext } from "@dnd-kit/core";
 import { msg } from "@lingui/core/macro";
-import type { FileObject } from "@supabase/storage-js";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 import {
   Outlet,
@@ -38,6 +36,7 @@ import {
 } from "~/modules/sales/ui/Quotes";
 import { useOptimisticDocumentDrag } from "~/modules/sales/ui/Quotes/QuoteExplorer";
 import { getCompanySettings } from "~/modules/settings";
+import type { FileObject, PostgrestResponse } from "~/types";
 import type { Handle } from "~/utils/handle";
 import { path } from "~/utils/path";
 

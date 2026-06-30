@@ -2,6 +2,7 @@ import { gzipSync } from "node:zlib";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { auditConfig } from "@carbon/database/audit.config";
 import type { AuditLogEntry } from "@carbon/database/audit.types";
+import { removeObjects, uploadObject } from "@carbon/object-storage/server";
 import { inngest } from "../../client";
 
 // Type for RPC calls
@@ -52,17 +53,12 @@ async function archiveCompanyLogs(
   const timestamp = `${year}-${month}-${day}`;
   const archivePath = `audit-logs/${companyId}/${year}/${month}/${timestamp}.jsonl.gz`;
 
-  // Upload to storage
-  const { error: uploadError } = await client.storage
-    .from(auditConfig.archiveBucket)
-    .upload(archivePath, gzipped, {
-      contentType: "application/gzip",
-      upsert: true
-    });
-
-  if (uploadError) {
-    throw new Error(`Failed to upload archive: ${uploadError.message}`);
-  }
+  await uploadObject({
+    bucket: auditConfig.archiveBucket,
+    key: archivePath,
+    body: gzipped,
+    contentType: "application/gzip"
+  });
 
   // Get date range from records
   const startDate = records[0]!.createdAt;
@@ -80,7 +76,11 @@ async function archiveCompanyLogs(
 
   if (archiveError) {
     // Try to clean up uploaded file
-    await client.storage.from(auditConfig.archiveBucket).remove([archivePath]);
+    await removeObjects(auditConfig.archiveBucket, [archivePath]).catch(
+      (error) => {
+        console.error("Failed to clean up audit archive after DB error", error);
+      }
+    );
     throw new Error(`Failed to record archive: ${archiveError.message}`);
   }
 

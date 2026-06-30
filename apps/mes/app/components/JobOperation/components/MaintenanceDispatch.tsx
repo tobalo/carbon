@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   DateTimePicker,
   Hidden,
@@ -21,7 +20,6 @@ import {
   VStack
 } from "@carbon/react";
 import { Editor } from "@carbon/react/Editor";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
 import { BsExclamationSquareFill } from "react-icons/bs";
@@ -36,7 +34,9 @@ import {
   maintenanceSeverity,
   oeeImpact
 } from "~/services/models";
+import type { PostgrestResponse } from "~/types";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadAuthenticatedFile } from "~/utils/storage.client";
 
 function getPriorityIcon(
   priority: (typeof maintenanceDispatchPriority)[number]
@@ -91,7 +91,6 @@ export function MaintenanceDispatch({
   const {
     company: { id: companyId }
   } = useUser();
-  const { carbon } = useCarbon();
 
   const [content, setContent] = useState<JSONContent>({});
   const [severity, setSeverity] =
@@ -126,7 +125,7 @@ export function MaintenanceDispatch({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/maintenance/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadAuthenticatedFile(fileName, file);
 
     if (result?.error) {
       toast.error("Failed to upload image");

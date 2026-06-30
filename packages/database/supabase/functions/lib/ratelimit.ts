@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 export type RateLimitResult = {
   success: boolean;
   count: number;
@@ -8,15 +6,22 @@ export type RateLimitResult = {
   resetAt: number;
 };
 
+type RpcClient = {
+  rpc(
+    functionName: string,
+    args?: Record<string, unknown>
+  ): PromiseLike<{ data: unknown; error: unknown }>;
+};
+
 /**
  * Check rate limit for an API key using the Postgres
- * check_api_key_rate_limit() function via Supabase .rpc().
+ * check_api_key_rate_limit() function via the current PostgREST .rpc().
  *
  * Returns the rate limit result. Callers are responsible for
  * throwing/returning an appropriate 429 response when !success.
  */
 export async function checkApiKeyRateLimit(
-  client: ReturnType<typeof createClient>,
+  client: RpcClient,
   apiKeyId: string,
   limit: number,
   window: string

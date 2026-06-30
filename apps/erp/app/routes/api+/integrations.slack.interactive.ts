@@ -1,5 +1,9 @@
+import type { CarbonClient } from "@carbon/auth";
 import { ERP_URL } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import type { Database } from "@carbon/database";
 import {
   createIssueSlackThread,
@@ -7,7 +11,6 @@ import {
   getCarbonEmployeeFromSlackId,
   getSlackIntegrationByTeamId
 } from "@carbon/ee/slack.server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { z } from "zod";
@@ -174,7 +177,7 @@ async function handleShortcut(
   payload: z.infer<typeof slackInteractivePayloadSchema>,
   companyId: string,
   slackToken: string,
-  serviceRole: SupabaseClient<Database>
+  serviceRole: CarbonClient
 ) {
   const callbackId = payload.callback_id;
 
@@ -369,7 +372,7 @@ async function handleViewSubmission(
   payload: z.infer<typeof slackInteractivePayloadSchema>,
   companyId: string,
   slackToken: string,
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   integration: Database["public"]["Tables"]["companyIntegration"]["Row"]
 ) {
   const view = payload.view;
@@ -449,7 +452,7 @@ async function handleViewSubmission(
           channelId: configuredChannelId
         }
       ),
-      serviceRole.functions.invoke("create", {
+      invokeCarbonServiceFunction("create", {
         body: {
           type: "nonConformanceTasks",
           id: ncrId,

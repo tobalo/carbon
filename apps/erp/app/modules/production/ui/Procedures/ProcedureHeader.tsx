@@ -17,7 +17,6 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { Suspense, useEffect } from "react";
 import {
   LuChevronDown,
@@ -32,6 +31,7 @@ import { Await, useNavigate, useParams } from "react-router";
 import { usePanels } from "~/components/Layout";
 import ConfirmDelete from "~/components/Modals/ConfirmDelete";
 import { usePermissions, useRouteData } from "~/hooks";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import type { Procedure } from "../../types";
 import ProcedureForm from "./ProcedureForm";

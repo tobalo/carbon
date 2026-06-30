@@ -1,5 +1,5 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { isIssueLocked } from "~/modules/quality";
 import { requireUnlockedBulk } from "~/utils/lockedGuard.server";
@@ -55,10 +55,9 @@ export async function action({ request }: ActionFunctionArgs) {
         };
       }
 
-      const serviceRole = await getCarbonServiceRole();
       await Promise.all(
         ids.map(async (id) => {
-          await serviceRole.functions.invoke("create", {
+          await invokeCarbonServiceFunction("create", {
             body: {
               type: "nonConformanceTasks",
               id,

@@ -7,6 +7,8 @@ declare global {
       AUTH_PROVIDERS: string;
       CARBON_EDITION: string;
       CARBON_API_URL: string;
+      CARBON_PUBLIC_KEY: string;
+      CARBON_STORAGE_PUBLIC_URL: string;
       CLOUDFLARE_TURNSTILE_SITE_KEY: string;
       CONTROLLED_ENVIRONMENT: string;
       ERP_URL: string;
@@ -15,8 +17,6 @@ declare global {
       ONSHAPE_CLIENT_ID: string;
       POSTHOG_API_HOST: string;
       POSTHOG_PROJECT_PUBLIC_KEY: string;
-      SUPABASE_URL: string;
-      SUPABASE_ANON_KEY: string;
       VERCEL_URL: string;
       VERCEL_ENV: string;
       QUICKBOOKS_CLIENT_ID: string;
@@ -31,6 +31,10 @@ declare global {
     interface ProcessEnv {
       CARBON_EDITION: string;
       CARBON_API_URL: string;
+      CARBON_DATABASE_URL: string;
+      CARBON_PUBLIC_KEY: string;
+      CARBON_SERVICE_ROLE_KEY: string;
+      CARBON_STORAGE_PUBLIC_URL: string;
       CLOUDFLARE_TURNSTILE_SITE_KEY: string;
       CLOUDFLARE_TURNSTILE_SECRET_KEY: string;
       DOMAIN: string;
@@ -63,12 +67,13 @@ declare global {
       STRIPE_BYPASS_USER_IDS: string;
       GTM_URL: string;
       GTM_EVENTS_API_SECRET_KEY: string;
-      SUPABASE_ANON_KEY: string;
-      SUPABASE_URL: string;
-      SUPABASE_DB_URL: string;
-      SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID: string;
-      SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: string;
-      SUPABASE_SERVICE_ROLE_KEY: string;
+      CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID: string;
+      CARBON_AUTH_EXTERNAL_AZURE_CLIENT_SECRET: string;
+      CARBON_AUTH_EXTERNAL_AZURE_REDIRECT_URI: string;
+      CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: string;
+      CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET: string;
+      CARBON_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI: string;
+      CARBON_AUTH_JWT_SECRET: string;
       REDIS_URL: string;
       VERCEL_URL: string;
       VERCEL_ENV: string;
@@ -144,11 +149,14 @@ const getEdition = () => {
 
 export const CarbonEdition = getEdition();
 
-export const CARBON_API_URL =
-  getEnv("CARBON_API_URL", {
-    isRequired: false,
-    isSecret: false
-  }) ?? getEnv("SUPABASE_URL", { isSecret: false });
+export const CARBON_API_URL = getEnv("CARBON_API_URL", {
+  isSecret: false
+});
+
+export const CARBON_STORAGE_PUBLIC_URL = getEnv("CARBON_STORAGE_PUBLIC_URL", {
+  isRequired: false,
+  isSecret: false
+});
 
 export const CLOUDFLARE_TURNSTILE_SITE_KEY = getEnv(
   "CLOUDFLARE_TURNSTILE_SITE_KEY",
@@ -247,27 +255,64 @@ export const SLACK_STATE_SECRET = getEnv("SLACK_STATE_SECRET", {
   isSecret: true
 });
 
-export const SUPABASE_SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY");
-export const SUPABASE_JWT_SECRET = getEnv("SUPABASE_JWT_SECRET", {
+export const CARBON_SERVICE_ROLE_KEY = getEnv("CARBON_SERVICE_ROLE_KEY");
+export const CARBON_AUTH_JWT_SECRET = getEnv("CARBON_AUTH_JWT_SECRET", {
   isSecret: true,
   isRequired: false
 });
-export const SUPABASE_DB_URL = getEnv("SUPABASE_DB_URL", {
-  isRequired: true,
-  isSecret: true
-});
-export const SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID = getEnv(
-  "SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID",
+export const CARBON_DATABASE_URL =
+  getEnv("CARBON_DATABASE_URL", {
+    isRequired: false,
+    isSecret: true
+  }) ??
+  getEnv("DATABASE_URL", {
+    isRequired: false,
+    isSecret: true
+  }) ??
+  getEnv("POSTGRES_URL", {
+    isRequired: true,
+    isSecret: true
+  });
+export const CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID = getEnv(
+  "CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID",
   {
     isRequired: false,
     isSecret: true
   }
 );
-export const SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID = getEnv(
-  "SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
+export const CARBON_AUTH_EXTERNAL_AZURE_CLIENT_SECRET = getEnv(
+  "CARBON_AUTH_EXTERNAL_AZURE_CLIENT_SECRET",
   {
     isRequired: false,
     isSecret: true
+  }
+);
+export const CARBON_AUTH_EXTERNAL_AZURE_REDIRECT_URI = getEnv(
+  "CARBON_AUTH_EXTERNAL_AZURE_REDIRECT_URI",
+  {
+    isRequired: false,
+    isSecret: false
+  }
+);
+export const CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID = getEnv(
+  "CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
+  {
+    isRequired: false,
+    isSecret: true
+  }
+);
+export const CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET = getEnv(
+  "CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET",
+  {
+    isRequired: false,
+    isSecret: true
+  }
+);
+export const CARBON_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI = getEnv(
+  "CARBON_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI",
+  {
+    isRequired: false,
+    isSecret: false
   }
 );
 
@@ -350,10 +395,43 @@ export const POSTHOG_API_HOST = getEnv("POSTHOG_API_HOST", {
 export const POSTHOG_PROJECT_PUBLIC_KEY = getEnv("POSTHOG_PROJECT_PUBLIC_KEY", {
   isSecret: false
 });
-export const SUPABASE_URL = getEnv("SUPABASE_URL", { isSecret: false });
-export const SUPABASE_ANON_KEY = getEnv("SUPABASE_ANON_KEY", {
+export const CARBON_PUBLIC_KEY = getEnv("CARBON_PUBLIC_KEY", {
   isSecret: false
 });
+
+const trimTrailingSlashes = (value: string) => value.replace(/\/+$/u, "");
+const trimSlashes = (value: string) => value.replace(/^\/+|\/+$/gu, "");
+const isAbsolutePublicUrl = (value: string) =>
+  /^(https?:)?\/\//u.test(value) ||
+  value.startsWith("data:") ||
+  value.startsWith("blob:");
+
+export const getPublicStorageUrl = (
+  bucket: string,
+  path: string | null | undefined
+) => {
+  if (!path || isAbsolutePublicUrl(path)) return path;
+  if (!CARBON_STORAGE_PUBLIC_URL) return path;
+
+  return `${trimTrailingSlashes(CARBON_STORAGE_PUBLIC_URL)}/${trimSlashes(
+    bucket
+  )}/${trimSlashes(path)}`;
+};
+
+export const getPublicStoragePath = (
+  bucket: string,
+  urlOrPath: string | null | undefined
+) => {
+  if (!urlOrPath || !CARBON_STORAGE_PUBLIC_URL) return urlOrPath ?? null;
+
+  const prefix = `${trimTrailingSlashes(CARBON_STORAGE_PUBLIC_URL)}/${trimSlashes(
+    bucket
+  )}/`;
+
+  return urlOrPath.startsWith(prefix)
+    ? urlOrPath.slice(prefix.length)
+    : urlOrPath;
+};
 
 export const DEFAULT_LANGUAGE =
   getEnv("DEFAULT_LANGUAGE", {
@@ -409,6 +487,8 @@ export function getBrowserEnv() {
     AUTH_PROVIDERS,
     CARBON_API_URL,
     CARBON_EDITION,
+    CARBON_PUBLIC_KEY,
+    CARBON_STORAGE_PUBLIC_URL,
     CLOUDFLARE_TURNSTILE_SITE_KEY,
     CONTROLLED_ENVIRONMENT,
     DEFAULT_LANGUAGE,
@@ -421,8 +501,6 @@ export function getBrowserEnv() {
     POSTHOG_API_HOST,
     POSTHOG_PROJECT_PUBLIC_KEY,
     QUICKBOOKS_CLIENT_ID,
-    SUPABASE_ANON_KEY,
-    SUPABASE_URL,
     VERCEL_ENV,
     VERCEL_URL,
     XERO_CLIENT_ID

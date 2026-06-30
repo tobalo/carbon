@@ -3,12 +3,12 @@
 import { useCarbon } from "@carbon/auth";
 import { fetchAllFromTable } from "@carbon/database";
 import { useRealtimeChannel } from "@carbon/react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import idb from "localforage";
 import { useEffect, useRef } from "react";
 import { useUser } from "~/hooks";
 import { useItems, usePeople } from "~/stores";
 import type { Item } from "~/stores/items";
+import type { RealtimeChannel } from "~/types";
 
 let hydratedFromIdb = false;
 let hydratedFromServer = false;

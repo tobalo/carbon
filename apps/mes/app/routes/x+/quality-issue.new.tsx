@@ -1,6 +1,9 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { Database } from "@carbon/database";
 import type { ActionFunctionArgs } from "react-router";
@@ -158,7 +161,7 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  const tasks = await serviceRole.functions.invoke("create", {
+  const tasks = await invokeCarbonServiceFunction("create", {
     body: {
       type: "nonConformanceTasks",
       id: nonConformanceId,

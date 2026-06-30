@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import { sql } from "kysely";
 import type { z } from "zod";
 
@@ -523,13 +522,13 @@ type DispositionRow = {
 type IssueClosureBlocker = { nonConformanceItemId: string; reason: string };
 
 export async function closeIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { nonConformanceId: string; companyId: string; userId: string }
 ): Promise<Result<{ id: string }>> {
   const { nonConformanceId, companyId, userId } = args;
   const db = getDatabaseClient();
 
-  // Preflight reads via Supabase (uses nested selects / RLS-aware service role)
+  // Preflight reads via the Carbon client (uses nested selects / RLS-aware service role)
   const planResult = await (client as any)
     .from("nonConformanceItem")
     .select(

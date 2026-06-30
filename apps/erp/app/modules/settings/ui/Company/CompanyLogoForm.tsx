@@ -1,4 +1,4 @@
-import { SUPABASE_URL, useCarbon } from "@carbon/auth";
+import { CARBON_API_URL, getPublicStoragePath } from "@carbon/auth";
 import {
   Avatar,
   Button,
@@ -14,14 +14,11 @@ import type { ChangeEvent } from "react";
 import { useSubmit } from "react-router";
 import type { Company } from "~/modules/settings";
 import { path } from "~/utils/path";
-
-const STORAGE_URL_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/public/`;
+import { removePublicFiles, uploadPublicFile } from "~/utils/storage.client";
 
 const toStoragePath = (urlOrPath: string | null): string | null => {
   if (!urlOrPath) return null;
-  return urlOrPath.startsWith(STORAGE_URL_PREFIX)
-    ? urlOrPath.slice(STORAGE_URL_PREFIX.length)
-    : urlOrPath;
+  return getPublicStoragePath("public", urlOrPath);
 };
 
 export type LogoTarget =
@@ -48,7 +45,6 @@ export const maxSizeMB = 10;
 
 const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const submit = useSubmit();
 
   const isIcon = target === "logoLightIcon" || target === "logoDarkIcon";
@@ -68,7 +64,7 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
   const currentLogoPath = company[target] ?? null;
 
   const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       let logo = e.target.files[0];
 
       const supportedTypes = [
@@ -102,7 +98,7 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
 
         try {
           const response = await fetch(
-            `${SUPABASE_URL}/functions/v1/image-resizer`,
+            `${CARBON_API_URL}/functions/v1/image-resizer`,
             {
               method: "POST",
               body: formData
@@ -138,12 +134,10 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
       const previousStoragePath = toStoragePath(currentLogoPath);
       const logoPath = getLogoPath(logo);
 
-      const imageUpload = await carbon.storage
-        .from("public")
-        .upload(logoPath, logo, {
-          cacheControl: "0",
-          upsert: true
-        });
+      const imageUpload = await uploadPublicFile(logoPath, logo, {
+        permission: "settings",
+        cacheControl: "0"
+      });
 
       if (imageUpload.error) {
         const errorMessage = imageUpload.error.message || "Unknown error";
@@ -157,12 +151,12 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
           previousStoragePath &&
           previousStoragePath !== imageUpload.data.path
         ) {
-          await carbon.storage
-            .from("public")
-            .remove([previousStoragePath])
-            .catch((cleanupError) => {
-              console.warn("Old logo cleanup failed:", cleanupError);
-            });
+          const cleanup = await removePublicFiles([previousStoragePath], {
+            permission: "settings"
+          });
+          if (cleanup.error) {
+            console.warn("Old logo cleanup failed:", cleanup.error);
+          }
         }
         toast.success(t`Logo uploaded successfully`);
         submitLogoUrl(imageUpload.data.path);
@@ -171,12 +165,12 @@ const CompanyLogoForm = ({ company, target }: CompanyLogoFormProps) => {
   };
 
   const deleteImage = async () => {
-    if (carbon && currentLogoPath) {
+    if (currentLogoPath) {
       const storagePath = toStoragePath(currentLogoPath);
       if (!storagePath) return;
-      const imageDelete = await carbon.storage
-        .from("public")
-        .remove([storagePath]);
+      const imageDelete = await removePublicFiles([storagePath], {
+        permission: "settings"
+      });
 
       if (imageDelete.error) {
         const errorMessage = imageDelete.error.message || "Unknown error";

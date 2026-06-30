@@ -1,31 +1,19 @@
 import { createGzip } from "node:zlib";
 import { requirePermissions } from "@carbon/auth/auth.server";
+import {
+  downloadObject,
+  listObjectKeysRecursive
+} from "@carbon/object-storage/server";
 import { isInternalEmail } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 import { pack as tarPack } from "tar-stream";
 
 /** List every object under a storage prefix, returning paths relative to it. */
-async function listRelative(
-  client: SupabaseClient,
-  bucket: string,
-  prefix: string,
-  base: string = prefix
-): Promise<string[]> {
-  const out: string[] = [];
-  const { data } = await client.storage
-    .from(bucket)
-    .list(prefix, { limit: 1000 });
-  if (!data) return out;
-  for (const entry of data) {
-    const full = `${prefix}/${entry.name}`;
-    if (entry.id === null) {
-      out.push(...(await listRelative(client, bucket, full, base)));
-    } else {
-      out.push(full.slice(base.length + 1));
-    }
-  }
-  return out;
+async function listRelative(bucket: string, prefix: string): Promise<string[]> {
+  const keys = await listObjectKeysRecursive(bucket, prefix);
+  return keys
+    .filter((key) => key.startsWith(`${prefix}/`))
+    .map((key) => key.slice(prefix.length + 1));
 }
 
 /** How many objects to download concurrently while packing the tar in order.
@@ -41,7 +29,7 @@ const DOWNLOAD_CONCURRENCY = 6;
  * gzip tar, which `backups-archive.server.ts` unpacks on re-import.
  */
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { client, companyId, email } = await requirePermissions(request, {
+  const { companyId, email } = await requirePermissions(request, {
     view: "settings"
   });
   if (!isInternalEmail(email)) throw new Response("Not found", { status: 404 });
@@ -52,7 +40,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
   const dir = `exports/${name}`;
 
-  const relPaths = await listRelative(client, companyId, dir);
+  const relPaths = await listRelative(companyId, dir);
   if (relPaths.length === 0) {
     throw new Response("Backup not found", { status: 404 });
   }
@@ -66,14 +54,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     });
 
   const downloadAt = (i: number): Promise<Buffer | null> =>
-    client.storage
-      .from(companyId)
-      .download(`${dir}/${relPaths[i]}`)
-      .then((f) =>
-        f.error || !f.data
-          ? null
-          : f.data.arrayBuffer().then((b) => Buffer.from(b))
-      )
+    downloadObject({
+      bucket: companyId,
+      key: `${dir}/${relPaths[i]}`
+    })
+      .then((object) => Buffer.from(object.body))
       .catch(() => null); // best-effort: a missing/failed object is skipped
 
   (async () => {

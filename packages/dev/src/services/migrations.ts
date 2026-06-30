@@ -1,4 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { log } from "@clack/prompts";
 import { execa } from "execa";
@@ -51,98 +50,38 @@ export async function waitForPostgres(port: number, timeoutMs = 60_000) {
   throw new Error(`postgres did not accept queries within ${timeoutMs}ms`);
 }
 
-/**
- * Block until supabase storage-api has bootstrapped `storage.buckets`. Probes
- * for 30s first; if missing, invokes `onHeal` (re-apply init.sql + restart
- * dependent services) then polls again with a 150s budget.
- *
- * The heal path recovers worktrees whose pgdata volume predates the current
- * init.sql — Docker only runs init scripts on a fresh data dir, so role
- * passwords drift and storage-api auth-fails forever otherwise.
- */
-export async function waitForStorageReady(
-  port: number,
-  opts: {
-    onHeal?: () => Promise<void>;
-    onProgress?: (line: string) => void;
-    onTimeout?: () => Promise<void>;
-  } = {}
-) {
-  const start = Date.now();
-  const elapsed = () => Math.floor((Date.now() - start) / 1000);
-
-  opts.onProgress?.("waiting for storage.buckets");
-  if (await pollBuckets(port, start + 30_000)) {
-    opts.onProgress?.(`storage.buckets ready (${elapsed()}s)`);
-    return;
-  }
-
-  if (opts.onHeal) {
-    opts.onProgress?.("storage stuck — running heal");
-    await opts.onHeal();
-  }
-
-  if (await pollBuckets(port, start + 180_000)) {
-    opts.onProgress?.(`storage.buckets ready (${elapsed()}s)`);
-    return;
-  }
-
-  if (opts.onTimeout) {
-    try {
-      await opts.onTimeout();
-    } catch {
-      // diagnostics are best-effort; original error below is what matters
-    }
-  }
-  throw new Error("storage.buckets did not appear within 180s");
-}
-
-// Re-apply `packages/dev/docker/init.sql` as the cluster superuser role.
-// Docker's `docker-entrypoint-initdb.d` only runs on a fresh pgdata volume —
-// a worktree with a pre-existing volume from before init.sql evolved keeps the
-// old role passwords forever, so storage-api / gotrue / postgrest auth-fail on
-// every boot. Re-applying is idempotent (`ALTER USER ... PASSWORD`, `CREATE
-// SCHEMA IF NOT EXISTS`).
-//
-// Connect as `supabase_admin` (not `postgres`): current supabase/postgres
-// images treat `supabase_admin` as a reserved role; only a superuser may
-// `ALTER` it, and the host TCP `postgres` role is no longer sufficient.
-export async function applyBootstrapSql(root: string, port: number) {
-  const sql = readFileSync(join(root, "packages/dev/docker/init.sql"), "utf8");
-  await withClient(port, (c) => c.query(sql), {
-    user: "supabase_admin",
-    password: "postgres"
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Schema migrations
 // ---------------------------------------------------------------------------
 
-// --include-all: supabase bootstrap inserts a sentinel into schema_migrations
-// that makes earlier-timestamp migrations look "out of order" without it.
-// Returns `applied: true` when at least one migration ran — callers gate
-// type/swagger regen on this so a re-run against an up-to-date DB stays cheap.
-//
-// Use `supabase_admin`, not `postgres`: current supabase/postgres images mark
-// `session_authorization=postgres` as non-superuser (`is_superuser=off`), so
-// the CLI cannot INSERT migration bookkeeping rows into
-// `supabase_migrations.schema_migrations` as `postgres`.
+// Applies Carbon SQL migrations directly through Postgres and records history in
+// carbon_migrations.schema_migrations. The runner mirrors existing legacy
+// migration history once, so already-applied worktrees do not replay the full
+// migration set.
 export async function applyMigrations(
   root: string,
   dbPort: number
 ): Promise<{ applied: boolean }> {
   const dbUrl = `postgresql://supabase_admin:postgres@localhost:${dbPort}/postgres`;
-  const args = ["migration", "up", "--include-all", "--db-url", dbUrl];
-  const cwd = join(root, "packages/database");
+  const args = [
+    "--filter",
+    "@carbon/database",
+    "exec",
+    "tsx",
+    "src/migrations/apply.ts",
+    "--db-url",
+    dbUrl,
+    "--migrations-dir",
+    join(root, "packages/database/migrations")
+  ];
 
   // Retry up to 3 times on deadlock — background services (PostgREST,
   // Realtime) hold catalog locks that race with CREATE POLICY / ALTER TABLE.
   const MAX_RETRIES = 3;
-  const execOpts = { cwd, reject: false, preferLocal: true };
+  const execOpts = { cwd: root, reject: false, preferLocal: true };
   // Inferred from the call so `r` is the string-encoded result (not execa's
   // buffer overload) and is definitely assigned after the loop.
-  let r = await execa("supabase", args, execOpts);
+  let r = await execa("pnpm", args, execOpts);
   for (let attempt = 1; attempt < MAX_RETRIES && r.exitCode !== 0; attempt++) {
     const output = `${r.stderr ?? ""}\n${r.stdout ?? ""}`;
     if (!/deadlock detected/i.test(output)) break;
@@ -150,83 +89,18 @@ export async function applyMigrations(
       `deadlock during migration (attempt ${attempt}/${MAX_RETRIES}) — retrying in 3s`
     );
     await sleep(3000);
-    r = await execa("supabase", args, execOpts);
+    r = await execa("pnpm", args, execOpts);
   }
   if (r.exitCode !== 0) {
-    const output = `${r.stderr ?? ""}\n${r.stdout ?? ""}`;
-    // Auto-repair: DB has migration versions not present locally (stale from
-    // another branch or incomplete volume wipe). Remove them and retry.
-    if (/remote migration versions not found in local/i.test(output)) {
-      const repaired = await repairStaleMigrations(root, dbPort);
-      if (repaired > 0) {
-        log.warn(`repaired ${repaired} stale migration(s) — retrying`);
-        const retry = await execa("supabase", args, {
-          cwd,
-          reject: false,
-          preferLocal: true
-        });
-        if (retry.exitCode === 0) {
-          const applied = /Applying migration/i.test(retry.stdout ?? "");
-          return { applied };
-        }
-        process.stderr.write(retry.stderr?.toString() ?? "");
-        process.stdout.write(retry.stdout?.toString() ?? "");
-        throw new Error(
-          `supabase ${args.join(" ")} failed after repair (exit ${retry.exitCode})`
-        );
-      }
-    }
     process.stderr.write(r.stderr?.toString() ?? "");
     process.stdout.write(r.stdout?.toString() ?? "");
-    throw new Error(`supabase ${args.join(" ")} failed (exit ${r.exitCode})`);
+    throw new Error(`pnpm ${args.join(" ")} failed (exit ${r.exitCode})`);
   }
-  // supabase prints "Applying migration <ts>_<name>.sql..." per applied
-  // migration; absent that, the schema was already current.
-  const applied = /Applying migration/i.test(r.stdout ?? "");
+  const appliedCount = Number(
+    (r.stdout ?? "").match(/CARBON_MIGRATIONS_APPLIED=(\d+)/)?.[1] ?? "0"
+  );
+  const applied = appliedCount > 0;
   return { applied };
-}
-
-// Find migration versions in DB that have no corresponding local file and
-// remove them from supabase_migrations.schema_migrations.
-async function repairStaleMigrations(
-  root: string,
-  dbPort: number
-): Promise<number> {
-  const migrationsDir = join(root, "packages/database/supabase/migrations");
-  const localVersions = new Set(
-    readdirSync(migrationsDir)
-      .filter((f) => f.endsWith(".sql"))
-      .map((f) => f.split("_")[0]!)
-  );
-
-  const remoteVersions = await withClient(
-    dbPort,
-    async (c) => {
-      const res = await c.query<{ version: string }>(
-        "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version"
-      );
-      return res.rows.map((r) => r.version);
-    },
-    { user: "supabase_admin", password: "postgres" }
-  );
-
-  const stale = remoteVersions.filter((v) => !localVersions.has(v));
-  if (stale.length === 0) return 0;
-
-  await withClient(
-    dbPort,
-    async (c) => {
-      for (const version of stale) {
-        await c.query(
-          "DELETE FROM supabase_migrations.schema_migrations WHERE version = $1",
-          [version]
-        );
-      }
-    },
-    { user: "supabase_admin", password: "postgres" }
-  );
-
-  return stale.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,8 +124,8 @@ export async function ensureSmokeTestUser(
 
   if (exists) return { seeded: false };
 
-  const dbUrl = `postgresql://postgres:postgres@localhost:${dbPort}/postgres`;
-  const supabaseUrl = `http://localhost:${apiPort}`;
+  const dbUrl = `postgresql://supabase_admin:postgres@localhost:${dbPort}/postgres`;
+  const apiUrl = `http://localhost:${apiPort}`;
   await execa(
     "pnpm",
     [
@@ -267,8 +141,8 @@ export async function ensureSmokeTestUser(
       cwd: root,
       env: {
         ...process.env,
-        SUPABASE_DB_URL: dbUrl,
-        SUPABASE_URL: supabaseUrl,
+        CARBON_API_URL: apiUrl,
+        CARBON_DATABASE_URL: dbUrl,
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
       },
       stdio: "pipe"
@@ -307,26 +181,5 @@ async function withClient<T>(
     return await fn(client);
   } finally {
     await client.end();
-  }
-}
-
-async function pollBuckets(port: number, deadline: number): Promise<boolean> {
-  while (Date.now() < deadline) {
-    if (await storageBucketsExists(port)) return true;
-    await sleep(1000);
-  }
-  return false;
-}
-
-async function storageBucketsExists(port: number): Promise<boolean> {
-  try {
-    return await withClient(port, async (c) => {
-      const r = await c.query<{ regclass: string | null }>(
-        "SELECT to_regclass('storage.buckets')::text AS regclass"
-      );
-      return r.rows[0]?.regclass === "storage.buckets";
-    });
-  } catch {
-    return false;
   }
 }

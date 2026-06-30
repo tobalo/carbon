@@ -2,6 +2,7 @@ import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { trigger } from "@carbon/jobs";
+import { moveObject } from "@carbon/object-storage/server";
 import { nanoid } from "nanoid";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -118,15 +119,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
 
-    // Move the file to the new path
-    const move = await client.storage
-      .from("private")
-      .move(documentPath, newPath);
-
-    if (move.error) {
+    try {
+      await moveObject({
+        source: { bucket: "private", key: documentPath },
+        destination: { bucket: "private", key: newPath }
+      });
+    } catch (caught) {
       throw redirect(
         path.to.salesRfqDetails(rfqId),
-        await flash(request, error(move.error, "Failed to move file"))
+        await flash(request, error(caught, "Failed to move file"))
       );
     }
 
@@ -136,15 +137,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
     });
   } else {
     newPath = `${companyId}/opportunity-line/${targetLineId}/${fileName}`;
-    // Move the file to the new path
-    const move = await client.storage
-      .from("private")
-      .move(documentPath, newPath);
-
-    if (move.error) {
+    try {
+      await moveObject({
+        source: { bucket: "private", key: documentPath },
+        destination: { bucket: "private", key: newPath }
+      });
+    } catch (caught) {
       throw redirect(
         path.to.salesRfqDetails(rfqId),
-        await flash(request, error(move.error, "Failed to move file"))
+        await flash(request, error(caught, "Failed to move file"))
       );
     }
   }

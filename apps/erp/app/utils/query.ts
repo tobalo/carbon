@@ -1,6 +1,4 @@
 import { badRequest, parseNumberFromUrlParam } from "@carbon/auth";
-import type { PostgrestFilterBuilder } from "@supabase/postgrest-js";
-import type { GenericSchema } from "@supabase/supabase-js/dist/module/lib/types";
 
 export type Sort = {
   sortBy: string;
@@ -19,6 +17,26 @@ export interface GenericQueryFilters {
   sorts?: Sort[];
   filters?: Filter[];
 }
+
+type GenericFilterBuilder<TQuery> = {
+  eq(column: string, value: unknown): TQuery;
+  neq(column: string, value: unknown): TQuery;
+  gt(column: string, value: unknown): TQuery;
+  gte(column: string, value: unknown): TQuery;
+  lt(column: string, value: unknown): TQuery;
+  lte(column: string, value: unknown): TQuery;
+  overlaps(column: string, value: unknown[]): TQuery;
+  ilike(column: string, pattern: string): TQuery;
+  in(column: string, value: unknown[]): TQuery;
+  order(
+    column: string,
+    options?: {
+      ascending?: boolean;
+      foreignTable?: string;
+    }
+  ): TQuery;
+  range(from: number, to: number): TQuery;
+};
 
 export function getGenericQueryFilters(
   params: URLSearchParams
@@ -58,13 +76,8 @@ export function getGenericQueryFilters(
   return { limit, offset, sorts, filters };
 }
 
-export function getGenericFilter<
-  T extends GenericSchema,
-  U extends Record<string, unknown>,
-  V
->(
-  // @ts-expect-error TS2707 - TODO: fix type
-  query: PostgrestFilterBuilder<T, U, V>,
+export function getGenericFilter<TQuery extends GenericFilterBuilder<TQuery>>(
+  query: TQuery,
   column: string,
   operator: string,
   value: string
@@ -94,16 +107,12 @@ export function getGenericFilter<
 }
 
 export function setGenericQueryFilters<
-  T extends GenericSchema,
-  U extends Record<string, unknown>,
-  V
+  TQuery extends GenericFilterBuilder<TQuery>
 >(
-  // @ts-expect-error TS2707 - TODO: fix type
-  query: PostgrestFilterBuilder<T, U, V>,
+  query: TQuery,
   args: Partial<GenericQueryFilters>,
   defaultSorts?: { column: string; ascending: boolean; foreignTable?: string }[]
-  // @ts-expect-error TS2707 - TODO: fix type
-): PostgrestFilterBuilder<T, U, V> {
+): TQuery {
   args.filters?.forEach((filter) => {
     if (!filter.value) return;
     query = getGenericFilter(

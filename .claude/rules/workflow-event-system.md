@@ -24,7 +24,7 @@ the procedure, not a re-description — it does not repeat that detail.
 | Served `functions` array | `packages/jobs/src/inngest/index.ts` |
 | Event-name type registry (`Events`) | `packages/lib/src/events.ts` (re-exported, NOT defined, by `packages/jobs/src/events.ts`) |
 | Zod schemas + subscription helpers | `packages/database/src/event.ts` |
-| `attach_event_trigger`, handler-type CHECK | `packages/database/supabase/migrations/` |
+| `attach_event_trigger`, handler-type CHECK | `packages/database/migrations/` |
 
 ## Use cases → handler type
 

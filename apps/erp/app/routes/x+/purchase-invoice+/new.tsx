@@ -5,7 +5,6 @@ import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { getLocalTimeZone, today } from "@internationalized/date";
 import { msg } from "@lingui/core/macro";
-import type { FunctionsResponse } from "@supabase/functions-js";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { useUrlParams, useUser } from "~/hooks";
@@ -25,6 +24,11 @@ export const handle: Handle = {
   module: "purchasing"
 };
 
+type FunctionResponse<T> = {
+  data: T | null;
+  error: { message: string } | null;
+};
+
 export async function loader({ request }: LoaderFunctionArgs) {
   // we don't use the client here -- if they have this permission, we'll upgrade to a service role if needed
   const { companyId, userId } = await requirePermissions(request, {
@@ -35,7 +39,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sourceDocument = url.searchParams.get("sourceDocument") ?? undefined;
   const sourceDocumentId = url.searchParams.get("sourceDocumentId") ?? "";
 
-  let result: FunctionsResponse<{ id: string }>;
+  let result: FunctionResponse<{ id: string }>;
 
   switch (sourceDocument) {
     case "Purchase Order":

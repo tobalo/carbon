@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Badge,
   Card,
@@ -24,7 +23,6 @@ import {
 import { convertKbToString } from "@carbon/utils";
 import { useDndContext, useDraggable } from "@dnd-kit/core";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 import {
@@ -39,7 +37,9 @@ import { DocumentPreview, FileDropzone } from "~/components";
 import DocumentIcon from "~/components/DocumentIcon";
 import { useDateFormatter, usePermissions, useUser } from "~/hooks";
 import { getDocumentType } from "~/modules/shared";
+import type { FileObject } from "~/types";
 import { path } from "~/utils/path";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 import type { Opportunity } from "../../types";
 import { useOptimisticDocumentDrag } from "../SalesRFQ/useOptimiticDocumentDrag";
@@ -292,7 +292,6 @@ export const useOpportunityDocuments = ({
   const { t } = useLingui();
   const permissions = usePermissions();
   const { company } = useUser();
-  const { carbon } = useCarbon();
   const revalidator = useRevalidator();
   const submit = useSubmit();
 
@@ -311,19 +310,19 @@ export const useOpportunityDocuments = ({
 
   const deleteAttachment = useCallback(
     async (attachment: FileObject) => {
-      const result = await carbon?.storage
-        .from("private")
-        .remove([getPath(attachment)]);
+      const result = await removePrivateFiles([getPath(attachment)], {
+        permission: "sales"
+      });
 
-      if (!result || result.error) {
-        toast.error(result?.error?.message || "Error deleting file");
+      if (result.error) {
+        toast.error(result.error.message || "Error deleting file");
         return;
       }
 
       toast.success(t`${attachment.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [carbon?.storage, getPath, revalidator, t]
+    [getPath, revalidator, t]
   );
 
   const download = useCallback(
@@ -377,21 +376,14 @@ export const useOpportunityDocuments = ({
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getPath(file);
         toast.info(t`Uploading ${file.name}`);
 
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadPrivateFile(fileName, file, {
+          permission: "sales",
+          cacheControl: `${12 * 60 * 60}`
+        });
 
         if (fileUpload.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -406,7 +398,7 @@ export const useOpportunityDocuments = ({
       }
       revalidator.revalidate();
     },
-    [getPath, createDocumentRecord, carbon, revalidator, t]
+    [getPath, createDocumentRecord, revalidator, t]
   );
 
   return {
@@ -419,14 +411,12 @@ export const useOpportunityDocuments = ({
 };
 
 const OpportunityDocumentForm = (props: OpportunityDocumentFormProps) => {
-  const { company } = useUser();
-  const { carbon } = useCarbon();
   const permissions = usePermissions();
 
   const { upload } = useOpportunityDocuments(props);
 
   const uploadFiles = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon && company) {
+    if (e.target.files) {
       upload(Array.from(e.target.files));
     }
   };

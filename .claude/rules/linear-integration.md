@@ -96,6 +96,6 @@ The dialog reads `task.linearIssue`, hydrated in `quality.service.ts`
 - `companyIntegration` must exist and be `active` for both inbound webhook and outbound
   notifications.
 - API key is the raw `Authorization` header value (personal API key, `lin_api…`).
-- Migration `packages/database/supabase/migrations/20251127091215_add_linear_integration.sql`
+- Migration `packages/database/migrations/20251127091215_add_linear_integration.sql`
   seeds the `integration` row; the `externalIntegrationMapping` table comes from the
   `external-integration-mapping` migrations (see accounting-sync-handlers.md).

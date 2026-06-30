@@ -1,7 +1,7 @@
 # Carbon on a single VPS — Docker Swarm + Caddy
 
-Self-host the full Carbon stack (ERP + MES + Supabase + Redis + Inngest) on **one
-Linux VPS** as a single-node [Docker Swarm](https://docs.docker.com/engine/swarm/)
+Self-host the full Carbon stack (ERP + MES + Postgres/Auth/Realtime + MinIO +
+Redis + Inngest) on **one Linux VPS** as a single-node [Docker Swarm](https://docs.docker.com/engine/swarm/)
 behind an automatic-HTTPS [Caddy](https://caddyserver.com/docs/) reverse proxy.
 Secrets are real Docker Swarm secrets; only ports 80/443 are exposed.
 
@@ -24,11 +24,11 @@ $EDITOR .env                # hosts, URLs, ACME email, SMTP
 |---|---|
 | `docker-compose.prod.yml` | The Swarm stack (all services, secrets, volumes, overlay network). |
 | `deploy.sh` | Lifecycle: `init` / `build` / `deploy` / `up` / `migrate` / `secret` / `status` / `logs` / `down`. |
-| `Caddyfile` | Reverse proxy: erp/mes/api + security headers; optional Studio behind basic-auth. |
+| `Caddyfile` | Reverse proxy: erp/mes/api/storage + security headers. |
 | `bin/secrets-entrypoint.sh` | Injects Swarm secrets into env (`__SECRET__` placeholders) for each service. |
-| `postgres/01-roles.sh` | Supabase role bootstrap. |
+| `postgres/01-roles.sh` | Postgres service role bootstrap. |
 | `postgres/02-performance.sh` | Postgres tuning + `pg_stat_statements`. |
 | `scripts/gen-supabase-keys.sh` | Generates the Supabase JWT key trio (openssl only). |
 | `scripts/harden.sh` | Host hardening (UFW, fail2ban, swap, unattended-upgrades). |
-| `scripts/backup.sh` | Postgres dump + storage volume archive. |
+| `scripts/backup.sh` | Postgres dump + MinIO object storage archive. |
 | `.env.example` | Non-secret configuration template. |

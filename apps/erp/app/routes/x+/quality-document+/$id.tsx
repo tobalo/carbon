@@ -1,13 +1,12 @@
+import type { CarbonClient } from "@carbon/auth";
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
-import type { Database } from "@carbon/database";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
 import { msg } from "@lingui/core/macro";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Outlet, redirect, useLoaderData, useParams } from "react-router";
 import { PanelProvider, ResizablePanels } from "~/components/Layout/Panels";
@@ -42,7 +41,7 @@ type ApprovalContext = {
 };
 
 async function getQualityDocumentApprovalContext(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   documentId: string,
   status: string | null,
   companyId: string,

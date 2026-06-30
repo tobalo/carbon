@@ -9,6 +9,7 @@ import type {
 } from "react";
 
 import type { Group, User } from "~/modules/users";
+import type { PostgrestError } from "~/types";
 
 export type ComboBoxRefs = {
   containerRef: RefObject<HTMLDivElement>;
@@ -93,7 +94,7 @@ export type SelectionItemsById = Record<string, IndividualOrGroup>;
 
 export interface SelectInputProps {
   aria?: Omit<InputHTMLAttributes<HTMLInputElement>, "size">;
-  errors?: import("@supabase/supabase-js").PostgrestError;
+  errors?: PostgrestError;
   inputValue: string;
   innerProps: UserSelectProps;
   loading: boolean;

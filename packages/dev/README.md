@@ -1,6 +1,6 @@
 # crbn — Carbon Dev CLI
 
-Per-worktree development environment manager. Each worktree gets its own compose stack (postgres, kong, supabase, inngest, inbucket), port allocation, redis db, and JWT credentials.
+Per-worktree development environment manager. Each worktree gets its own compose stack (postgres, postgrest, kong, realtime, edge-runtime, inngest, inbucket), port allocation, redis db, and JWT credentials.
 
 ## Setup
 
@@ -28,9 +28,9 @@ source ./setup.sh   # adds crbn to PATH + installs shell wrapper
 | Command | Description |
 |---|---|
 | `crbn up` | Boot compose stack + apps. |
-| `crbn up --no-portless` | Localhost mode: fixed ports (API `:54321`, ERP `:3000`, MES `:3001`). |
+| `crbn up --no-portless` | Localhost mode: prefers API `:54321`, ERP `:3000`, MES `:3001`; falls back to assigned ports if a default is already occupied. |
 | `crbn up --borrow` | Reuse another worktree's running containers (DB, API, etc). |
-| `crbn up --no-apps` | Services only (postgres, kong, supabase, inngest, mail). |
+| `crbn up --no-apps` | Services only (postgres, postgrest, kong, realtime, edge-runtime, inngest, mail). |
 | `crbn up --no-migrate` | Skip database migrations. |
 | `crbn up --no-regen` | Skip type/swagger regeneration. |
 | `crbn up --pull` | Force `docker compose pull` even if images exist locally. |
@@ -48,15 +48,17 @@ source ./setup.sh   # adds crbn to PATH + installs shell wrapper
 
 ## Portless vs Localhost
 
-By default, `crbn up` uses [portless](https://github.com/nicholasgasior/portless) for `.dev` TLS URLs (e.g. `https://erp.dev.dev`). Pass `--no-portless` (or set `CARBON_PORTLESS=0`) for localhost mode with fixed ports:
+By default, `crbn up` uses [portless](https://github.com/nicholasgasior/portless) for `.dev` TLS URLs (e.g. `https://erp.<worktree>.dev`). Pass `--no-portless` (or set `CARBON_PORTLESS=0`) for localhost mode. Localhost mode prefers these default ports and falls back to the per-worktree assigned ports when one is already occupied:
 
 | Service | Port |
 |---|---|
-| Supabase API (Kong) | `54321` |
+| Carbon API (Kong) | `54321` |
 | ERP | `3000` |
 | MES | `3001` |
 
-OAuth redirect URIs in localhost mode use `http://localhost:54321/auth/v1/callback`.
+OAuth redirect URIs in localhost mode use the app Better Auth route, such as `http://localhost:3000/api/auth/callback/google` or `http://localhost:3000/api/auth/callback/microsoft`.
+
+If a default port is occupied, use the URL printed by `crbn up` or shown by `crbn status` when registering OAuth redirect URIs.
 
 `pnpm dev` defaults to `crbn up --no-portless`.
 

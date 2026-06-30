@@ -4658,12 +4658,6 @@ msgstr "Impossibile creare il webhook: {0}"
 msgid "Failed to create work center: {0}"
 msgstr "Impossibile creare il centro di lavoro: {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "Impossibile eliminare il file dalla posizione precedente"
-
-msgid "Failed to download file for moving"
-msgstr "Impossibile scaricare il file per lo spostamento"
-
 msgid "Failed to fetch item costs"
 msgstr "Impossibile recuperare i costi degli articoli"
 
@@ -4739,6 +4733,9 @@ msgstr "Impossibile caricare i dettagli della parte fornitore"
 msgid "Failed to load tracked entities"
 msgstr "Impossibile caricare le entità tracciate"
 
+msgid "Failed to move file"
+msgstr ""
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "Impossibile rimuovere l'immagine: {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "Impossibile caricare il file CSV."
 
 msgid "Failed to upload file"
 msgstr "Impossibile caricare il file"
-
-msgid "Failed to upload file to new location"
-msgstr "Impossibile caricare il file nella nuova posizione"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "Esaurimento scorte"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "Smetti di creare ordini di acquisto dopo questa data"
-
-msgid "Storage client not available"
-msgstr "Client di archiviazione non disponibile"
 
 msgid "Storage Rules"
 msgstr "Regole di Archiviazione"

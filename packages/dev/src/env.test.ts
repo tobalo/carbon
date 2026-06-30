@@ -5,7 +5,6 @@ import type { JwtCreds, PortMap } from "./worktree.js";
 const ports: PortMap = {
   PORT_DB: 54000,
   PORT_API: 54001,
-  PORT_STUDIO: 54002,
   PORT_INBUCKET: 54003,
   PORT_INNGEST: 54004,
   PORT_ERP: 54005,
@@ -19,7 +18,7 @@ const jwt: JwtCreds = {
 };
 
 describe("renderEnv (portless disabled)", () => {
-  it("emits localhost URLs for app and supabase", () => {
+  it("emits localhost URLs for app and API", () => {
     const out = renderEnv({
       slug: "feat-x",
       ports,
@@ -30,7 +29,14 @@ describe("renderEnv (portless disabled)", () => {
     expect(out).toContain("CARBON_WORKTREE=feat-x");
     expect(out).toContain("ERP_URL=http://localhost:54005");
     expect(out).toContain("MES_URL=http://localhost:54006");
-    expect(out).toContain("SUPABASE_URL=http://localhost:54001");
+    expect(out).toContain("CARBON_API_URL=http://localhost:54001");
+    expect(out).toContain(
+      "CARBON_DATABASE_URL=postgresql://postgres:postgres@localhost:54000/postgres"
+    );
+    expect(out).not.toContain("CARBON_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI=");
+    expect(out).not.toContain("CARBON_AUTH_EXTERNAL_AZURE_REDIRECT_URI=");
+    expect(out).not.toContain("SUPABASE_URL=http://localhost:54001");
+    expect(out).not.toContain("SUPABASE_DB_URL=");
     expect(out).not.toContain("PORTLESS_TLD");
   });
 
@@ -44,7 +50,6 @@ describe("renderEnv (portless disabled)", () => {
     });
     expect(out).toContain("PORT_DB=54000");
     expect(out).toContain("PORT_API=54001");
-    expect(out).toContain("PORT_STUDIO=54002");
     expect(out).toContain("PORT_INBUCKET=54003");
     expect(out).toContain("PORT_INNGEST=54004");
     expect(out).toContain("PORT_ERP=54005");
@@ -62,7 +67,7 @@ describe("renderEnv (portless disabled)", () => {
     expect(out).toMatch(/REDIS_URL=redis:\/\/localhost:\d+\/7/);
   });
 
-  it("injects jwt creds verbatim", () => {
+  it("injects auth creds under Carbon names", () => {
     const out = renderEnv({
       slug: "s",
       ports,
@@ -70,9 +75,12 @@ describe("renderEnv (portless disabled)", () => {
       jwt,
       portless: false
     });
-    expect(out).toContain("SUPABASE_JWT_SECRET=test-secret");
-    expect(out).toContain("SUPABASE_ANON_KEY=test-anon-key");
-    expect(out).toContain("SUPABASE_SERVICE_ROLE_KEY=test-service-key");
+    expect(out).toContain("CARBON_AUTH_JWT_SECRET=test-secret");
+    expect(out).toContain("CARBON_PUBLIC_KEY=test-anon-key");
+    expect(out).toContain("CARBON_SERVICE_ROLE_KEY=test-service-key");
+    expect(out).not.toContain("SUPABASE_JWT_SECRET=");
+    expect(out).not.toContain("SUPABASE_ANON_KEY=");
+    expect(out).not.toContain("SUPABASE_SERVICE_ROLE_KEY=");
   });
 
   it("ends with a trailing newline", () => {
@@ -88,7 +96,7 @@ describe("renderEnv (portless disabled)", () => {
 });
 
 describe("renderEnv (portless enabled)", () => {
-  it("emits portless hostnames for app and supabase", () => {
+  it("emits portless hostnames for app and API", () => {
     const out = renderEnv({
       slug: "feat-x",
       ports,
@@ -100,7 +108,14 @@ describe("renderEnv (portless enabled)", () => {
     expect(out).toContain("CARBON_WORKTREE=feat-x");
     expect(out).toContain("ERP_URL=https://erp.feat-x.dev");
     expect(out).toContain("MES_URL=https://mes.feat-x.dev");
-    expect(out).toContain("SUPABASE_URL=https://api.feat-x.dev");
+    expect(out).toContain("CARBON_API_URL=https://api.feat-x.dev");
+    expect(out).toContain(
+      "CARBON_DATABASE_URL=postgresql://postgres:postgres@localhost:54000/postgres"
+    );
+    expect(out).not.toContain("CARBON_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI=");
+    expect(out).not.toContain("CARBON_AUTH_EXTERNAL_AZURE_REDIRECT_URI=");
+    expect(out).not.toContain("SUPABASE_URL=https://api.feat-x.dev");
+    expect(out).not.toContain("SUPABASE_DB_URL=");
     expect(out).toContain("PORTLESS_TLD=dev");
   });
 
@@ -115,7 +130,6 @@ describe("renderEnv (portless enabled)", () => {
     });
     expect(out).toContain("PORT_DB=54000");
     expect(out).toContain("PORT_API=54001");
-    expect(out).toContain("PORT_STUDIO=54002");
     expect(out).toContain("PORT_INBUCKET=54003");
     expect(out).toContain("PORT_INNGEST=54004");
     expect(out).toContain("PORT_ERP=54005");
@@ -134,7 +148,7 @@ describe("renderEnv (portless enabled)", () => {
     expect(out).toMatch(/REDIS_URL=redis:\/\/localhost:\d+\/7/);
   });
 
-  it("injects jwt creds verbatim", () => {
+  it("injects auth creds under Carbon names", () => {
     const out = renderEnv({
       slug: "s",
       ports,
@@ -143,9 +157,12 @@ describe("renderEnv (portless enabled)", () => {
       portless: true,
       branchPrefix: "s"
     });
-    expect(out).toContain("SUPABASE_JWT_SECRET=test-secret");
-    expect(out).toContain("SUPABASE_ANON_KEY=test-anon-key");
-    expect(out).toContain("SUPABASE_SERVICE_ROLE_KEY=test-service-key");
+    expect(out).toContain("CARBON_AUTH_JWT_SECRET=test-secret");
+    expect(out).toContain("CARBON_PUBLIC_KEY=test-anon-key");
+    expect(out).toContain("CARBON_SERVICE_ROLE_KEY=test-service-key");
+    expect(out).not.toContain("SUPABASE_JWT_SECRET=");
+    expect(out).not.toContain("SUPABASE_ANON_KEY=");
+    expect(out).not.toContain("SUPABASE_SERVICE_ROLE_KEY=");
   });
 
   it("ends with a trailing newline", () => {

@@ -5,7 +5,7 @@
 // depends on ERP request-utils (GenericQueryFilters, sanitize) that don't
 // belong in the EE package.
 
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import { fetchAllFromTable } from "@carbon/database";
 import {
   type ItemRuleFilter,
@@ -16,7 +16,6 @@ import {
   type TransactionSurface,
   toItemRuleFilter
 } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { itemPostingGroupIdFromEmbed } from "./context";
 
 // Nullable filter columns appended to broadcast selects for item-target rules.
@@ -84,7 +83,7 @@ type RuleRowSelect = Pick<
  * still sees broadcasts.
  */
 export async function getActiveRulesForTargets(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     targetType: TargetType;
     targetIds: string[];
@@ -121,7 +120,7 @@ export async function getActiveRulesForTargets(
 
   const [explicit, broadcast] = await Promise.all([
     args.targetIds.length > 0
-      ? (client as SupabaseClient<Database>)
+      ? (client as CarbonClient)
           .from(table)
           .select(`${idCol}, storageRule:ruleId(${ruleCols})`)
           .in(idCol, args.targetIds)
@@ -203,7 +202,7 @@ export type RuleAssignmentRow = {
 };
 
 export async function getRuleAssignmentsForTarget(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { targetType: TargetType; targetId: string; companyId: string }
 ): Promise<{ data: RuleAssignmentRow[]; error: unknown }> {
   const table = assignmentTableFor(args.targetType);
@@ -233,7 +232,7 @@ export async function getRuleAssignmentsForTarget(
     .eq("targetType", args.targetType);
 
   const [res, broadcastsRes, itemCtxRes] = await Promise.all([
-    (client as SupabaseClient<Database>)
+    (client as CarbonClient)
       .from(table)
       .select(
         `${idCol}, ruleId, createdAt, storageRule:ruleId(id, name, targetType, severity, message, active, surfaces, appliesToAll)`
@@ -358,7 +357,7 @@ export async function getRuleAssignmentsForTarget(
 }
 
 export async function getStorageRulesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   targetType?: TargetType
 ) {
@@ -383,7 +382,7 @@ export async function getStorageRulesList(
 }
 
 export async function assignStorageRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     targetType: TargetType;
     targetId: string;
@@ -420,7 +419,7 @@ export async function assignStorageRule(
     };
   }
 
-  return (client as SupabaseClient<Database>)
+  return (client as CarbonClient)
     .from(table)
     .insert({
       [idCol]: args.targetId,
@@ -433,13 +432,13 @@ export async function assignStorageRule(
 }
 
 export async function unassignStorageRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { targetType: TargetType; targetId: string; ruleId: string }
 ) {
   const table = assignmentTableFor(args.targetType);
   const idCol = targetIdColumnFor(args.targetType);
 
-  return (client as SupabaseClient<Database>)
+  return (client as CarbonClient)
     .from(table)
     .delete()
     .eq(idCol, args.targetId)

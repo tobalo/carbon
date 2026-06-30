@@ -1,8 +1,7 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 
 export async function getActiveMaintenanceDispatchesByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string
 ) {
   return client
@@ -13,7 +12,7 @@ export async function getActiveMaintenanceDispatchesByLocation(
 }
 
 export async function getMaintenanceDispatchesAssignedTo(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string
 ) {
   return client
@@ -24,7 +23,7 @@ export async function getMaintenanceDispatchesAssignedTo(
 }
 
 export async function getBlockedWorkCenters(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string
 ) {
   return client
@@ -37,7 +36,7 @@ export async function getBlockedWorkCenters(
 }
 
 export async function getWorkCenterWithBlockingStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   workCenterId: string
 ) {
   return client
@@ -50,7 +49,7 @@ export async function getWorkCenterWithBlockingStatus(
 }
 
 export async function getMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   dispatchId: string
 ) {
   return client
@@ -71,7 +70,7 @@ export async function getMaintenanceDispatch(
 }
 
 export async function getActiveMaintenanceEventByEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeId: string
 ) {
   return client
@@ -96,7 +95,7 @@ export async function getActiveMaintenanceEventByEmployee(
 }
 
 export async function getActiveMaintenanceEventsCount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string
 ) {
   return client
@@ -106,7 +105,7 @@ export async function getActiveMaintenanceEventsCount(
 }
 
 export async function startMaintenanceEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     maintenanceDispatchId: string;
     employeeId: string;
@@ -133,7 +132,7 @@ export async function startMaintenanceEvent(
 }
 
 export async function endMaintenanceEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     eventId: string;
     endTime: string;
@@ -152,7 +151,7 @@ export async function endMaintenanceEvent(
 }
 
 export async function updateMaintenanceDispatchStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     dispatchId: string;
     status: "Open" | "Assigned" | "In Progress" | "Completed" | "Cancelled";
@@ -177,7 +176,7 @@ export async function updateMaintenanceDispatchStatus(
 }
 
 export async function assignMaintenanceDispatch(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     dispatchId: string;
     assignee: string;
@@ -197,7 +196,7 @@ export async function assignMaintenanceDispatch(
 }
 
 export async function getMaintenanceDispatchEvents(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   dispatchId: string
 ) {
   return client
@@ -208,7 +207,7 @@ export async function getMaintenanceDispatchEvents(
 }
 
 export async function getMaintenanceDispatchItems(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   dispatchId: string
 ) {
   return client
@@ -223,7 +222,7 @@ export async function getMaintenanceDispatchItems(
 }
 
 export async function getWorkCenterReplacementParts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   workCenterId: string
 ) {
   return client
@@ -238,7 +237,7 @@ export async function getWorkCenterReplacementParts(
 }
 
 export async function addMaintenanceDispatchItem(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     maintenanceDispatchId: string;
     itemId: string;
@@ -265,14 +264,14 @@ export async function addMaintenanceDispatchItem(
 }
 
 export async function deleteMaintenanceDispatchItem(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string
 ) {
   return client.from("maintenanceDispatchItem").delete().eq("id", itemId);
 }
 
 export async function getMaintenanceDispatchItemTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   maintenanceDispatchItemId: string
 ) {
   return client

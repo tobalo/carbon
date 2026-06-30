@@ -1,5 +1,6 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { inngest } from "../../client";
+import { invokeCarbonFunction } from "../invoke-carbon-function";
 
 export const mrpFunction = inngest.createFunction(
   { id: "mrp", retries: 2 },
@@ -28,7 +29,7 @@ export const mrpFunction = inngest.createFunction(
 
       for (const company of companies.data) {
         try {
-          const result = await serviceRole.functions.invoke("mrp", {
+          const result = await invokeCarbonFunction("mrp", {
             body: {
               type: "company",
               id: company.id,

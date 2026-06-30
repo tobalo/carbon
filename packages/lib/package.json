@@ -6,11 +6,9 @@
     "@carbon/kv": "workspace:*",
     "@carbon/notifications": "workspace:*",
     "@slack/web-api": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "inngest": "3.54.0",
     "resend": "3.5.0",
     "sst": "catalog:",
-    "supabase": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

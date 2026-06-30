@@ -7,7 +7,7 @@
 -- (added / renamed) without a migration. Companies FK to it by id; a NULL
 -- industryId means "custom" (free-text in customIndustryDescription). The
 -- onboarding demo template for an industry is a repo-committed backup file
--- (packages/database/supabase/backups/<industryId>.carbon.json.gz), published to
+-- (packages/database/backups/<industryId>.carbon.json.gz), published to
 -- the company-templates bucket by a manual step (ci/src/upload-backup-templates.ts)
 -- — it is not tracked on this table.
 

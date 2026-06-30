@@ -150,12 +150,6 @@ export function summaryLines(
       branchPrefix ? ports.PORT_API : undefined
     ),
     row(
-      pc.green,
-      "Studio",
-      url("studio", ports.PORT_STUDIO),
-      branchPrefix ? ports.PORT_STUDIO : undefined
-    ),
-    row(
       pc.yellow,
       "Mail",
       url("mail", ports.PORT_INBUCKET),

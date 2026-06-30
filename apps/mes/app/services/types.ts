@@ -1,4 +1,4 @@
-import type { FileObject } from "@supabase/storage-js";
+import type { ListedFileObject } from "@carbon/object-storage/server";
 import type {
   getJobByOperationId,
   getJobMakeMethod,
@@ -80,6 +80,8 @@ export type ProductionEvent = NonNullable<
 export type ProductionQuantity = NonNullable<
   Awaited<ReturnType<typeof getProductionQuantitiesForJobOperation>>["data"]
 >[number];
+
+export type FileObject = ListedFileObject;
 
 export type StorageItem = FileObject & {
   bucket: string;

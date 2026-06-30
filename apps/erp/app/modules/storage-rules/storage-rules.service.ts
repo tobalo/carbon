@@ -2,18 +2,18 @@
 // Cross-app queries (assignment loaders, list fetch for tab data, polymorphic
 // assign/unassign) live in `@carbon/ee/storage-rules`.
 
-import type { Database, Json } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
+import type { Json } from "@carbon/database";
 import type {
   ConditionAst,
   Severity,
   TargetType,
   TransactionSurface
 } from "@carbon/utils";
+import { sanitize } from "@carbon/utils";
 import { getLocalTimeZone, now } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 
 type StorageRuleFilters = {
   appliesToAll: boolean;
@@ -50,7 +50,7 @@ type StorageRuleUpdate = StorageRuleFilters & {
 };
 
 export async function getStorageRules(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & {
     search: string | null;
@@ -75,15 +75,12 @@ export async function getStorageRules(
   return query;
 }
 
-export async function getStorageRule(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getStorageRule(client: CarbonClient, id: string) {
   return client.from("storageRule").select("*").eq("id", id).single();
 }
 
 export async function upsertStorageRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   rule: StorageRuleInsert | StorageRuleUpdate
 ) {
   if ("createdBy" in rule) {
@@ -105,15 +102,12 @@ export async function upsertStorageRule(
     .single();
 }
 
-export async function deleteStorageRule(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteStorageRule(client: CarbonClient, id: string) {
   return client.from("storageRule").delete().eq("id", id);
 }
 
 export async function getRuleAssignmentCounts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   ruleIds: string[]
 ) {
   // Counts span both assignment tables. Each rule lives in exactly one
@@ -127,7 +121,7 @@ export async function getRuleAssignmentCounts(
 
   const results = await Promise.all(
     tables.map((table) =>
-      (client as SupabaseClient<Database>)
+      (client as CarbonClient)
         .from(table)
         .select("ruleId")
         .in("ruleId", ruleIds)

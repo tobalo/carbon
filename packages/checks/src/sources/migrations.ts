@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 export type SqlFile = { file: string; contents: string };
 
-const MIGRATIONS_REL = "packages/database/supabase/migrations";
+const MIGRATIONS_REL = "packages/database/migrations";
 
 /**
  * Repo root, resolved from this source file (not cwd) so checks run correctly

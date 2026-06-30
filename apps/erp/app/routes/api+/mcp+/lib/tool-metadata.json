@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-27T00:36:56.346Z",
+  "generated": "2026-06-30T17:27:11.721Z",
   "totalTools": 1221,
   "modules": 15,
   "tools": [
@@ -4187,9 +4187,9 @@
       "module": "inventory",
       "classification": "READ",
       "description": "get receipt files",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "companyId",
         "lineIds"
       ],
@@ -4199,6 +4199,7 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "lineIds": {
             "type": "array",
             "items": {
@@ -4207,6 +4208,7 @@
           }
         },
         "required": [
+          "_client",
           "lineIds"
         ]
       }
@@ -4827,9 +4829,9 @@
       "module": "inventory",
       "classification": "READ",
       "description": "get shipment files",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "companyId",
         "lineIds"
       ],
@@ -4839,6 +4841,7 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "lineIds": {
             "type": "array",
             "items": {
@@ -4847,6 +4850,7 @@
           }
         },
         "required": [
+          "_client",
           "lineIds"
         ]
       }
@@ -6881,9 +6885,9 @@
       "module": "invoicing",
       "classification": "WRITE",
       "description": "create purchase invoice from purchase order",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "purchaseOrderId",
         "companyId",
         "userId"
@@ -6896,11 +6900,13 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "purchaseOrderId": {
             "type": "string"
           }
         },
         "required": [
+          "_client",
           "purchaseOrderId"
         ]
       }
@@ -6910,9 +6916,9 @@
       "module": "invoicing",
       "classification": "WRITE",
       "description": "create sales invoice from sales order",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "salesOrderId",
         "companyId",
         "userId"
@@ -6925,11 +6931,13 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "salesOrderId": {
             "type": "string"
           }
         },
         "required": [
+          "_client",
           "salesOrderId"
         ]
       }
@@ -6939,9 +6947,9 @@
       "module": "invoicing",
       "classification": "WRITE",
       "description": "create sales invoice from shipment",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "shipmentId",
         "companyId",
         "userId"
@@ -6954,11 +6962,13 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "shipmentId": {
             "type": "string"
           }
         },
         "required": [
+          "_client",
           "shipmentId"
         ]
       }
@@ -8151,9 +8161,9 @@
       "module": "items",
       "classification": "WRITE",
       "description": "activate method version",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "payload"
       ],
       "injectAuth": [
@@ -8162,12 +8172,22 @@
       "schema": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
+          "_client": {},
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
           }
         },
         "required": [
-          "id"
+          "_client",
+          "payload"
         ]
       }
     },
@@ -8176,9 +8196,9 @@
       "module": "items",
       "classification": "WRITE",
       "description": "copy item",
-      "paramCount": 8,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "args"
       ],
       "injectAuth": [
@@ -8189,40 +8209,12 @@
       "schema": {
         "type": "object",
         "properties": {
-          "targetId": {
-            "type": "string"
-          },
-          "sourceId": {
-            "type": "string"
-          },
-          "billOfMaterial": {
-            "type": "string"
-          },
-          "billOfProcess": {
-            "type": "string"
-          },
-          "parameters": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "string"
-          },
-          "steps": {
-            "type": "string"
-          },
-          "workInstructions": {
-            "type": "string"
-          }
+          "_client": {},
+          "args": {}
         },
         "required": [
-          "targetId",
-          "sourceId",
-          "billOfMaterial",
-          "billOfProcess",
-          "parameters",
-          "tools",
-          "steps",
-          "workInstructions"
+          "_client",
+          "args"
         ]
       }
     },
@@ -8231,9 +8223,9 @@
       "module": "items",
       "classification": "WRITE",
       "description": "copy make method",
-      "paramCount": 8,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "args"
       ],
       "injectAuth": [
@@ -8244,40 +8236,12 @@
       "schema": {
         "type": "object",
         "properties": {
-          "targetId": {
-            "type": "string"
-          },
-          "sourceId": {
-            "type": "string"
-          },
-          "billOfMaterial": {
-            "type": "string"
-          },
-          "billOfProcess": {
-            "type": "string"
-          },
-          "parameters": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "string"
-          },
-          "steps": {
-            "type": "string"
-          },
-          "workInstructions": {
-            "type": "string"
-          }
+          "_client": {},
+          "args": {}
         },
         "required": [
-          "targetId",
-          "sourceId",
-          "billOfMaterial",
-          "billOfProcess",
-          "parameters",
-          "tools",
-          "steps",
-          "workInstructions"
+          "_client",
+          "args"
         ]
       }
     },
@@ -9113,9 +9077,9 @@
       "module": "items",
       "classification": "READ",
       "description": "get item files",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "itemId",
         "companyId"
       ],
@@ -9125,11 +9089,13 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "itemId": {
             "type": "string"
           }
         },
         "required": [
+          "_client",
           "itemId"
         ]
       }
@@ -18464,7 +18430,7 @@
       "description": "convert supplier quote to order",
       "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "payload"
       ],
       "injectAuth": [
@@ -18474,14 +18440,24 @@
       "schema": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "selectedLines": {}
+          "_client": {},
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "selectedLines": {}
+            },
+            "required": [
+              "id",
+              "selectedLines"
+            ]
+          }
         },
         "required": [
-          "id",
-          "selectedLines"
+          "_client",
+          "payload"
         ]
       }
     },
@@ -22928,9 +22904,9 @@
       "module": "quality",
       "classification": "READ",
       "description": "get quality files",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "id",
         "companyId"
       ],
@@ -22940,11 +22916,13 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "id": {
             "type": "string"
           }
         },
         "required": [
+          "_client",
           "id"
         ]
       }
@@ -27612,9 +27590,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "convert sales rfq to quote",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "payload"
       ],
       "injectAuth": [
@@ -27624,12 +27602,22 @@
       "schema": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
+          "_client": {},
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
           }
         },
         "required": [
-          "id"
+          "_client",
+          "payload"
         ]
       }
     },
@@ -27638,9 +27626,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "convert quote to order",
-      "paramCount": 5,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "payload"
       ],
       "injectAuth": [
@@ -27650,23 +27638,33 @@
       "schema": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "selectedLines": {},
-          "purchaseOrderNumber": {
-            "type": "string"
-          },
-          "digitalQuoteAcceptedBy": {
-            "type": "string"
-          },
-          "digitalQuoteAcceptedByEmail": {
-            "type": "string"
+          "_client": {},
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "selectedLines": {},
+              "purchaseOrderNumber": {
+                "type": "string"
+              },
+              "digitalQuoteAcceptedBy": {
+                "type": "string"
+              },
+              "digitalQuoteAcceptedByEmail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "selectedLines"
+            ]
           }
         },
         "required": [
-          "id",
-          "selectedLines"
+          "_client",
+          "payload"
         ]
       }
     },
@@ -27675,9 +27673,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "copy quote line",
-      "paramCount": 9,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "payload"
       ],
       "injectAuth": [
@@ -27688,50 +27686,12 @@
       "schema": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "item",
-              "quoteLine",
-              "method",
-              "quoteToQuote"
-            ]
-          },
-          "sourceId": {
-            "type": "string"
-          },
-          "targetId": {
-            "type": "string"
-          },
-          "billOfMaterial": {
-            "type": "string"
-          },
-          "billOfProcess": {
-            "type": "string"
-          },
-          "parameters": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "string"
-          },
-          "steps": {
-            "type": "string"
-          },
-          "workInstructions": {
-            "type": "string"
-          }
+          "_client": {},
+          "payload": {}
         },
         "required": [
-          "type",
-          "sourceId",
-          "targetId",
-          "billOfMaterial",
-          "billOfProcess",
-          "parameters",
-          "tools",
-          "steps",
-          "workInstructions"
+          "_client",
+          "payload"
         ]
       }
     },
@@ -27740,9 +27700,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "copy quote",
-      "paramCount": 9,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "payload"
       ],
       "injectAuth": [
@@ -27753,50 +27713,12 @@
       "schema": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "item",
-              "quoteLine",
-              "method",
-              "quoteToQuote"
-            ]
-          },
-          "sourceId": {
-            "type": "string"
-          },
-          "targetId": {
-            "type": "string"
-          },
-          "billOfMaterial": {
-            "type": "string"
-          },
-          "billOfProcess": {
-            "type": "string"
-          },
-          "parameters": {
-            "type": "string"
-          },
-          "tools": {
-            "type": "string"
-          },
-          "steps": {
-            "type": "string"
-          },
-          "workInstructions": {
-            "type": "string"
-          }
+          "_client": {},
+          "payload": {}
         },
         "required": [
-          "type",
-          "sourceId",
-          "targetId",
-          "billOfMaterial",
-          "billOfProcess",
-          "parameters",
-          "tools",
-          "steps",
-          "workInstructions"
+          "_client",
+          "payload"
         ]
       }
     },
@@ -31661,9 +31583,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "upsert make method from quote line",
-      "paramCount": 4,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "lineMethod"
       ],
       "injectAuth": [
@@ -31674,51 +31596,61 @@
       "schema": {
         "type": "object",
         "properties": {
-          "itemId": {
-            "type": "string"
-          },
-          "quoteId": {
-            "type": "string"
-          },
-          "quoteLineId": {
-            "type": "string"
-          },
-          "parts": {
+          "_client": {},
+          "lineMethod": {
             "type": "object",
             "properties": {
-              "billOfMaterial": {
-                "type": "boolean"
+              "itemId": {
+                "type": "string"
               },
-              "billOfProcess": {
-                "type": "boolean"
+              "quoteId": {
+                "type": "string"
               },
-              "parameters": {
-                "type": "boolean"
+              "quoteLineId": {
+                "type": "string"
               },
-              "tools": {
-                "type": "boolean"
-              },
-              "steps": {
-                "type": "boolean"
-              },
-              "workInstructions": {
-                "type": "boolean"
+              "parts": {
+                "type": "object",
+                "properties": {
+                  "billOfMaterial": {
+                    "type": "boolean"
+                  },
+                  "billOfProcess": {
+                    "type": "boolean"
+                  },
+                  "parameters": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "type": "boolean"
+                  },
+                  "steps": {
+                    "type": "boolean"
+                  },
+                  "workInstructions": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "billOfMaterial",
+                  "billOfProcess",
+                  "parameters",
+                  "tools",
+                  "steps",
+                  "workInstructions"
+                ]
               }
             },
             "required": [
-              "billOfMaterial",
-              "billOfProcess",
-              "parameters",
-              "tools",
-              "steps",
-              "workInstructions"
+              "itemId",
+              "quoteId",
+              "quoteLineId"
             ]
           }
         },
         "required": [
-          "itemId",
-          "quoteId",
-          "quoteLineId"
+          "_client",
+          "lineMethod"
         ]
       }
     },
@@ -31727,9 +31659,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "upsert make method from quote method",
-      "paramCount": 3,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "quoteMethod"
       ],
       "injectAuth": [
@@ -31740,47 +31672,57 @@
       "schema": {
         "type": "object",
         "properties": {
-          "sourceId": {
-            "type": "string"
-          },
-          "targetId": {
-            "type": "string"
-          },
-          "parts": {
+          "_client": {},
+          "quoteMethod": {
             "type": "object",
             "properties": {
-              "billOfMaterial": {
-                "type": "boolean"
+              "sourceId": {
+                "type": "string"
               },
-              "billOfProcess": {
-                "type": "boolean"
+              "targetId": {
+                "type": "string"
               },
-              "parameters": {
-                "type": "boolean"
-              },
-              "tools": {
-                "type": "boolean"
-              },
-              "steps": {
-                "type": "boolean"
-              },
-              "workInstructions": {
-                "type": "boolean"
+              "parts": {
+                "type": "object",
+                "properties": {
+                  "billOfMaterial": {
+                    "type": "boolean"
+                  },
+                  "billOfProcess": {
+                    "type": "boolean"
+                  },
+                  "parameters": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "type": "boolean"
+                  },
+                  "steps": {
+                    "type": "boolean"
+                  },
+                  "workInstructions": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "billOfMaterial",
+                  "billOfProcess",
+                  "parameters",
+                  "tools",
+                  "steps",
+                  "workInstructions"
+                ]
               }
             },
             "required": [
-              "billOfMaterial",
-              "billOfProcess",
-              "parameters",
-              "tools",
-              "steps",
-              "workInstructions"
+              "sourceId",
+              "targetId"
             ]
           }
         },
         "required": [
-          "sourceId",
-          "targetId"
+          "_client",
+          "quoteMethod"
         ]
       }
     },
@@ -32366,9 +32308,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "upsert quote line method",
-      "paramCount": 5,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "lineMethod"
       ],
       "injectAuth": [
@@ -32379,52 +32321,62 @@
       "schema": {
         "type": "object",
         "properties": {
-          "itemId": {
-            "type": "string"
-          },
-          "quoteId": {
-            "type": "string"
-          },
-          "quoteLineId": {
-            "type": "string"
-          },
-          "configuration": {},
-          "parts": {
+          "_client": {},
+          "lineMethod": {
             "type": "object",
             "properties": {
-              "billOfMaterial": {
-                "type": "boolean"
+              "itemId": {
+                "type": "string"
               },
-              "billOfProcess": {
-                "type": "boolean"
+              "quoteId": {
+                "type": "string"
               },
-              "parameters": {
-                "type": "boolean"
+              "quoteLineId": {
+                "type": "string"
               },
-              "tools": {
-                "type": "boolean"
-              },
-              "steps": {
-                "type": "boolean"
-              },
-              "workInstructions": {
-                "type": "boolean"
+              "configuration": {},
+              "parts": {
+                "type": "object",
+                "properties": {
+                  "billOfMaterial": {
+                    "type": "boolean"
+                  },
+                  "billOfProcess": {
+                    "type": "boolean"
+                  },
+                  "parameters": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "type": "boolean"
+                  },
+                  "steps": {
+                    "type": "boolean"
+                  },
+                  "workInstructions": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "billOfMaterial",
+                  "billOfProcess",
+                  "parameters",
+                  "tools",
+                  "steps",
+                  "workInstructions"
+                ]
               }
             },
             "required": [
-              "billOfMaterial",
-              "billOfProcess",
-              "parameters",
-              "tools",
-              "steps",
-              "workInstructions"
+              "itemId",
+              "quoteId",
+              "quoteLineId"
             ]
           }
         },
         "required": [
-          "itemId",
-          "quoteId",
-          "quoteLineId"
+          "_client",
+          "lineMethod"
         ]
       }
     },
@@ -32458,9 +32410,9 @@
       "module": "sales",
       "classification": "WRITE",
       "description": "upsert quote material make method",
-      "paramCount": 4,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "quoteMethod"
       ],
       "injectAuth": [
@@ -32471,48 +32423,58 @@
       "schema": {
         "type": "object",
         "properties": {
-          "sourceId": {
-            "type": "string"
-          },
-          "targetId": {
-            "type": "string"
-          },
-          "configuration": {},
-          "parts": {
+          "_client": {},
+          "quoteMethod": {
             "type": "object",
             "properties": {
-              "billOfMaterial": {
-                "type": "boolean"
+              "sourceId": {
+                "type": "string"
               },
-              "billOfProcess": {
-                "type": "boolean"
+              "targetId": {
+                "type": "string"
               },
-              "parameters": {
-                "type": "boolean"
-              },
-              "tools": {
-                "type": "boolean"
-              },
-              "steps": {
-                "type": "boolean"
-              },
-              "workInstructions": {
-                "type": "boolean"
+              "configuration": {},
+              "parts": {
+                "type": "object",
+                "properties": {
+                  "billOfMaterial": {
+                    "type": "boolean"
+                  },
+                  "billOfProcess": {
+                    "type": "boolean"
+                  },
+                  "parameters": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "type": "boolean"
+                  },
+                  "steps": {
+                    "type": "boolean"
+                  },
+                  "workInstructions": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "billOfMaterial",
+                  "billOfProcess",
+                  "parameters",
+                  "tools",
+                  "steps",
+                  "workInstructions"
+                ]
               }
             },
             "required": [
-              "billOfMaterial",
-              "billOfProcess",
-              "parameters",
-              "tools",
-              "steps",
-              "workInstructions"
+              "sourceId",
+              "targetId"
             ]
           }
         },
         "required": [
-          "sourceId",
-          "targetId"
+          "_client",
+          "quoteMethod"
         ]
       }
     },
@@ -35915,9 +35877,9 @@
       "module": "shared",
       "classification": "WRITE",
       "description": "generate embedding",
-      "paramCount": 1,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "text"
       ],
       "injectAuth": [
@@ -35928,11 +35890,13 @@
       "schema": {
         "type": "object",
         "properties": {
+          "_client": {},
           "text": {
             "type": "string"
           }
         },
         "required": [
+          "_client",
           "text"
         ]
       }
@@ -36179,10 +36143,10 @@
       }
     },
     {
-      "name": "shared_getBase64ImageFromSupabase",
+      "name": "shared_getBase64ImageFromStorage",
       "module": "shared",
       "classification": "READ",
-      "description": "get base64 image from supabase",
+      "description": "get base64 image from storage",
       "paramCount": 1,
       "serviceParams": [
         "client",
@@ -36452,9 +36416,9 @@
       "module": "shared",
       "classification": "WRITE",
       "description": "import csv",
-      "paramCount": 4,
+      "paramCount": 2,
       "serviceParams": [
-        "client",
+        "_client",
         "args"
       ],
       "injectAuth": [
@@ -36463,19 +36427,29 @@
       "schema": {
         "type": "object",
         "properties": {
-          "table": {
-            "type": "string"
-          },
-          "filePath": {
-            "type": "string"
-          },
-          "columnMappings": {},
-          "enumMappings": {}
+          "_client": {},
+          "args": {
+            "type": "object",
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "filePath": {
+                "type": "string"
+              },
+              "columnMappings": {},
+              "enumMappings": {}
+            },
+            "required": [
+              "table",
+              "filePath",
+              "columnMappings"
+            ]
+          }
         },
         "required": [
-          "table",
-          "filePath",
-          "columnMappings"
+          "_client",
+          "args"
         ]
       }
     },

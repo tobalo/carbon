@@ -1,9 +1,8 @@
+import type { CarbonClient } from "@carbon/auth";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import { redis } from "@carbon/kv";
 import { trigger } from "@carbon/lib/trigger";
 import { isUrl } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSlackWebClient } from "./client";
 
 export type DocumentType = "nonConformance";
@@ -28,7 +27,7 @@ export interface SlackDocumentThread {
 }
 
 export async function createIssueSlackThread(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     carbonUrl: string;
     companyId: string;
@@ -150,7 +149,7 @@ export async function createIssueSlackThread(
 }
 
 export async function deleteSlackDocumentThread(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: DocumentType,
   documentId: string,
   companyId: string
@@ -164,7 +163,7 @@ export async function deleteSlackDocumentThread(
 }
 
 export async function getCompanySlackThreads(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   documentType?: DocumentType
 ) {
@@ -181,7 +180,7 @@ export async function getCompanySlackThreads(
 }
 
 export async function getIssueSlackThread(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   nonConformanceId: string,
   companyId: string
 ) {
@@ -194,7 +193,7 @@ export async function getIssueSlackThread(
 }
 
 export async function getSlackAuth(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string
 ): Promise<SlackAuth | null> {
@@ -231,7 +230,7 @@ export async function getSlackAuth(
 }
 
 export async function getSlackUserIdByCarbonId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   accessToken: string,
   userId: string
 ) {
@@ -266,7 +265,7 @@ export async function getSlackUserIdByCarbonId(
 }
 
 export async function getSlackDocumentThread(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: DocumentType,
   documentId: string,
   companyId: string
@@ -281,7 +280,7 @@ export async function getSlackDocumentThread(
 }
 
 export async function getSlackIntegrationByTeamId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   teamId: string
 ) {
   return await client
@@ -292,7 +291,7 @@ export async function getSlackIntegrationByTeamId(
 }
 
 export async function getCarbonEmployeeFromSlackId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   accessToken: string,
   slackUserId: string,
   carbonCompanyId: string
@@ -361,7 +360,7 @@ export async function getCarbonEmployeeFromSlackId(
 }
 
 export async function syncDocumentToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     documentType: DocumentType;
     documentId: string;
@@ -535,7 +534,7 @@ export async function syncDocumentToSlack(
 }
 
 export async function syncDocumentCreatedToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     channelId: string;
     companyId: string;
@@ -561,7 +560,7 @@ export async function syncDocumentCreatedToSlack(
 }
 
 export async function syncDocumentStatusToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     documentType: DocumentType;
     documentId: string;
@@ -590,7 +589,7 @@ export async function syncDocumentStatusToSlack(
 }
 
 export async function syncDocumentAssignmentToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     documentType: DocumentType;
     documentId: string;
@@ -617,7 +616,7 @@ export async function syncDocumentAssignmentToSlack(
 }
 
 export async function syncDocumentCustomToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     companyId: string;
     customType: string;
@@ -641,7 +640,7 @@ export async function syncDocumentCustomToSlack(
 }
 
 export async function syncIssueStatusToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     companyId: string;
     newStatus: string;
@@ -663,7 +662,7 @@ export async function syncIssueStatusToSlack(
 }
 
 export async function syncIssueTaskToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     companyId: string;
     completedAt?: string;
@@ -715,7 +714,7 @@ export async function syncIssueTaskToSlack(
 }
 
 export async function syncIssueAssignmentToSlack(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     nonConformanceId: string;
     companyId: string;
@@ -735,7 +734,7 @@ export async function syncIssueAssignmentToSlack(
 }
 
 export async function updateSlackDocumentThread(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   updates: {
     channelId?: string;

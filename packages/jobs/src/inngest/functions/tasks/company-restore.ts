@@ -408,7 +408,7 @@ export const companyRestoreFunction = inngest.createFunction(
 
       try {
         const name = backupNameFromSource(filePath);
-        const backup = await readBackup(client, companyId, name);
+        const backup = await readBackup(companyId, name);
         const targetGroupId = await getCompanyGroupId(client, companyId);
 
         // Group-scoped data (chart of accounts, currencies, dimensions) is shared
@@ -485,12 +485,7 @@ export const companyRestoreFunction = inngest.createFunction(
             includeStorage: "all",
             name: snapshotPath
           });
-          await writeBackupManifest(
-            client,
-            companyId,
-            snapshotPath,
-            snapshot.manifest
-          );
+          await writeBackupManifest(companyId, snapshotPath, snapshot.manifest);
           await writeRestoreMarker(client, {
             companyId,
             userId,
@@ -527,7 +522,6 @@ export const companyRestoreFunction = inngest.createFunction(
           try {
             await report({ phase: "files", done: 0, total: fileCount });
             await restoreAssetsFromBackup(
-              client,
               {
                 files: backup.manifest.storage,
                 srcBucket: companyId,
@@ -607,7 +601,7 @@ export const companyRestoreFinalizeFunction = inngest.createFunction(
       const snapshotPath = marker?.metadata.snapshotPath;
 
       if (snapshotPath) {
-        await removeStoragePrefix(client, companyId, backupDir(snapshotPath));
+        await removeStoragePrefix(companyId, backupDir(snapshotPath));
       }
       await deleteRestoreMarker(client, companyId, restoreRunId);
 
@@ -661,7 +655,7 @@ export const companyRestoreRevertFunction = inngest.createFunction(
         // check). Wipe + reload the SAME scope the forward restore touched so the
         // undo is exact — including group data (chart of accounts) when the
         // forward run covered it.
-        const snapshot = await readBackup(client, companyId, snapshotPath);
+        const snapshot = await readBackup(companyId, snapshotPath);
         const targetGroupId = await getCompanyGroupId(client, companyId);
         const catalog = await getCompanyTableCatalog(db);
         const { rows, idRewrite } = await wipeAndLoad(db, catalog, snapshot, {
@@ -676,7 +670,6 @@ export const companyRestoreRevertFunction = inngest.createFunction(
           snapshot.manifest.storage?.filter((f) => f.included).length ?? 0;
         await report({ phase: "files", done: 0, total: fileCount });
         await restoreAssetsFromBackup(
-          client,
           {
             files: snapshot.manifest.storage,
             srcBucket: companyId,
@@ -688,7 +681,7 @@ export const companyRestoreRevertFunction = inngest.createFunction(
           (done, total) => report({ phase: "files", done, total })
         );
 
-        await removeStoragePrefix(client, companyId, backupDir(snapshotPath));
+        await removeStoragePrefix(companyId, backupDir(snapshotPath));
         await deleteRestoreMarker(client, companyId, restoreRunId);
 
         console.log("Company restore reverted", {

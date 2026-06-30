@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Card,
   CardContent,
@@ -22,7 +21,6 @@ import {
 } from "@carbon/react";
 import { convertKbToString } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import { LuDownload, LuEllipsisVertical, LuTrash } from "react-icons/lu";
@@ -33,26 +31,34 @@ import FileDropzone from "~/components/FileDropzone";
 import { useDateFormatter, useUser } from "~/hooks";
 import { getDocumentType } from "~/modules/shared";
 import { path } from "~/utils/path";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 
 type Props = {
-  files: FileObject[];
+  files: DefaultAttachmentFile[];
+  permission: string;
   storagePathPrefix: string;
   title: ReactNode;
   description: ReactNode;
+};
+
+export type DefaultAttachmentFile = {
+  name: string;
+  created_at?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 const PREVIEWABLE = new Set(["PDF", "Image"]);
 
 export default function DefaultAttachmentsPanel({
   files,
+  permission,
   storagePathPrefix,
   title,
   description
 }: Props) {
   const { t } = useLingui();
   const { formatDate } = useDateFormatter();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const revalidator = useRevalidator();
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
@@ -64,23 +70,17 @@ export default function DefaultAttachmentsPanel({
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      if (!carbon) {
-        toast.error(t`Storage client not available`);
-        return;
-      }
       for (const file of acceptedFiles) {
         const safeName = stripSpecialCharacters(file.name);
-        const upload = await carbon.storage
-          .from("private")
-          .upload(fullPath(safeName), file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const upload = await uploadPrivateFile(fullPath(safeName), file, {
+          cacheControl: `${12 * 60 * 60}`,
+          permission
+        });
         if (upload.error) toast.error(t`Failed to upload ${file.name}`);
       }
       revalidator.revalidate();
     },
-    [carbon, fullPath, revalidator, t]
+    [fullPath, permission, revalidator, t]
   );
 
   const onDownload = useCallback(
@@ -107,16 +107,10 @@ export default function DefaultAttachmentsPanel({
 
   const onDelete = useCallback(
     async (name: string) => {
-      if (!carbon) {
-        toast.error(t`Storage client not available`);
-        return;
-      }
       const storagePath = fullPath(name);
       setDeletingPath(storagePath);
       try {
-        const result = await carbon.storage
-          .from("private")
-          .remove([storagePath]);
+        const result = await removePrivateFiles([storagePath], { permission });
         if (result.error) {
           toast.error(result.error.message || t`Error deleting file`);
         } else {
@@ -127,7 +121,7 @@ export default function DefaultAttachmentsPanel({
         setDeletingPath(null);
       }
     },
-    [carbon, fullPath, revalidator, t]
+    [fullPath, permission, revalidator, t]
   );
 
   return (
@@ -160,9 +154,10 @@ export default function DefaultAttachmentsPanel({
                 const type = getDocumentType(f.name);
                 const isPreviewable = PREVIEWABLE.has(type);
                 const filePath = fullPath(f.name);
+                const sizeBytes = f.metadata?.size;
                 const sizeKb =
-                  f.metadata?.size != null
-                    ? Math.round(f.metadata.size / 1024)
+                  typeof sizeBytes === "number"
+                    ? Math.round(sizeBytes / 1024)
                     : null;
 
                 return (

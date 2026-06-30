@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Array as ArrayInput,
   Hidden,
@@ -70,6 +69,7 @@ import { ConfirmDelete } from "~/components/Modals";
 import { usePermissions, useRouteData, useUser } from "~/hooks";
 import { procedureStepType } from "~/modules/shared";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import {
   procedureParameterValidator,
   procedureStepValidator
@@ -717,7 +717,6 @@ function ProcedureStepForm({
     }
   });
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -750,16 +749,18 @@ function ProcedureStepForm({
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/procedures/${procedureId}/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "production"
+    });
 
-    if (result?.error) {
+    if (result.error) {
       toast.error(t`Failed to upload image`);
       throw new Error(result.error.message);
     }
 
-    if (!result?.data) {
+    if (!result.data) {
       throw new Error("Failed to upload image");
     }
 

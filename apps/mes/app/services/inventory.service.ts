@@ -1,11 +1,11 @@
-import { SUPABASE_URL } from "@carbon/auth";
+import type { CarbonClient } from "@carbon/auth";
+import { getPublicStorageUrl } from "@carbon/auth";
 import type { Database } from "@carbon/database";
 import type {
   DocumentTemplate,
   DocumentTemplateType
 } from "@carbon/documents/template";
 import { toDocumentTemplate } from "@carbon/documents/template";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { zfd } from "zod-form-data";
 
@@ -15,7 +15,7 @@ import { zfd } from "zod-form-data";
  * nothing is stored, so the output falls back to the type's default.
  */
 export async function getDocumentTemplateConfig(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   documentType: DocumentTemplateType
 ): Promise<DocumentTemplate | null> {
@@ -37,7 +37,7 @@ export const inventoryAdjustmentValidator = z.object({
 });
 
 export async function getBatchNumbersForItem(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -75,7 +75,7 @@ export async function getBatchNumbersForItem(
 }
 
 export async function getCompanySettings(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -85,12 +85,7 @@ export async function getCompanySettings(
     .single();
 }
 
-const PUBLIC_STORAGE_URL_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/public/`;
-
-export async function getCompany(
-  client: SupabaseClient<Database>,
-  companyId: string
-) {
+export async function getCompany(client: CarbonClient, companyId: string) {
   const company = await client
     .from("company")
     .select("*")
@@ -100,7 +95,7 @@ export async function getCompany(
   // Logos are stored as storage paths; expand to full public URLs (matches the
   // ERP getCompany) so they're fetchable by the PDF/ZPL pipeline.
   const url = (p: string | null) =>
-    p ? `${PUBLIC_STORAGE_URL_PREFIX}${p}` : p;
+    p ? (getPublicStorageUrl("public", p) ?? p) : p;
   return {
     data: {
       ...company.data,
@@ -114,7 +109,7 @@ export async function getCompany(
 }
 
 export async function getSerialNumbersForItem(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -158,7 +153,7 @@ export async function getSerialNumbersForItem(
  * quantities already allocated to other non-cancelled picking lines.
  */
 export async function getAvailableTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -183,7 +178,7 @@ export async function getAvailableTrackedEntities(
  * the picker's default sort. Falls back to "Default" (smart) when unset.
  */
 export async function getPickOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { itemId: string; locationId: string; companyId: string }
 ): Promise<Database["public"]["Enums"]["pickMethodSortMethod"]> {
   const { data } = await client
@@ -210,7 +205,7 @@ export type PickingListRecommendation = {
  * Returns a map of pickingListLineId → recommended lots (empty/partial if short).
  */
 export async function getPickingListRecommendations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ): Promise<Record<string, PickingListRecommendation[]>> {
   const [linesResult, availableResult] = await Promise.all([
@@ -291,7 +286,7 @@ export type JobMaterialPickedQuantity = {
  * activity simply have no entry in the returned map. Never throws (returns {}).
  */
 export async function getPickedQuantitiesByJobMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobMaterialIds: string[]
 ): Promise<Record<string, JobMaterialPickedQuantity>> {
   const picked: Record<string, JobMaterialPickedQuantity> = {};
@@ -322,7 +317,7 @@ export async function getPickedQuantitiesByJobMaterial(
 }
 
 export async function insertManualInventoryAdjustment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   inventoryAdjustment: z.infer<typeof inventoryAdjustmentValidator> & {
     companyId: string;
     createdBy: string;

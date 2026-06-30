@@ -18,7 +18,6 @@ import { basename, dirname, join, normalize } from "pathe";
 export const PORT_NAMES = [
   "PORT_DB",
   "PORT_API",
-  "PORT_STUDIO",
   "PORT_INBUCKET",
   "PORT_INNGEST",
   "PORT_ERP",
@@ -246,7 +245,7 @@ function parseRegistryEntry(raw: unknown): RegistryEntry | null {
   if (!isJwtCreds(r.jwt)) return null;
   return {
     worktreeRoot: r.worktreeRoot,
-    ports: r.ports,
+    ports: pickKnownPorts(r.ports),
     redisDb: r.redisDb,
     jwt: r.jwt
   };
@@ -259,6 +258,14 @@ function isPortMap(v: unknown): v is PortMap {
     if (typeof o[name] !== "number" || !Number.isInteger(o[name])) return false;
   }
   return true;
+}
+
+function pickKnownPorts(ports: PortMap): PortMap {
+  const known = {} as PortMap;
+  for (const name of PORT_NAMES) {
+    known[name] = ports[name];
+  }
+  return known;
 }
 
 function isJwtCreds(v: unknown): v is JwtCreds {
@@ -338,8 +345,8 @@ async function pickFreePort(taken: Set<number>): Promise<number> {
 }
 
 // Mint a fresh JWT_SECRET + the matching `anon` and `service_role` HS256 JWTs.
-// Mirrors supabase's well-known dev token shape so all downstream services
-// (gotrue, postgrest, kong, storage, studio) accept them without further config.
+// Mirrors the local PostgREST/Kong dev token shape so services accept generated
+// anon and service-role keys without further config.
 function generateJwtCreds(): JwtCreds {
   // 32-byte (256-bit) secret, hex-encoded — matches HS256 key strength.
   const secret = randomBytes(32).toString("hex");

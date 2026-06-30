@@ -1,11 +1,13 @@
+import type { CarbonClient } from "@carbon/auth";
 import { notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import { Loading } from "@carbon/react";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { Suspense } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { Await, useLoaderData } from "react-router";
@@ -33,7 +35,7 @@ async function handleKanban({
   userId,
   id
 }: {
-  client: SupabaseClient<Database>;
+  client: CarbonClient;
   companyId: string;
   companyGroupId: string;
   userId: string;
@@ -156,7 +158,7 @@ async function handleKanban({
           companyId,
           userId
         }),
-        serviceRole.functions.invoke("schedule", {
+        invokeCarbonServiceFunction("schedule", {
           body: {
             jobId: id,
             companyId,

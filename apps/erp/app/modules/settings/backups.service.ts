@@ -1,5 +1,10 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
+import {
+  downloadObjectWithRetry,
+  listObjectsResult,
+  removeObjectsByPrefix
+} from "@carbon/object-storage/server";
 
 // Company backup data access. The export edge function is a thin auth boundary;
 // the heavy lifting runs in the carbon/company-export inngest job. Restore is
@@ -16,31 +21,12 @@ const SNAPSHOT_PREFIX = "_pre-restore-";
  * Remove every object under a prefix (recursing into folders) so a deleted
  * backup actually releases its bucket space rather than orphaning files.
  */
-async function removeStoragePrefix(
-  client: SupabaseClient<Database>,
-  bucket: string,
-  prefix: string
-) {
-  const { data } = await client.storage
-    .from(bucket)
-    .list(prefix, { limit: 1000 });
-  if (!data) return;
-  const files: string[] = [];
-  for (const entry of data) {
-    const path = `${prefix}/${entry.name}`;
-    if (entry.id === null) {
-      await removeStoragePrefix(client, bucket, path);
-    } else {
-      files.push(path);
-    }
-  }
-  if (files.length > 0) {
-    await client.storage.from(bucket).remove(files);
-  }
+async function removeStoragePrefix(bucket: string, prefix: string) {
+  await removeObjectsByPrefix(bucket, prefix);
 }
 
 export async function exportCompanyBackup(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   args: {
     companyId: string;
     userId: string;
@@ -48,7 +34,7 @@ export async function exportCompanyBackup(
     includeStorage?: "none" | "all";
   }
 ) {
-  return client.functions.invoke("export-company", { body: args });
+  return invokeCarbonServiceFunction("export-company", { body: args });
 }
 
 export type CompanyBackupSummary = {
@@ -70,12 +56,12 @@ export type CompanyBackupSummary = {
  * reads run in parallel.
  */
 export async function listCompanyBackups(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ): Promise<{ data: CompanyBackupSummary[] | null; error: Error | null }> {
-  const { data, error } = await client.storage
-    .from(companyId)
-    .list("exports", { limit: 100 });
+  const { data, error } = await listObjectsResult(companyId, "exports", {
+    limit: 100
+  });
   if (error) return { data: null, error };
 
   const folders = (data ?? []).filter(
@@ -92,12 +78,16 @@ export async function listCompanyBackups(
         rows: 0,
         sizeBytes: 0
       };
-      const mf = await client.storage
-        .from(companyId)
-        .download(`exports/${folder.name}/manifest.json`);
-      if (mf.data) {
+      const mf = await downloadObjectWithRetry(
+        {
+          bucket: companyId,
+          key: `exports/${folder.name}/manifest.json`
+        },
+        { attempts: 1 }
+      );
+      if (mf) {
         try {
-          const m = JSON.parse(await mf.data.text()) as {
+          const m = JSON.parse(new TextDecoder().decode(mf.body)) as {
             exportedAt?: string;
             label?: string | null;
             tables?: Array<{ rows?: number }>;
@@ -130,11 +120,11 @@ export async function listCompanyBackups(
 
 /** Delete a backup — the whole `exports/<name>/` folder (data + manifest + assets). */
 export async function deleteCompanyBackup(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   name: string
 ) {
-  await removeStoragePrefix(client, companyId, `exports/${name}`);
+  await removeStoragePrefix(companyId, `exports/${name}`);
   return { error: null as Error | null };
 }
 
@@ -144,7 +134,7 @@ export async function deleteCompanyBackup(
  * exists between the restore completing and the user keeping or reverting it.
  */
 export async function getCompanyRestoreRuns(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   const markers = await client
@@ -187,7 +177,7 @@ export async function getCompanyRestoreRuns(
  * appearing in the list is what signals completion).
  */
 export async function getCompanyExportRun(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ): Promise<{
   data: {

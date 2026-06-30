@@ -4658,12 +4658,6 @@ msgstr "Échec de la création du webhook : {0}"
 msgid "Failed to create work center: {0}"
 msgstr "Échec de la création du centre de travail : {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "Impossible de supprimer le fichier de l'ancien emplacement"
-
-msgid "Failed to download file for moving"
-msgstr "Échec du téléchargement du fichier pour le déplacement"
-
 msgid "Failed to fetch item costs"
 msgstr "Échec de la récupération des coûts des articles"
 
@@ -4739,6 +4733,9 @@ msgstr "Impossible de charger les détails de la pièce fournisseur"
 msgid "Failed to load tracked entities"
 msgstr "Impossible de charger les entités suivies"
 
+msgid "Failed to move file"
+msgstr ""
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "Échec de la suppression de l'image : {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "Échec du téléchargement du fichier CSV."
 
 msgid "Failed to upload file"
 msgstr "Échec du téléchargement du fichier"
-
-msgid "Failed to upload file to new location"
-msgstr "Échec du téléchargement du fichier vers le nouvel emplacement"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "Rupture de stock"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "Arrêter de créer des commandes d'achat après cette date"
-
-msgid "Storage client not available"
-msgstr "Client de stockage non disponible"
 
 msgid "Storage Rules"
 msgstr "Règles de stockage"

@@ -227,7 +227,7 @@ Each document type has a registered data resolver function that fetches the rele
 
 The resolver then enriches the tracked entities by batch-querying the item table for part numbers and revisions, returning a list of data items for rendering.
 
-**resolveKanbanData** serves the kanbanCard document type. It fetches the kanban record from the kanbans view, including item information, location, shelf, supplier, and quantity. If the kanban has a thumbnail image, the task downloads it from Supabase Storage and converts it to a base64 data URI. It also constructs a URL to the ERP kanban API route for additional card data.
+**resolveKanbanData** serves the kanbanCard document type. It fetches the kanban record from the kanbans view, including item information, location, shelf, supplier, and quantity. If the kanban has a thumbnail image, the task downloads it from private object storage and converts it to a base64 data URI. It also constructs a URL to the ERP kanban API route for additional card data.
 
 ### Built-in Renderers
 
@@ -294,7 +294,7 @@ Four business events trigger automatic printing. Each integration follows the sa
 
 Each auto-print block:
 
-1. Reads the printing settings from companySettings using a service-role Supabase client (bypassing RLS to ensure the query succeeds regardless of the user's permission level)
+1. Reads the printing settings from companySettings using a service-role Carbon data client (bypassing RLS to ensure the query succeeds regardless of the user's permission level)
 2. Checks whether the relevant auto-print toggle is enabled
 3. If enabled, triggers the print-job task with the source document type, document identifier, company and user identifiers, optional location ID, and optional work center ID
 4. Catches any error silently (logging it but not re-throwing), so that a printing failure never prevents the business operation from completing
@@ -559,7 +559,7 @@ Once this entry exists, the Settings UI automatically shows "Sales Invoice" in t
 
 In `packages/jobs/trigger/print-job.tsx`, add a resolver function and register it in the resolver map.
 
-The resolver receives the Supabase client and the source document ID, and returns a `ResolvedData` object: an array of items (the data that will be passed to the renderer) and an optional human-readable ID for the source document.
+The resolver receives the Carbon data client and the source document ID, and returns a `ResolvedData` object: an array of items (the data that will be passed to the renderer) and an optional human-readable ID for the source document.
 
 For a sales invoice, the resolver would query the sales invoice table for the invoice details (customer, line items, totals, etc.) and return them as the items array. The readable ID would be the invoice number (e.g., "INV-001").
 

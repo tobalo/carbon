@@ -1,7 +1,6 @@
+import type { CarbonClient } from "@carbon/auth";
 import { notFound } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 import { data, redirect } from "react-router";
 import { getKanban } from "~/modules/inventory";
@@ -13,7 +12,7 @@ async function handleKanbanComplete({
   companyId,
   id
 }: {
-  client: SupabaseClient<Database>;
+  client: CarbonClient;
   companyId: string;
   id: string;
 }): Promise<{ data: string; error: null } | { data: null; error: string }> {

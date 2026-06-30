@@ -3,7 +3,7 @@ paths:
   - "apps/erp/app/modules/accounting/**"
   - "apps/erp/app/routes/x+/fixed-asset+/**"
   - "apps/erp/app/routes/x+/depreciation-run+/**"
-  - "packages/database/supabase/migrations/*fixed-asset*"
+  - "packages/database/migrations/*fixed-asset*"
 ---
 
 # Fixed Asset Lifecycle

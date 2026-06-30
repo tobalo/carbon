@@ -13,7 +13,7 @@ paths:
   - "apps/erp/app/services/onboarding.server.ts"
   - "apps/erp/app/services/onboarding-draft.server.ts"
   - "ci/src/upload-backup-templates.ts"
-  - "packages/database/supabase/backups/**"
+  - "packages/database/backups/**"
 ---
 
 # Company Backup / Restore / Onboarding Seed
@@ -220,7 +220,7 @@ snapshotPath, foreign, includeGroup }`. `revert` reads the marker and reloads
 `routes/onboarding+/industry.tsx` → `dataChoice: "template" | "import" | "none"`
 ("Use a demo template" / "Restore from a backup" / "I don't need data"). A demo
 template is a committed data-only `.gz` at
-`packages/database/supabase/backups/<industryId>.carbon.json.gz` plus a sibling
+`packages/database/backups/<industryId>.carbon.json.gz` plus a sibling
 `<industryId>.assets/` folder of its storage files (one per `industry` row).
 `provisionCompanyData` (onboarding.server.ts) imports it on top of an
 identity-only seed, **referencing** the shared `_templates/<industryId>/` assets

@@ -1,10 +1,15 @@
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { Database } from "@carbon/database";
 import type { Kysely, KyselyDatabase } from "@carbon/database/client";
-import { getPurchaseOrderStatus, supportedModelTypes } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { downloadObjectWithRetry } from "@carbon/object-storage/server";
+import {
+  getPurchaseOrderStatus,
+  sanitize,
+  supportedModelTypes
+} from "@carbon/utils";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import type {
   approvalDocumentType,
   documentTypes,
@@ -147,7 +152,7 @@ export async function approveRequest(
 }
 
 export async function canApproveRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   approvalRequest: ApprovalRequestForApproveCheck,
   userId: string
 ): Promise<boolean> {
@@ -205,7 +210,7 @@ export async function canApproveRequest(
  * Used for "Assigned to Me" lists.
  */
 export async function canApproveRequestInWindow(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   approvalRequest: ApprovalRequestForApproveCheck,
   userId: string
 ): Promise<boolean> {
@@ -251,7 +256,7 @@ export function canCancelRequest(
 }
 
 export async function cancelApprovalRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string
 ) {
@@ -292,7 +297,7 @@ export async function cancelApprovalRequest(
 }
 
 export async function canViewApprovalRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   approvalRequest: ApprovalRequestForViewCheck,
   userId: string
 ): Promise<boolean> {
@@ -312,7 +317,7 @@ export async function canViewApprovalRequest(
 }
 
 export async function createApprovalRequest(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   request: CreateApprovalRequestInput & { amount?: number }
 ) {
   return client
@@ -332,7 +337,7 @@ export async function createApprovalRequest(
 }
 
 export async function deleteApprovalRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -343,27 +348,24 @@ export async function deleteApprovalRule(
     .eq("companyId", companyId);
 }
 
-export async function deleteNote(
-  client: SupabaseClient<Database>,
-  noteId: string
-) {
+export async function deleteNote(client: CarbonClient, noteId: string) {
   return client.from("note").update({ active: false }).eq("id", noteId);
 }
 
-export async function deleteSavedView(
-  client: SupabaseClient<Database>,
-  viewId: string
-) {
+export async function deleteSavedView(client: CarbonClient, viewId: string) {
   return client.from("tableView").delete().eq("id", viewId);
 }
 
 export async function generateEmbedding(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   text: string
 ): Promise<number[]> {
-  const response = await client.functions.invoke("embedding", {
-    body: { text }
-  });
+  const response = await invokeCarbonServiceFunction<{ embedding?: number[] }>(
+    "embedding",
+    {
+      body: { text }
+    }
+  );
 
   if (response.error) {
     throw new Error(
@@ -380,10 +382,7 @@ export async function generateEmbedding(
   return response.data.embedding as number[];
 }
 
-export async function getApprovalById(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getApprovalById(client: CarbonClient, id: string) {
   const baseRequest = await client
     .from("approvalRequest")
     .select("*")
@@ -411,7 +410,7 @@ export async function getApprovalById(
 }
 
 export async function getApprovalRequestsByDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   documentId: string
 ) {
@@ -424,7 +423,7 @@ export async function getApprovalRequestsByDocument(
 }
 
 export async function getApprovalRuleByAmount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string,
   amount?: number
@@ -452,7 +451,7 @@ export async function getApprovalRuleByAmount(
 }
 
 export async function getApproverUserIdsForRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   rule: Pick<ApprovalRule, "approverGroupIds" | "defaultApproverId">
 ): Promise<string[]> {
   const groupIds = rule.approverGroupIds?.filter(Boolean) ?? [];
@@ -487,7 +486,7 @@ export async function getApproverUserIdsForRule(
  * their tier. Returns deduped user IDs.
  */
 export async function getLowerTierApproverUserIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string,
   amount: number | null | undefined
@@ -519,7 +518,7 @@ export async function getLowerTierApproverUserIds(
 }
 
 export async function getApprovalRuleById(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -532,14 +531,14 @@ export async function getApprovalRuleById(
 }
 
 export async function getApprovalRules(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client.from("approvalRule").select("*").eq("companyId", companyId);
 }
 
 export async function getApprovalRulesForApprover(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string
 ) {
@@ -553,7 +552,7 @@ export async function getApprovalRulesForApprover(
 }
 
 export async function getApprovalsForUser(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string,
   args?: GenericQueryFilters & ApprovalFilters
@@ -676,21 +675,26 @@ export async function getApprovalsForUser(
   };
 }
 
-export async function getBase64ImageFromSupabase(
-  client: SupabaseClient<Database>,
+export async function getBase64ImageFromStorage(
+  client: CarbonClient,
   path: string
 ) {
   function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return Buffer.from(buffer).toString("base64");
   }
 
-  const { data, error } = await client.storage.from("private").download(path);
-  if (error) {
+  const data = await downloadObjectWithRetry(
+    {
+      bucket: "private",
+      key: path
+    },
+    { attempts: 1 }
+  );
+  if (!data) {
     return null;
   }
 
-  const arrayBuffer = await data.arrayBuffer();
-  const base64String = arrayBufferToBase64(arrayBuffer);
+  const base64String = arrayBufferToBase64(data.body);
 
   // Determine the mime type based on file extension
   const fileExtension = path.split(".").pop()?.toLowerCase();
@@ -702,12 +706,12 @@ export async function getBase64ImageFromSupabase(
   return `data:${mimeType};base64,${base64String}`;
 }
 
-export async function getCountries(client: SupabaseClient<Database>) {
+export async function getCountries(client: CarbonClient) {
   return client.from("country").select("*").order("name");
 }
 
 export async function getLatestApprovalRequestForDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   documentId: string
 ) {
@@ -788,10 +792,7 @@ export function getDocumentType(
   return "Other";
 }
 
-export async function getModelByItemId(
-  client: SupabaseClient<Database>,
-  itemId: string
-) {
+export async function getModelByItemId(client: CarbonClient, itemId: string) {
   const item = await client
     .from("item")
     .select("id, type, modelUploadId")
@@ -827,10 +828,7 @@ export async function getModelByItemId(
   };
 }
 
-export async function getNotes(
-  client: SupabaseClient<Database>,
-  documentId: string
-) {
+export async function getNotes(client: CarbonClient, documentId: string) {
   return client
     .from("note")
     .select("id, note, createdAt, user(id, fullName, avatarUrl)")
@@ -840,7 +838,7 @@ export async function getNotes(
 }
 
 export async function getPendingApprovalsForApprover(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -896,7 +894,7 @@ export async function getPendingApprovalsForApprover(
 }
 
 export async function getPeriods(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   { startDate, endDate }: { startDate: string; endDate: string }
 ) {
   const endWithTime = endDate.includes("T") ? endDate : `${endDate}T23:59:59`;
@@ -908,7 +906,7 @@ export async function getPeriods(
 }
 
 export async function getSavedViews(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -921,7 +919,7 @@ export async function getSavedViews(
 }
 
 export async function getTagsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   table?: string | null
 ) {
@@ -935,7 +933,7 @@ export async function getTagsList(
 }
 
 export async function hasPendingApproval(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   documentId: string
 ): Promise<boolean> {
@@ -951,7 +949,7 @@ export async function hasPendingApproval(
 }
 
 export async function importCsv(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   args: {
     table: string;
     filePath: string;
@@ -961,13 +959,13 @@ export async function importCsv(
     userId: string;
   }
 ) {
-  return client.functions.invoke("import-csv", {
+  return invokeCarbonServiceFunction("import-csv", {
     body: args
   });
 }
 
 export async function insertNote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   note: {
     note: string;
     documentId: string;
@@ -979,14 +977,14 @@ export async function insertNote(
 }
 
 export async function insertTag(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   tag: Database["public"]["Tables"]["tag"]["Insert"]
 ) {
   return client.from("tag").insert(tag).select("*").single();
 }
 
 export async function isApprovalRequired(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   documentType: (typeof approvalDocumentType)[number],
   companyId: string,
   amount?: number
@@ -1005,17 +1003,14 @@ export async function isApprovalRequired(
   return config.data.enabled;
 }
 
-export async function getExternalLink(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getExternalLink(client: CarbonClient, id: string) {
   let query = client.from("externalLink").select("*").eq("id", id).single();
 
   return query;
 }
 
 export async function upsertExternalLink(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   externalLink:
     | Database["public"]["Tables"]["externalLink"]["Insert"]
     | Database["public"]["Tables"]["externalLink"]["Update"]
@@ -1038,7 +1033,7 @@ export async function upsertExternalLink(
 }
 
 export async function getCustomerPortals(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -1061,10 +1056,7 @@ export async function getCustomerPortals(
   return query;
 }
 
-export async function getCustomerPortal(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getCustomerPortal(client: CarbonClient, id: string) {
   return client
     .from("externalLink")
     .select("*, customer:customerId(id, name)")
@@ -1073,15 +1065,12 @@ export async function getCustomerPortal(
     .single();
 }
 
-export async function deleteCustomerPortal(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteCustomerPortal(client: CarbonClient, id: string) {
   return client.from("externalLink").delete().eq("id", id);
 }
 
 export async function updateModelThumbnail(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   modelId: string,
   thumbnailPath: string
 ) {
@@ -1089,7 +1078,7 @@ export async function updateModelThumbnail(
 }
 
 export async function upsertModelUpload(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   upload:
     | {
         id: string;
@@ -1111,7 +1100,7 @@ export async function upsertModelUpload(
 }
 
 export async function updateNote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   note: string
 ) {
@@ -1218,7 +1207,7 @@ export async function rejectRequest(
 }
 
 export async function upsertApprovalRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   rule: UpsertApprovalRuleInput
 ) {
   if ("id" in rule) {
@@ -1248,7 +1237,7 @@ export async function upsertApprovalRule(
 }
 
 export async function upsertSavedView(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   view: {
     id?: string;
     name: string;
@@ -1302,7 +1291,7 @@ export async function upsertSavedView(
 }
 
 export async function updateSavedViewOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   updates: {
     id: string;
     sortOrder: number;

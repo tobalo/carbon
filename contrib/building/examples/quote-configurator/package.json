@@ -8,8 +8,6 @@
     "@carbon/utils": "workspace:*",
     "@react-router/dev": "catalog:",
     "@react-router/fs-routes": "7.14.0",
-    "@supabase/functions-js": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "@vercel/react-router": "catalog:",
     "non.geist": "catalog:",
     "react": "catalog:",

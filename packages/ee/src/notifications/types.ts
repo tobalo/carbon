@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 
 // Integration types
 export interface CompanyIntegration {
@@ -84,8 +83,8 @@ export interface NotificationService {
 
 // Context for notification services
 export interface NotificationContext {
-  client: SupabaseClient<Database>;
-  serviceRole?: SupabaseClient<Database>;
+  client: CarbonClient;
+  serviceRole?: CarbonClient;
 }
 
 // Service registry

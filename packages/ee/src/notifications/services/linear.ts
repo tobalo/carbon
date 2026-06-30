@@ -1,6 +1,5 @@
+import type { CarbonClient } from "@carbon/auth";
 import { getUser } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TiptapDocument } from "../../linear/lib/index.server";
 import {
   getLinearClient,
@@ -22,7 +21,7 @@ export class LinearNotificationService implements NotificationService {
 
   async send(
     event: NotificationEvent,
-    context: { serviceRole: SupabaseClient<Database> }
+    context: { serviceRole: CarbonClient }
   ): Promise<void> {
     switch (event.type) {
       case "task.status.changed": {

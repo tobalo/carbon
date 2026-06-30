@@ -1,6 +1,5 @@
+import type { CarbonClient } from "@carbon/auth";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { adfToTiptap } from "./richtext";
 import type { JiraCredentials, JiraIssue, JiraIssueMapping } from "./types";
 import { JiraIssueMappingSchema } from "./types";
@@ -10,7 +9,7 @@ import { mapJiraStatusToCarbonStatus } from "./utils";
  * Get the Jira integration for a company.
  */
 export async function getJiraIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return await client
@@ -25,7 +24,7 @@ export async function getJiraIntegration(
  * Update Jira credentials in the integration metadata.
  */
 export async function updateJiraCredentials(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   credentials: JiraCredentials
 ) {
@@ -79,7 +78,7 @@ export function issueToMapping(
  * Link an action task to a Jira issue.
  */
 export async function linkActionToJiraIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   input: {
     actionId: string;
@@ -149,7 +148,7 @@ export async function linkActionToJiraIssue(
  * Unlink an action task from a Jira issue.
  */
 export async function unlinkActionFromJiraIssue(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   input: {
     actionId: string;
@@ -177,7 +176,7 @@ export async function unlinkActionFromJiraIssue(
  * Get Jira issue metadata from the external integration mapping.
  */
 export const getJiraIssueFromExternalId = async (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   actionId: string
 ): Promise<JiraIssueMapping | null> => {
@@ -203,7 +202,7 @@ export const getJiraIssueFromExternalId = async (
  * Get employees that match email addresses.
  */
 export const getCompanyEmployees = async (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   emails: string[]
 ) => {
@@ -221,7 +220,7 @@ export const getCompanyEmployees = async (
  * Update the cached Jira issue metadata in the mapping.
  */
 export async function updateJiraIssueMapping(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   actionId: string,
   mapping: JiraIssueMapping

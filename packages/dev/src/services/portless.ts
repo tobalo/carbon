@@ -107,7 +107,7 @@ export function startProxyDaemon(root: string) {
   }).unref();
 }
 
-// Must match render-env.ts hostnames + the api.carbon.dev OAuth alias.
+// Must match render-env.ts hostnames.
 const PORTLESS_TLD = "dev";
 
 type PrivilegeIssue =
@@ -378,8 +378,7 @@ export async function pruneStaleRoutes() {
   });
 }
 
-// Branch-independent OAuth callback host. Last `crbn up` wins. Keep in sync
-// with SUPABASE_AUTH_EXTERNAL_*_REDIRECT_URI in render-env.ts.
+// Branch-independent OAuth callback host. Last `crbn up` wins.
 const STABLE_OAUTH_ALIAS = "api.carbon";
 
 // Always prefix with the branch name (last `/`-segment, sanitized) so every
@@ -417,7 +416,6 @@ function aliasMap(
     { name: withPrefix("erp", branchPrefix), port: ports.PORT_ERP },
     { name: withPrefix("mes", branchPrefix), port: ports.PORT_MES },
     { name: withPrefix("api", branchPrefix), port: ports.PORT_API },
-    { name: withPrefix("studio", branchPrefix), port: ports.PORT_STUDIO },
     { name: withPrefix("mail", branchPrefix), port: ports.PORT_INBUCKET },
     { name: withPrefix("inngest", branchPrefix), port: ports.PORT_INNGEST },
     { name: STABLE_OAUTH_ALIAS, port: ports.PORT_API }

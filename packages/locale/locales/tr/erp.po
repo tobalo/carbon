@@ -4658,12 +4658,6 @@ msgstr "Webhook oluşturulamadı: {0}"
 msgid "Failed to create work center: {0}"
 msgstr "İş merkezi oluşturulamadı: {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "Eski konumdan dosya silinemedi"
-
-msgid "Failed to download file for moving"
-msgstr "Taşınacak dosya indirilemedi"
-
 msgid "Failed to fetch item costs"
 msgstr "Ürün maliyetleri alınamadı"
 
@@ -4739,6 +4733,9 @@ msgstr "Tedarikçi parça detayları yüklenemedi"
 msgid "Failed to load tracked entities"
 msgstr "Takip edilen varlıklar yüklenemedi"
 
+msgid "Failed to move file"
+msgstr ""
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "Görsel kaldırılamadı: {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "CSV dosyası yüklenemedi."
 
 msgid "Failed to upload file"
 msgstr "Dosyayı yüklemede başarısız oldu"
-
-msgid "Failed to upload file to new location"
-msgstr "Yeni konuma dosya yüklenemedi"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "Stok tükenmesi"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "Bu tarihten sonra satın alma siparişleri vermeyi durdur"
-
-msgid "Storage client not available"
-msgstr "Depolama istemcisi kullanılamıyor"
 
 msgid "Storage Rules"
 msgstr "Depolama Kuralları"

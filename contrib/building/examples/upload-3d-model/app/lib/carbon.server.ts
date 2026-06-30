@@ -1,5 +1,4 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
+import { uploadObject } from "@carbon/object-storage/server";
 import {
   CARBON_API_KEY,
   CARBON_API_URL,
@@ -7,18 +6,29 @@ import {
   CARBON_COMPANY_ID,
   CARBON_PUBLIC_KEY
 } from "~/config";
+import {
+  createPostgrestClient,
+  type PostgrestClient,
+  type PostgrestError
+} from "./postgrest-client";
+
+const storageError = (error: unknown): PostgrestError => ({
+  code: "STORAGE_ERROR",
+  details: "",
+  hint: "",
+  message: error instanceof Error ? error.message : String(error),
+  name: "StorageError"
+});
 
 class CarbonClient {
   private readonly appUrl: string = CARBON_APP_URL;
-  private readonly client: SupabaseClient;
+  private readonly client: PostgrestClient;
   private readonly companyId: string = CARBON_COMPANY_ID;
   constructor() {
-    this.client = createClient(CARBON_API_URL, CARBON_PUBLIC_KEY, {
-      global: {
-        headers: {
-          "carbon-key": CARBON_API_KEY
-        }
-      }
+    this.client = createPostgrestClient({
+      apiUrl: CARBON_API_URL,
+      carbonKey: CARBON_API_KEY,
+      publicKey: CARBON_PUBLIC_KEY
     });
   }
 
@@ -37,27 +47,33 @@ class CarbonClient {
     const fileExtension = file.name.split(".").pop();
     const fileName = `${this.companyId}/models/${modelId}.${fileExtension}`;
 
-    const [fileUpload, recordInsert] = await Promise.all([
-      this.client.storage.from("private").upload(fileName, file),
-      this.client.from("modelUpload").insert({
-        id: modelId,
-        modelPath: fileName,
-        size: file.size,
-        name: file.name,
-        companyId: this.companyId,
-        createdBy: "system"
-      })
-    ]);
-
-    if (fileUpload.error) {
+    try {
+      await uploadObject({
+        bucket: "private",
+        key: fileName,
+        body: file
+      });
+    } catch (error) {
       return {
         data: null,
-        error: fileUpload.error as unknown as PostgrestError
+        error: storageError(error)
       };
     }
 
+    const recordInsert = await this.client.from("modelUpload").insert({
+      id: modelId,
+      modelPath: fileName,
+      size: file.size,
+      name: file.name,
+      companyId: this.companyId,
+      createdBy: "system"
+    });
+
     if (recordInsert.error) {
-      return recordInsert;
+      return {
+        data: null,
+        error: recordInsert.error
+      };
     }
 
     return {
@@ -77,17 +93,17 @@ class CarbonClient {
     const thumbnailId = nanoid();
     const thumbnailPath = `${this.companyId}/thumbnails/${thumbnailId}.png`;
 
-    const thumbnailUpload = await this.client.storage
-      .from("private")
-      .upload(thumbnailPath, file, {
-        upsert: true,
+    try {
+      await uploadObject({
+        bucket: "private",
+        key: thumbnailPath,
+        body: file,
         contentType: "image/png"
       });
-
-    if (thumbnailUpload.error) {
+    } catch (error) {
       return {
         data: null,
-        error: thumbnailUpload.error as unknown as PostgrestError
+        error: storageError(error)
       };
     }
 

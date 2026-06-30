@@ -1,5 +1,5 @@
 import { notFound } from "@carbon/auth";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { downloadObjectWithRetry } from "@carbon/object-storage/server";
 import { supportedModelTypes } from "@carbon/utils";
 import type { LoaderFunctionArgs } from "react-router";
 
@@ -24,8 +24,6 @@ const supportedFileTypes: Record<string, string> = {
 };
 
 export async function loader({ params }: LoaderFunctionArgs) {
-  const client = getCarbonServiceRole();
-
   const path = params["*"];
 
   if (!path) throw new Error("Path not found");
@@ -44,23 +42,12 @@ export async function loader({ params }: LoaderFunctionArgs) {
     throw new Error(`File type ${fileType} not supported`);
   const contentType = supportedFileTypes[fileType];
 
-  async function downloadFile() {
-    const result = await client.storage.from("private").download(`${path}`);
-    if (result.error) {
-      console.error(result.error);
-      return null;
-    }
-    return result.data;
-  }
-
-  let fileData = await downloadFile();
+  const fileData = await downloadObjectWithRetry({
+    bucket: "private",
+    key: decodeURIComponent(path)
+  });
   if (!fileData) {
-    // Wait for a second and try again
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    fileData = await downloadFile();
-    if (!fileData) {
-      throw new Error("Failed to download file after retry");
-    }
+    throw new Error("Failed to download file after retry");
   }
 
   const headers = new Headers({
@@ -70,5 +57,5 @@ export async function loader({ params }: LoaderFunctionArgs) {
     "Access-Control-Allow-Methods": "GET", // Only allow GET requests
     "Access-Control-Allow-Headers": "Content-Type" // Allow Content-Type header
   });
-  return new Response(fileData, { status: 200, headers });
+  return new Response(fileData.body, { status: 200, headers });
 }

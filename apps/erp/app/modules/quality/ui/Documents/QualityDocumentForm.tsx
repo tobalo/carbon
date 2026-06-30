@@ -11,11 +11,11 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
 import { Hidden, Input, Number, Submit } from "~/components/Form";
 import { usePermissions } from "~/hooks";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import { qualityDocumentValidator } from "../../quality.models";
 

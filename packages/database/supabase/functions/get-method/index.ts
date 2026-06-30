@@ -2,14 +2,8 @@ import { serve } from "https://deno.land/std@0.175.0/http/server.ts";
 import { nanoid } from "https://deno.land/x/nanoid@v3.0.0/mod.ts";
 import { z } from "npm:zod@^3.24.1";
 
-import type {
-    PostgrestError,
-    SupabaseClient,
-} from "@supabase/supabase-js";
-
 import { DB, getConnectionPool, getDatabaseClient } from "../lib/database.ts";
 import { requirePermissions } from "../lib/supabase.ts";
-import type { Database } from "../lib/types.ts";
 
 import { Transaction } from "kysely";
 import {
@@ -29,7 +23,7 @@ import {
     traverseJobMethod,
     traverseQuoteMethod,
 } from "../lib/methods.ts";
-import { KyselyDatabase } from "../lib/postgres/index.ts";
+import type { KyselyDatabase } from "../../../src/postgres/index.ts";
 import { importTypeScript } from "../lib/sandbox.ee.ts";
 import { getStorageUnitId } from "../lib/storage-units.ts";
 import {
@@ -44,6 +38,18 @@ import {
 
 const pool = getConnectionPool(1);
 const db = getDatabaseClient<DB>(pool);
+
+type PostgrestError = {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+};
+
+type LegacyPostgrestClient = {
+  from(table: string): any;
+  rpc(functionName: string, args?: Record<string, unknown>): any;
+};
 
 const partsValidator = z.object({
   billOfMaterial: z.boolean().default(true),
@@ -5495,7 +5501,7 @@ type MethodTreeItem = {
 };
 
 export async function getMethodTree(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   makeMethodId: string
 ): Promise<{ data: MethodTreeItem[] | null; error: PostgrestError | null }> {
   const items = await getMethodTreeArray(client, makeMethodId);
@@ -5510,7 +5516,7 @@ export async function getMethodTree(
 }
 
 export function getMethodTreeArray(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   makeMethodId: string
 ) {
   return client.rpc("get_method_tree", {
@@ -5531,7 +5537,7 @@ function jobBuildDate(
 // (chain-collapsed, mode-gated, conversion-factored) as-of the job's build date.
 // Every *-ToJob path needs the same map, so this is the single load point.
 async function loadSupersessionRedirect(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   job: { startDate?: string | null; dueDate?: string | null } | null | undefined
 ): Promise<Map<string, { to: string; factor: number }>> {
@@ -5554,7 +5560,7 @@ async function loadSupersessionRedirect(
 // structural flip we leave on the old part (handled elsewhere). Returns true when
 // the swap was applied, so the caller can skip the default traversal.
 async function swapMadeSubAssembly(opts: {
-  client: SupabaseClient<Database>;
+  client: LegacyPostgrestClient;
   trx: Transaction<DB>;
   companyId: string;
   job: { startDate?: string | null; dueDate?: string | null } | null | undefined;
@@ -5649,7 +5655,7 @@ async function swapMadeSubAssembly(opts: {
 // or this returns null for them. The line's unit of measure and methodType are
 // intentionally preserved — the conversion factor translates the quantity.
 async function resolveJobMaterialSupersession(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   redirect: Map<string, { to: string; factor: number }>,
   line: { itemId: string; methodType: string }
@@ -5751,7 +5757,7 @@ function getFieldKey(field: string, id: string) {
 
 async function insertProcedureDataForJobOperation(
   trx: Transaction<DB>,
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   args: {
     operationId: string;
     procedureId: string;
@@ -5827,7 +5833,7 @@ async function insertProcedureDataForJobOperation(
 }
 
 async function hydrateConfiguration(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   configuration: Record<string, unknown> | undefined,
   itemId: string | undefined | null,
   companyId: string

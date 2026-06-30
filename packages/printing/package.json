@@ -9,8 +9,6 @@
   },
   "devDependencies": {
     "@carbon/config": "workspace:*",
-    "@carbon/database": "workspace:*",
-    "@supabase/supabase-js": "catalog:",
     "@types/node": "20.19.39",
     "@types/react": "catalog:",
     "typescript": "catalog:"

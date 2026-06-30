@@ -16,6 +16,7 @@ import { nanoid } from "nanoid";
 import { useState } from "react";
 import { usePermissions, useUser } from "~/hooks";
 import { getPrivateUrl } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 
 export function IssueContent({
   id,
@@ -42,16 +43,18 @@ export function IssueContent({
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/quality/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "quality"
+    });
 
-    if (result?.error) {
+    if (result.error) {
       toast.error(t`Failed to upload image`);
       throw new Error(result.error.message);
     }
 
-    if (!result?.data) {
+    if (!result.data) {
       throw new Error("Failed to upload image");
     }
 

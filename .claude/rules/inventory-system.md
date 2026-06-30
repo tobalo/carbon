@@ -1,7 +1,7 @@
 ---
 paths:
   - "apps/erp/app/modules/inventory/**"
-  - "packages/database/supabase/migrations/**"
+  - "packages/database/migrations/**"
 ---
 
 # Inventory System

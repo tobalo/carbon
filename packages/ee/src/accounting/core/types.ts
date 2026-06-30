@@ -1,6 +1,5 @@
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import type { Kysely, KyselyDatabase, KyselyTx } from "@carbon/database/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type z from "zod";
 import type { AccountingProvider } from "../providers";
 import {
@@ -144,7 +143,7 @@ export interface EntityDefinition {
 export type AccountingSyncPayload = z.infer<typeof AccountingSyncSchema>;
 
 export type SyncFn = (input: {
-  client: SupabaseClient<Database>;
+  client: CarbonClient;
   kysely: Kysely<KyselyDatabase>;
   entity: AccountingEntity;
   provider: AccountingProvider;

@@ -1,12 +1,22 @@
-import type {
-  PostgrestClientOptions,
-  PostgrestError,
-  PostgrestFilterBuilder
-} from "@supabase/postgrest-js";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LegacyPostgrestClient } from "./legacy-client.ts";
 import type { Database } from "./types.ts";
 
 const BATCH_SIZE = 1000;
+
+type QueryError = {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+};
+
+type PaginatedQuery<T> = PromiseLike<{
+  data: T[] | null;
+  count: number | null;
+  error: QueryError | null;
+}> & {
+  range(from: number, to: number): PaginatedQuery<T>;
+};
 
 export type PaginatedResult<T> =
   | {
@@ -17,20 +27,15 @@ export type PaginatedResult<T> =
   | {
       data: null;
       count: null;
-      error: PostgrestError;
+      error: QueryError;
     };
 
 /**
  * Fetches all records from a table by automatically handling pagination
- * to work around Supabase's 1000 row limit per request
+ * to work around the current PostgREST 1000 row limit per request
  */
 export async function fetchAllRecords<T extends object>(
-  baseQuery: PostgrestFilterBuilder<
-    PostgrestClientOptions,
-    Database["public"],
-    Record<string, unknown>,
-    T[]
-  >
+  baseQuery: PaginatedQuery<T>
 ): Promise<PaginatedResult<T>> {
   const allData: T[] = [];
   let offset = 0;
@@ -61,7 +66,7 @@ export async function fetchAllRecords<T extends object>(
     }
 
     // Check if we have more data to fetch
-    hasMore = result.data && result.data.length === BATCH_SIZE;
+    hasMore = (result.data?.length ?? 0) === BATCH_SIZE;
     offset += BATCH_SIZE;
   }
 
@@ -76,7 +81,7 @@ export async function fetchAllRecords<T extends object>(
  * Helper function for simple table queries that need all records
  */
 export async function fetchAllFromTable<T extends object>(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   tableName:
     | keyof Database["public"]["Tables"]
     | keyof Database["public"]["Views"],
@@ -84,7 +89,6 @@ export async function fetchAllFromTable<T extends object>(
   filterFn?: (query: any) => any
 ): Promise<PaginatedResult<T>> {
   let baseQuery = client
-    // @ts-expect-error
     .from(tableName)
     .select(selectColumns, { count: "exact" });
 
@@ -92,7 +96,6 @@ export async function fetchAllFromTable<T extends object>(
     baseQuery = filterFn(baseQuery);
   }
 
-  // @ts-expect-error
   return fetchAllRecords(baseQuery);
 }
 
@@ -101,12 +104,7 @@ export async function fetchAllFromTable<T extends object>(
  * Used when you need all records but want to process them in batches
  */
 export async function* fetchRecordsInBatches<T extends object>(
-  baseQuery: PostgrestFilterBuilder<
-    PostgrestClientOptions,
-    Database["public"],
-    Record<string, unknown>,
-    T[]
-  >,
+  baseQuery: PaginatedQuery<T>,
   batchSize: number = BATCH_SIZE
 ): AsyncGenerator<{ data: T[]; batch: number; hasMore: boolean }> {
   let offset = 0;
@@ -121,7 +119,7 @@ export async function* fetchRecordsInBatches<T extends object>(
       throw new Error(`Batch query failed: ${result.error.message}`);
     }
 
-    hasMore = result.data && result.data.length === batchSize;
+    hasMore = (result.data?.length ?? 0) === batchSize;
     batch++;
 
     yield {

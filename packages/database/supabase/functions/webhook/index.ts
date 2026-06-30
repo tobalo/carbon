@@ -1,8 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
 import { serve } from "https://deno.land/std@0.175.0/http/server.ts";
+import { sql } from "kysely";
 import { z } from "npm:zod@^3.24.1";
+import type { DB } from "../lib/database.ts";
+import { getConnectionPool, getDatabaseClient } from "../lib/database.ts";
 import { corsHeaders } from "../lib/headers.ts";
-import type { Database } from "../lib/types.ts";
+
+const pool = getConnectionPool(1);
+const db = getDatabaseClient<DB>(pool);
 
 const payloadValidator = z.object({
   webhookId: z.string(),
@@ -21,17 +25,6 @@ serve(async (req: Request) => {
   const payload = await req.json();
   const { type, record, old, url, companyId, table, webhookId } =
     payloadValidator.parse(payload);
-
-  const serviceRole = createClient<Database>(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
 
   try {
     console.log({
@@ -61,9 +54,7 @@ serve(async (req: Request) => {
       throw new Error(`Webhook request failed with status ${response.status}`);
     }
 
-    await serviceRole.rpc("increment_webhook_success", {
-      webhook_id: webhookId,
-    });
+    await incrementWebhookSuccess(webhookId);
 
     return new Response(
       JSON.stringify({
@@ -77,9 +68,7 @@ serve(async (req: Request) => {
   } catch (err) {
     console.error(err);
     if (webhookId) {
-      await serviceRole.rpc("increment_webhook_error", {
-        webhook_id: webhookId,
-      });
+      await incrementWebhookError(webhookId);
     }
     return new Response(JSON.stringify(err), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -87,3 +76,25 @@ serve(async (req: Request) => {
     });
   }
 });
+
+async function incrementWebhookSuccess(webhookId: string) {
+  await db
+    .updateTable("webhook")
+    .set({
+      successCount: sql`"successCount" + 1`,
+      lastSuccess: sql`now()`,
+    })
+    .where("id", "=", webhookId)
+    .execute();
+}
+
+async function incrementWebhookError(webhookId: string) {
+  await db
+    .updateTable("webhook")
+    .set({
+      errorCount: sql`"errorCount" + 1`,
+      lastError: sql`now()`,
+    })
+    .where("id", "=", webhookId)
+    .execute();
+}

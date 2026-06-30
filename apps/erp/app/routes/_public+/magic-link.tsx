@@ -1,4 +1,4 @@
-import { CONTROLLED_ENVIRONMENT, SUPABASE_URL } from "@carbon/auth";
+import { CONTROLLED_ENVIRONMENT } from "@carbon/auth";
 import { Button, Heading, VStack } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useNavigate, useSearchParams } from "react-router";
@@ -15,7 +15,7 @@ export default function ConfirmMagicLink() {
   }
 
   const getConfirmationURL = (token: string) => {
-    return `${SUPABASE_URL}/auth/v1/verify?token=${token}&type=magiclink&redirect_to=${window?.location.origin}/callback`;
+    return `/callback?token=${encodeURIComponent(token)}`;
   };
 
   return (

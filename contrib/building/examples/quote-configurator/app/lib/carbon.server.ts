@@ -1,5 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import {
   CARBON_API_KEY,
   CARBON_API_URL,
@@ -7,6 +5,10 @@ import {
   CARBON_COMPANY_ID,
   CARBON_PUBLIC_KEY
 } from "~/config";
+import {
+  createPostgrestClient,
+  type PostgrestClient
+} from "./postgrest-client";
 
 export const quoteLineStatusType = [
   "Not Started",
@@ -27,15 +29,13 @@ export const quoteStatusType = [
 
 class CarbonClient {
   private readonly appUrl: string = CARBON_APP_URL;
-  private readonly client: SupabaseClient;
+  private readonly client: PostgrestClient;
   private readonly companyId: string = CARBON_COMPANY_ID;
   constructor() {
-    this.client = createClient(CARBON_API_URL, CARBON_PUBLIC_KEY, {
-      global: {
-        headers: {
-          "carbon-key": CARBON_API_KEY
-        }
-      }
+    this.client = createPostgrestClient({
+      apiUrl: CARBON_API_URL,
+      carbonKey: CARBON_API_KEY,
+      publicKey: CARBON_PUBLIC_KEY
     });
   }
 
@@ -283,7 +283,7 @@ class CarbonClient {
     quoteLineId: string;
     configuration?: Record<string, unknown>;
   }) {
-    return this.client.functions.invoke("get-method", {
+    return this.client.invokeFunction("get-method", {
       body: {
         type: "itemToQuoteLine",
         sourceId: lineMethod.itemId,

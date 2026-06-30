@@ -38,13 +38,12 @@ function Arrow() {
   );
 }
 
-// Supabase's official client libraries — https://supabase.com/docs/guides/api/rest/client-libs
 const CARDS = [
   {
     glyph: <Brand path={siTypescript.path} />,
     tone: "bg-[#E8F0FB] text-[#3178C6]",
     name: "JavaScript & TypeScript",
-    desc: "The recommended client — supabase-js. Read and write Carbon with carbon.from('…').",
+    desc: "Use fetch, undici, or a generated OpenAPI client against Carbon's HTTP endpoints.",
     href: "#quickstart",
     cta: "Quickstart",
   },
@@ -52,25 +51,25 @@ const CARDS = [
     glyph: <Brand path={siFlutter.path} />,
     tone: "bg-[#E5EFF9] text-[#02569B]",
     name: "Dart & Flutter",
-    desc: "The official supabase-flutter SDK for Dart and Flutter apps.",
-    href: "https://supabase.com/docs/reference/dart/introduction",
-    cta: "Supabase Dart",
+    desc: "Use package:http or a generated OpenAPI client with the same carbon-key header.",
+    href: "/api-reference/authentication",
+    cta: "Authentication",
   },
   {
     glyph: <Brand path={siSwift.path} />,
     tone: "bg-ed-red-bg text-[#E0431F]",
     name: "Swift",
-    desc: "The official supabase-swift SDK for iOS, macOS, and server-side Swift.",
-    href: "https://supabase.com/docs/reference/swift/introduction",
-    cta: "Supabase Swift",
+    desc: "Use URLSession or an OpenAPI-generated Swift client for server-side integrations.",
+    href: "/api-reference/authentication",
+    cta: "Authentication",
   },
   {
     glyph: <Brand path={siPython.path} />,
     tone: "bg-[#EAF1F8] text-[#3776AB]",
     name: "Python",
-    desc: "The official supabase-py client, or call the REST API directly with requests.",
-    href: "https://supabase.com/docs/reference/python/introduction",
-    cta: "Supabase Python",
+    desc: "Use requests, httpx, or a generated OpenAPI client for scripts and services.",
+    href: "/api-reference/authentication",
+    cta: "Authentication",
   },
 ];
 

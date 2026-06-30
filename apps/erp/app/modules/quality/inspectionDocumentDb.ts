@@ -1,5 +1,5 @@
+import type { CarbonClient } from "@carbon/auth";
 import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 type ProcedureStepType = Database["public"]["Enums"]["procedureStepType"];
 
@@ -74,12 +74,12 @@ type InspectionDbClient = {
   };
 };
 
-export function inspectionDb(client: SupabaseClient<Database>) {
+export function inspectionDb(client: CarbonClient) {
   return client as unknown as InspectionDbClient;
 }
 
 export async function listInspectionFeatures(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   inspectionDocumentId: string
 ) {
   const result = await inspectionDb(client)
@@ -95,7 +95,7 @@ export async function listInspectionFeatures(
 }
 
 export async function listBalloons(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   inspectionDocumentId: string
 ) {
   const result = await inspectionDb(client)
@@ -112,7 +112,7 @@ export async function listBalloons(
 
 /** Maps persisted balloon ids to inspectionFeature ids for legacy save payloads. */
 export async function mapBalloonIdsToFeatureIdsForDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   inspectionDocumentId: string,
   ids: string[]
 ) {

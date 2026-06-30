@@ -1,9 +1,8 @@
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import type { ProductLabelItem } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function getStockTransferLabelItems(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   stockTransferId: string,
   lineId?: string

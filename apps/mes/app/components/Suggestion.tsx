@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Hidden,
   Submit,
@@ -32,6 +31,7 @@ import { useUser } from "~/hooks";
 import type { action } from "~/routes/x+/suggestion";
 import { suggestionValidator } from "~/services/models";
 import { path } from "~/utils/path";
+import { uploadAuthenticatedFile } from "~/utils/storage.client";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 
@@ -56,7 +56,6 @@ const Suggestion = () => {
     name: string;
     path: string;
   } | null>(null);
-  const { carbon } = useCarbon();
   const user = useUser();
 
   const companyId = user.company.id;
@@ -75,8 +74,10 @@ const Suggestion = () => {
   }, [fetcher.data]);
 
   const uploadImage = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       const file = e.target.files[0];
+      if (!file) return;
+
       const fileExtension = file.name.substring(file.name.lastIndexOf(".") + 1);
 
       if (file.size > MAX_FILE_SIZE) {
@@ -85,12 +86,9 @@ const Suggestion = () => {
       }
 
       const fileName = `${companyId}/suggestions/${nanoid()}.${fileExtension}`;
-      const imageUpload = await carbon.storage
-        .from("private")
-        .upload(fileName, file, {
-          cacheControl: `${12 * 60 * 60}`,
-          upsert: true
-        });
+      const imageUpload = await uploadAuthenticatedFile(fileName, file, {
+        cacheControl: `${12 * 60 * 60}`
+      });
 
       if (imageUpload.error) {
         console.error(imageUpload.error);

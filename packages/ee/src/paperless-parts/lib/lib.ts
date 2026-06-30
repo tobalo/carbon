@@ -1,6 +1,8 @@
 import { openai } from "@ai-sdk/openai";
+import { CARBON_API_URL, type CarbonClient } from "@carbon/auth";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import type { Database } from "@carbon/database";
+import { uploadObject } from "@carbon/object-storage/server";
 import {
   getMaterialDescription,
   getMaterialId,
@@ -8,7 +10,6 @@ import {
   supportedModelTypes,
   textToTiptap
 } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateObject } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -30,7 +31,7 @@ import type {
 import { calculatePromisedDate } from "./utils";
 
 async function lookupEntityByPaperlessId(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   entityType: string,
   integration: string,
   externalId: string,
@@ -48,7 +49,7 @@ async function lookupEntityByPaperlessId(
 }
 
 async function createPaperlessMapping(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   entityType: string,
   entityId: string,
   integration: string,
@@ -132,7 +133,7 @@ const substanceSchema = z.object({
 });
 
 async function determineMaterialSubstance(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   materialInfo: {
     description: string;
     materialName: string;
@@ -242,7 +243,7 @@ function cleanExpiredCache(): void {
  * Get cached material properties or fetch from database if not cached
  */
 async function getCachedMaterialProperties(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   substanceId: string
 ): Promise<MaterialPropertiesCache | null> {
   // Clean expired entries periodically
@@ -410,7 +411,7 @@ type PaperlessPartsMaterialInput = {
 };
 
 async function determineMaterialProperties(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   substanceId: string,
   materialInfo: PaperlessPartsMaterialInput
 ): Promise<MaterialNamingDetails | null> {
@@ -517,13 +518,13 @@ async function determineMaterialProperties(
  * }
  * ```
  *
- * @param carbon - Supabase client
+ * @param carbon - Carbon data client
  * @param materialId - The material ID (readableId)
  * @param companyId - The company ID
  * @returns Material naming details with both names and codes
  */
 export async function getMaterialProperties(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   materialId: string,
   companyId: string
 ): Promise<MaterialNamingDetails | null> {
@@ -575,7 +576,7 @@ export async function getMaterialProperties(
 }
 
 export async function getOrCreateMaterial(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     input: PaperlessPartsMaterialInput;
     createdBy: string;
@@ -775,7 +776,7 @@ export async function getOrCreateMaterial(
  * Upload CAD model file and create model record
  */
 async function uploadModelFile(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     file: File;
     companyId: string;
@@ -830,27 +831,16 @@ async function uploadModelFile(
 
     console.log(`Uploading CAD model ${file.name} to ${modelPath}`);
 
-    // Upload model to storage
-    const modelUpload = await carbon.storage
-      .from("private")
-      .upload(modelPath, file, {
-        upsert: true
-      });
-
-    if (modelUpload.error) {
-      console.error(`Failed to upload model ${file.name}:`, modelUpload.error);
-      return false;
-    }
-
-    if (!modelUpload.data?.path) {
-      console.error(`No path returned for uploaded model ${file.name}`);
-      return false;
-    }
+    const modelUpload = await uploadObject({
+      bucket: "private",
+      key: modelPath,
+      body: file
+    });
 
     // Create model record
     const modelRecord = await carbon.from("modelUpload").insert({
       id: modelId,
-      modelPath: modelUpload.data.path,
+      modelPath: modelUpload.path,
       name: file.name,
       size: file.size,
       companyId,
@@ -901,7 +891,7 @@ async function uploadModelFile(
  * Upload file to Carbon storage and create document record using upsertDocument
  */
 async function uploadFileToItem(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     file: File;
     companyId: string;
@@ -920,22 +910,12 @@ async function uploadFileToItem(
 
     console.log(`Uploading ${file.name} to ${storagePath}`);
 
-    const fileUpload = await carbon.storage
-      .from("private")
-      .upload(storagePath, file, {
-        cacheControl: `${12 * 60 * 60}`,
-        upsert: true
-      });
-
-    if (fileUpload.error) {
-      console.error(`Failed to upload file ${file.name}:`, fileUpload.error);
-      return false;
-    }
-
-    if (!fileUpload.data?.path) {
-      console.error(`No path returned for uploaded file ${file.name}`);
-      return false;
-    }
+    await uploadObject({
+      bucket: "private",
+      key: storagePath,
+      body: file,
+      cacheControl: `${12 * 60 * 60}`
+    });
 
     return true;
   } catch (error) {
@@ -948,7 +928,7 @@ async function uploadFileToItem(
  * Download and upload supporting files for a component
  */
 async function processSupportingFiles(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     supportingFiles: Array<{ filename?: string; url?: string }>;
     companyId: string;
@@ -1038,7 +1018,7 @@ async function processSupportingFiles(
 }
 
 export async function getCustomerIdAndContactId(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   paperless: PaperlessPartsClient<unknown>,
   args: {
     company: Database["public"]["Tables"]["company"]["Row"];
@@ -1488,7 +1468,7 @@ export async function getCustomerIdAndContactId(
 }
 
 export async function getCustomerLocationIds(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     customerId: string;
     company: Database["public"]["Tables"]["company"]["Row"];
@@ -1754,7 +1734,7 @@ export async function getCustomerLocationIds(
 }
 
 export async function getEmployeeAndSalesPersonId(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     company: Database["public"]["Tables"]["company"]["Row"];
     estimator?: z.infer<typeof SalesPersonSchema>;
@@ -1794,7 +1774,7 @@ export async function getEmployeeAndSalesPersonId(
 }
 
 export async function getOrderLocationId(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     company: Database["public"]["Tables"]["company"]["Row"];
     sendFrom?: z.infer<typeof FacilitySchema>;
@@ -1851,7 +1831,7 @@ export function getCarbonOrderStatus(
  * Find existing part by Paperless Parts external ID
  */
 export async function getPaperlessPart(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     companyId: string;
     paperlessPartsId: string | number;
@@ -1918,7 +1898,7 @@ export async function getPaperlessPart(
  * Download and process thumbnail from URL, upload to Carbon storage
  */
 async function downloadAndUploadThumbnail(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     thumbnailUrl: string;
     companyId: string;
@@ -1944,14 +1924,13 @@ async function downloadAndUploadThumbnail(
     formData.append("contained", "true");
 
     // Process the image through the resizer
-    const supabaseUrl = process.env.SUPABASE_URL;
-    if (!supabaseUrl) {
-      console.error("SUPABASE_URL environment variable not found");
+    if (!CARBON_API_URL) {
+      console.error("CARBON_API_URL environment variable not found");
       return null;
     }
 
     const resizerResponse = await fetch(
-      `${supabaseUrl}/functions/v1/image-resizer`,
+      `${CARBON_API_URL}/functions/v1/image-resizer`,
       {
         method: "POST",
         body: formData
@@ -1980,20 +1959,15 @@ async function downloadAndUploadThumbnail(
       type: contentType
     });
 
-    // Upload to private bucket
     const storagePath = `${companyId}/thumbnails/${itemId}/${fileName}`;
-    const { data, error } = await carbon.storage
-      .from("private")
-      .upload(storagePath, thumbnailFile, {
-        upsert: true
-      });
+    const uploaded = await uploadObject({
+      bucket: "private",
+      key: storagePath,
+      body: thumbnailFile,
+      contentType
+    });
 
-    if (error) {
-      console.error("Failed to upload thumbnail to storage:", error);
-      return null;
-    }
-
-    return data?.path || null;
+    return uploaded.path;
   } catch (error) {
     console.error("Error processing thumbnail:", error);
     return null;
@@ -2004,7 +1978,7 @@ async function downloadAndUploadThumbnail(
  * Create new item and part from Paperless Parts component data
  */
 export async function createPartFromComponent(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     companyId: string;
     createdBy: string;
@@ -2432,7 +2406,7 @@ export async function createPartFromComponent(
  * Get or create part from Paperless Parts component
  */
 export async function getOrCreatePart(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     companyId: string;
     createdBy: string;
@@ -2547,7 +2521,7 @@ export async function getOrCreatePart(
 let servicePrefix = "Service: ";
 
 async function getOrCreateProcess(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   operation: any,
   companyId: string,
   createdBy: string
@@ -2589,7 +2563,7 @@ async function getOrCreateProcess(
  * Insert sales order lines from Paperless Parts order items
  */
 export async function insertOrderLines(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     salesOrderId: string;
     opportunityId: string;
@@ -2835,7 +2809,7 @@ export async function insertOrderLines(
  * Insert quote lines from Paperless Parts quote items
  */
 export async function insertQuoteLines(
-  carbon: SupabaseClient<Database>,
+  carbon: CarbonClient,
   args: {
     quoteId: string;
     opportunityId: string | undefined;

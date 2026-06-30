@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Badge,
   HStack,
@@ -18,6 +17,7 @@ import { useDropzone } from "react-dropzone";
 import { LuCloudUpload, LuFileText, LuX } from "react-icons/lu";
 import { useRevalidator } from "react-router";
 import { useUser } from "~/hooks";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 
 export type ResolvedAttachmentItem = {
@@ -59,7 +59,6 @@ export default function AttachmentsList({
   attachments
 }: AttachmentsListProps) {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const revalidator = useRevalidator();
   const [uploading, setUploading] = useState(false);
@@ -75,10 +74,6 @@ export default function AttachmentsList({
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      if (!carbon) {
-        toast.error(t`Storage client not available`);
-        return;
-      }
       if (!supplierInteractionId) {
         toast.error(t`Cannot upload — supplier interaction not yet created`);
         return;
@@ -88,12 +83,10 @@ export default function AttachmentsList({
         for (const file of acceptedFiles) {
           const safeName = stripSpecialCharacters(file.name);
           const storagePath = `${company.id}/supplier-interaction/${supplierInteractionId}/${safeName}`;
-          const upload = await carbon.storage
-            .from("private")
-            .upload(storagePath, file, {
-              cacheControl: `${12 * 60 * 60}`,
-              upsert: true
-            });
+          const upload = await uploadPrivateFile(storagePath, file, {
+            permission: "purchasing",
+            cacheControl: `${12 * 60 * 60}`
+          });
           if (upload.error) {
             toast.error(t`Failed to upload ${file.name}`);
           }
@@ -103,7 +96,7 @@ export default function AttachmentsList({
         setUploading(false);
       }
     },
-    [carbon, company.id, supplierInteractionId, revalidator, t]
+    [company.id, supplierInteractionId, revalidator, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -113,15 +106,16 @@ export default function AttachmentsList({
 
   const onRemovePoFile = useCallback(
     async (a: ResolvedAttachmentItem) => {
-      if (!carbon) return;
-      const result = await carbon.storage.from("private").remove([a.path]);
+      const result = await removePrivateFiles([a.path], {
+        permission: "purchasing"
+      });
       if (result.error) {
         toast.error(result.error.message || t`Error removing file`);
       } else {
         revalidator.revalidate();
       }
     },
-    [carbon, revalidator, t]
+    [revalidator, t]
   );
 
   return (

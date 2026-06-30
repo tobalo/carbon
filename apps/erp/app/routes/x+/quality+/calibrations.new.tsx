@@ -4,7 +4,6 @@ import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { useUrlParams } from "@carbon/react";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { FileObject } from "@supabase/storage-js";
 import { nanoid } from "nanoid";
 import { useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -15,6 +14,7 @@ import {
   upsertGaugeCalibrationRecord
 } from "~/modules/quality";
 import GaugeCalibrationRecordForm from "~/modules/quality/ui/Calibrations/GaugeCalibrationRecordForm";
+import type { FileObject } from "~/types";
 
 import { setCustomFields } from "~/utils/form";
 import { getParams, path } from "~/utils/path";

@@ -3,7 +3,6 @@ import { requirePermissions } from "@carbon/auth/auth.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { JSONContent } from "@tiptap/react";
 import { useRef } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -30,6 +29,7 @@ import {
   SalesOrderSummary
 } from "~/modules/sales/ui/SalesOrder";
 import type { SalesOrderShipmentFormRef } from "~/modules/sales/ui/SalesOrder/SalesOrderShipmentForm";
+import type { FileObject } from "~/types";
 import { getCustomFields, setCustomFields } from "~/utils/form";
 import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";

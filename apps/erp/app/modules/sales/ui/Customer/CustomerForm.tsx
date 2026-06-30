@@ -13,7 +13,6 @@ import {
   toast
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -31,6 +30,7 @@ import {
   Submit
 } from "~/components/Form";
 import { useCompanySettings, usePermissions } from "~/hooks";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import { customerValidator } from "../../sales.models";
 import type { Customer } from "../../types";

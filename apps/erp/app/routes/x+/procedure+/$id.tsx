@@ -26,6 +26,7 @@ import { getTagsList } from "~/modules/shared";
 import type { action } from "~/routes/x+/procedure+/update";
 import type { Handle } from "~/utils/handle";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 
 export const handle: Handle = {
   breadcrumb: msg`Procedures`,
@@ -162,7 +163,9 @@ function ProcedureEditor() {
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/job/notes/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "production"
+    });
 
     if (result?.error) {
       toast.error("Failed to upload image");

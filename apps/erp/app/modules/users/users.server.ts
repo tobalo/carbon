@@ -1,5 +1,10 @@
+import type { CarbonClient } from "@carbon/auth";
 import { error, success } from "@carbon/auth";
-import { deleteAuthAccount } from "@carbon/auth/auth.server";
+import {
+  createEmailAuthAccount,
+  deleteAuthAccount,
+  setAuthAccountPassword
+} from "@carbon/auth/auth.server";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { flash, requireAuthSession } from "@carbon/auth/session.server";
 import {
@@ -7,10 +12,8 @@ import {
   deactivateEmployee,
   deactivateSupplier
 } from "@carbon/auth/users.server";
-import type { Database, Json } from "@carbon/database";
+import type { Json } from "@carbon/database";
 import { redis } from "@carbon/kv";
-
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "react-router";
 import { getSupplierContact } from "~/modules/purchasing";
 import { getCustomerContact } from "~/modules/sales";
@@ -28,8 +31,16 @@ import type { Result } from "~/types";
 import { path } from "~/utils/path";
 import { insertEmployeeJob } from "../people/people.service";
 
+type EmployeeTypePermissionRow = {
+  view?: string[] | null;
+  create?: string[] | null;
+  update?: string[] | null;
+  delete?: string[] | null;
+  module?: string | null;
+};
+
 export async function acceptInvite(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   code: string,
   email?: string
 ) {
@@ -123,7 +134,7 @@ export async function acceptInvite(
 }
 
 async function activateCustomer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     userId,
     companyId
@@ -152,7 +163,7 @@ async function activateCustomer(
 }
 
 async function activateEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     userId,
     companyId
@@ -181,7 +192,7 @@ async function activateEmployee(
 }
 
 async function activateSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     userId,
     companyId
@@ -210,7 +221,7 @@ async function activateSupplier(
 }
 
 export async function addUserToCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userToCompany: {
     userId: string;
     companyId: string;
@@ -221,7 +232,7 @@ export async function addUserToCompany(
 }
 
 export async function createCustomerAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     id,
     customerId,
@@ -259,17 +270,23 @@ export async function createCustomerAccount(
     userId = user.data.id;
   } else {
     isNewUser = true;
-    const createSupabaseUser = await serviceRole.auth.admin.createUser({
-      email: email.toLowerCase(),
-      password: crypto.randomUUID(),
-      email_confirm: true
-    });
+    const authUser = await createEmailAuthAccount(
+      email.toLowerCase(),
+      crypto.randomUUID(),
+      {
+        firstName,
+        lastName
+      }
+    );
 
-    if (createSupabaseUser.error) {
-      return { success: false, message: createSupabaseUser.error.message };
+    if (!authUser) {
+      return {
+        success: false,
+        message: "Failed to create Carbon auth account"
+      };
     }
 
-    userId = createSupabaseUser.data.user.id;
+    userId = authUser.id;
     const createCarbonUser = await createUser(serviceRole, {
       id: userId,
       email: email.toLowerCase(),
@@ -334,7 +351,7 @@ export async function createCustomerAccount(
 }
 
 export async function createEmployeeAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     email,
     firstName,
@@ -388,17 +405,23 @@ export async function createEmployeeAccount(
     }
   } else {
     isNewUser = true;
-    const createSupabaseUser = await serviceRole.auth.admin.createUser({
-      email: email.toLowerCase(),
-      password: crypto.randomUUID(),
-      email_confirm: true
-    });
+    const authUser = await createEmailAuthAccount(
+      email.toLowerCase(),
+      crypto.randomUUID(),
+      {
+        firstName,
+        lastName
+      }
+    );
 
-    if (createSupabaseUser.error) {
-      return { success: false, message: createSupabaseUser.error.message };
+    if (!authUser) {
+      return {
+        success: false,
+        message: "Failed to create Carbon auth account"
+      };
     }
 
-    userId = createSupabaseUser.data.user.id;
+    userId = authUser.id;
     const createCarbonUser = await createUser(serviceRole, {
       id: userId,
       email: email.toLowerCase(),
@@ -465,7 +488,7 @@ export async function createEmployeeAccount(
 }
 
 export async function createSupplierAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     id,
     supplierId,
@@ -503,17 +526,23 @@ export async function createSupplierAccount(
     userId = user.data.id;
   } else {
     isNewUser = true;
-    const createSupabaseUser = await serviceRole.auth.admin.createUser({
-      email: email.toLowerCase(),
-      password: crypto.randomUUID(),
-      email_confirm: true
-    });
+    const authUser = await createEmailAuthAccount(
+      email.toLowerCase(),
+      crypto.randomUUID(),
+      {
+        firstName,
+        lastName
+      }
+    );
 
-    if (createSupabaseUser.error) {
-      return { success: false, message: createSupabaseUser.error.message };
+    if (!authUser) {
+      return {
+        success: false,
+        message: "Failed to create Carbon auth account"
+      };
     }
 
-    userId = createSupabaseUser.data.user.id;
+    userId = authUser.id;
     const createCarbonUser = await createUser(serviceRole, {
       id: userId,
       email: email.toLowerCase(),
@@ -577,10 +606,7 @@ export async function createSupplierAccount(
   return { success: true, code, userId, email };
 }
 
-async function createUser(
-  client: SupabaseClient<Database>,
-  user: Omit<User, "fullName">
-) {
+async function createUser(client: CarbonClient, user: Omit<User, "fullName">) {
   const { data, error } = await insertUser(client, user);
 
   if (error) {
@@ -591,17 +617,14 @@ async function createUser(
 }
 
 export async function getClaims(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   uid: string,
   company?: string
 ) {
   return client.rpc("get_claims", { uid, company: company ?? "" });
 }
 
-export async function getCurrentUser(
-  request: Request,
-  client: SupabaseClient<Database>
-) {
+export async function getCurrentUser(request: Request, client: CarbonClient) {
   const { userId } = await requireAuthSession(request);
 
   const user = await getUser(client, userId);
@@ -619,7 +642,7 @@ export function getPermissionCacheKey(userId: string) {
   return `permissions:${userId}`;
 }
 
-export async function getUser(client: SupabaseClient<Database>, id: string) {
+export async function getUser(client: CarbonClient, id: string) {
   return client
     .from("user")
     .select("*")
@@ -681,15 +704,12 @@ export async function getUserClaims(userId: string, companyId: string) {
   }
 }
 
-export async function getUserGroups(
-  client: SupabaseClient<Database>,
-  userId: string
-) {
+export async function getUserGroups(client: CarbonClient, userId: string) {
   return client.rpc("groups_for_user", { uid: userId });
 }
 
 export async function getUserDefaults(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -702,7 +722,7 @@ export async function getUserDefaults(
 }
 
 export async function getModulePreferences(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -715,7 +735,7 @@ export async function getModulePreferences(
 }
 
 export async function upsertModulePreferences(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string,
   preferences: { module: string; position: number; hidden: boolean }[]
@@ -734,7 +754,7 @@ export async function upsertModulePreferences(
 }
 
 async function insertCustomerAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerAccount: {
     id: string;
     customerId: string;
@@ -749,16 +769,13 @@ async function insertCustomerAccount(
 }
 
 export async function insertEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employee: EmployeeInsert
 ) {
   return client.from("employee").insert([employee]).select("*").single();
 }
 
-export async function insertInvite(
-  client: SupabaseClient<Database>,
-  invite: InviteInsert
-) {
+export async function insertInvite(client: CarbonClient, invite: InviteInsert) {
   return client
     .from("invite")
     .upsert([{ ...invite, acceptedAt: null }], {
@@ -770,7 +787,7 @@ export async function insertInvite(
 }
 
 async function insertSupplierAccount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierAccount: {
     id: string;
     supplierId: string;
@@ -785,7 +802,7 @@ async function insertSupplierAccount(
 }
 
 async function insertUser(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   user: Omit<User, "fullName" | "createdAt">
 ) {
   return client.from("user").upsert([user]).select("*");
@@ -793,13 +810,13 @@ async function insertUser(
 
 /**
  * Creates a console-only operator: a lightweight user record that can pin in
- * at MES terminals without needing email, password, or Supabase Auth.
+ * at MES terminals without needing email, password, or a Carbon Auth account.
  *
  * Uses a synthetic email ({uuid}@console.internal) to satisfy the NOT NULL
  * constraint. No auth.users entry is created — operators cannot log in.
  */
 export async function createConsoleOperator(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     firstName,
     lastName,
@@ -823,7 +840,7 @@ export async function createConsoleOperator(
   const userId = crypto.randomUUID();
   const syntheticEmail = `${userId}@console.internal`;
 
-  // 1. Insert user record (no Supabase Auth)
+  // 1. Insert user record (no auth account)
   // Note: isConsoleOperator field added by migration 20260319000000_console-mode.sql
   // Type will be available after db:generate runs
   const userInsert = await serviceRole
@@ -895,11 +912,11 @@ export async function createConsoleOperator(
 }
 
 /**
- * Converts a console-only operator to a full user by adding a Supabase Auth
+ * Converts a console-only operator to a full user by adding a Carbon Auth
  * account and updating their email to a real one.
  */
 export async function convertConsoleOperatorToUser(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     userId,
     email,
@@ -939,16 +956,20 @@ export async function convertConsoleOperatorToUser(
     return { success: false, message: "Email is already in use" };
   }
 
-  // Create Supabase Auth account with the same user ID
-  const createAuth = await serviceRole.auth.admin.createUser({
-    id: userId,
-    email: email.toLowerCase(),
-    password: crypto.randomUUID(),
-    email_confirm: true
-  });
+  // Create Carbon Auth account with the same user ID
+  const authUser = await createEmailAuthAccount(
+    email.toLowerCase(),
+    crypto.randomUUID(),
+    {
+      id: userId
+    }
+  );
 
-  if (createAuth.error) {
-    return { success: false, message: createAuth.error.message };
+  if (!authUser) {
+    return {
+      success: false,
+      message: "Failed to create Carbon auth account"
+    };
   }
 
   // Update user record: real email + no longer console operator
@@ -1017,13 +1038,7 @@ export async function convertConsoleOperatorToUser(
 function makePermissionsFromEmployeeType({
   data
 }: {
-  data: {
-    view: string[];
-    create: string[];
-    update: string[];
-    delete: string[];
-    module: string;
-  }[];
+  data: EmployeeTypePermissionRow[];
 }) {
   const permissions: Record<string, string[]> = {};
 
@@ -1036,10 +1051,10 @@ function makePermissionsFromEmployeeType({
 
     const module = permission.module.toLowerCase();
 
-    permissions[`${module}_view`] = permission.view;
-    permissions[`${module}_create`] = permission.create;
-    permissions[`${module}_update`] = permission.update;
-    permissions[`${module}_delete`] = permission.delete;
+    permissions[`${module}_view`] = permission.view ?? [];
+    permissions[`${module}_create`] = permission.create ?? [];
+    permissions[`${module}_update`] = permission.update ?? [];
+    permissions[`${module}_delete`] = permission.delete ?? [];
   });
 
   return permissions;
@@ -1279,7 +1294,7 @@ function makeSupplierPermissions(companyId: string) {
 }
 
 export async function getInvite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   email: string,
   companyId: string
 ) {
@@ -1292,13 +1307,11 @@ export async function getInvite(
 }
 
 export async function resetPassword(userId: string, password: string) {
-  return getCarbonServiceRole().auth.admin.updateUserById(userId, {
-    password
-  });
+  return setAuthAccountPassword(userId, password);
 }
 
 async function rollbackInvite(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   { userId, companyId }: { userId: string; companyId: string }
 ) {
   await Promise.all([
@@ -1326,7 +1339,7 @@ async function rollbackInvite(
 }
 
 async function setUserPermissions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   permissions: Record<string, string[]>
 ) {
@@ -1360,7 +1373,7 @@ async function setUserPermissions(
 }
 
 export async function updateEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     id,
     employeeType,
@@ -1384,7 +1397,7 @@ export async function updateEmployee(
 }
 
 export async function updatePermissions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     id,
     permissions,

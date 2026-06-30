@@ -12,12 +12,13 @@ see the onboarding migration):
 > Generation 2: storage assets are real files in the `.assets/` folder, NOT
 > base64-embedded in the gz (which kept the gz small and bounded export memory).
 
-These are published into every workspace by `ci/src/upload-backup-templates.ts`
-as a **manual** step — the `Publish backup templates` workflow
+These are published to the configured Carbon object store by
+`ci/src/upload-backup-templates.ts` as a **manual** step — the
+`Publish backup templates` workflow
 (`.github/workflows/publish-templates.yml`, `workflow_dispatch`) or
 `pnpm --filter ci ci:upload-backup-templates` locally. It is **not** run on every
-deploy (templates change rarely and are large). It uploads the `.gz` to each
-workspace's private `company-templates` bucket and fans the files from
+deploy (templates change rarely and are large). It uploads the `.gz` to the
+private `company-templates` bucket and fans the files from
 `<industryId>.assets/` into the shared `_templates/<industryId>/` prefix of the
 `private` bucket. The publish is **idempotent** — anything that already exists is
 skipped; pass `--force` (workflow input `force: true`) to overwrite an updated

@@ -1,4 +1,4 @@
-import { getAppUrl, getMESUrl, SUPABASE_URL } from "@carbon/auth";
+import { getAppUrl, getMESUrl, getPublicStorageUrl } from "@carbon/auth";
 import { generatePath } from "react-router";
 
 const x = "/x"; // from ~/routes/x+ folder
@@ -177,6 +177,7 @@ export const path = {
       search: `${api}/search`,
       seedQualityDocuments: `${api}/quality/documents/seed`,
       sequences: (table: string) => `${api}/settings/sequences?table=${table}`,
+      storage: `${api}/storage`,
       serialNumbers: (itemId: string, isReadOnly: boolean) =>
         generatePath(
           `${api}/inventory/serial-numbers?itemId=${itemId}&isReadOnly=${isReadOnly}`
@@ -1875,7 +1876,7 @@ export const onboardingSequence = [
 ] as const;
 
 export const getStoragePath = (bucket: string, path: string) => {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return getPublicStorageUrl(bucket, path) ?? path;
 };
 
 export const requestReferrer = (request: Request, withParams = true) => {

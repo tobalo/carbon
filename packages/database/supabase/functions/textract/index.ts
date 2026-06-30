@@ -11,7 +11,8 @@ import {
 
 import z from "npm:zod@^3.24.1";
 import { corsHeaders } from "../lib/headers.ts";
-import { getSupabaseServiceRole } from "../lib/supabase.ts";
+import { downloadObject } from "../lib/object-storage.ts";
+import { requireTrustedBearer } from "../lib/trusted-auth.ts";
 
 const AWS_REGION = Deno.env.get("AWS_REGION");
 const AWS_ACCESS_KEY_ID = Deno.env.get("AWS_ACCESS_KEY_ID");
@@ -56,15 +57,13 @@ serve(async (req: Request) => {
 
   try {
     const { path } = payloadValidator.parse(payload);
+    requireTrustedBearer(req.headers.get("Authorization"));
 
     console.log({
       function: "textract",
       path,
     });
 
-    const supabase = await getSupabaseServiceRole(
-      req.headers.get("Authorization")
-    );
     const s3Key = `textract/${Date.now()}-${path.split("/").pop()}`;
 
     // Check if file already exists in S3
@@ -78,20 +77,17 @@ serve(async (req: Request) => {
       console.log("File already exists in S3, skipping upload");
     } catch (error) {
       if (error.name === "NotFound") {
-        // File doesn't exist, proceed with download and upload
-        // Download file from Supabase Storage
-        const { data, error } = await supabase.storage
-          .from("documents")
-          .download(path);
+        const document = await downloadObject({
+          bucket: "documents",
+          key: path,
+        });
 
-        if (error) throw error;
-
-        // Upload file to S3
         await s3Client.send(
           new PutObjectCommand({
             Bucket: AWS_S3_BUCKET,
             Key: s3Key,
-            Body: data,
+            Body: document.body,
+            ContentType: document.contentType,
           })
         );
         console.log("File uploaded to S3");

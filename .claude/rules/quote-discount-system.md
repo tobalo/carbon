@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/database/supabase/migrations/*pricing-rules*.sql"
+  - "packages/database/migrations/*pricing-rules*.sql"
   - "apps/erp/app/modules/sales/sales.service.ts"
   - "apps/erp/app/modules/sales/ui/Quotes/QuoteLinePricing.tsx"
   - "apps/erp/app/modules/sales/ui/Pricing/*.tsx"

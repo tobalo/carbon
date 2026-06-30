@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Combobox,
   DateTimePicker,
@@ -54,6 +53,7 @@ import { stepRecordValidator } from "~/services/models";
 import type { JobOperationStep } from "~/services/types";
 import { useItems, usePeople } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadAuthenticatedFile } from "~/utils/storage.client";
 import FileDropzone from "../../FileDropzone";
 
 export function StepsListItem({
@@ -368,14 +368,13 @@ export function RecordModal({
   }, [employees]);
 
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [filePath, setFilePath] = useState<string | null>(null);
   const fetcher = useFetcher<{ success: boolean }>();
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!acceptedFiles[0] || !carbon) return;
+    if (!acceptedFiles[0]) return;
     const fileUpload = acceptedFiles[0];
 
     setFile(fileUpload);
@@ -383,12 +382,9 @@ export function RecordModal({
 
     const fileName = `${company.id}/job/${attribute.operationId}/${attribute.id}/${nanoid()}/${fileUpload.name}`;
 
-    const upload = await carbon?.storage
-      .from("private")
-      .upload(fileName, fileUpload, {
-        cacheControl: `${12 * 60 * 60}`,
-        upsert: true
-      });
+    const upload = await uploadAuthenticatedFile(fileName, fileUpload, {
+      cacheControl: `${12 * 60 * 60}`
+    });
 
     if (upload.error) {
       toast.error(t`Failed to upload file: ${fileUpload.name}`);

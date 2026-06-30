@@ -1,6 +1,9 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import {
   evaluateLinesForSurface,
   isBlocked
@@ -99,7 +102,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
-  const issue = await serviceRole.functions.invoke("issue", {
+  const issue = await invokeCarbonServiceFunction("issue", {
     body: {
       type: "unconsumeTrackedEntities",
       materialId,

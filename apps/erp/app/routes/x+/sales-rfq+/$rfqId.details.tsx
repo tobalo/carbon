@@ -5,7 +5,6 @@ import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import { VStack } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData, useParams } from "react-router";
 import { DeferredFiles } from "~/components";
@@ -22,6 +21,7 @@ import {
   OpportunityNotes,
   OpportunityState
 } from "~/modules/sales/ui/Opportunity";
+import type { FileObject } from "~/types";
 import { setCustomFields } from "~/utils/form";
 import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";

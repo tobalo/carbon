@@ -1,4 +1,3 @@
-import { getCarbon } from "@carbon/auth";
 import { getOrRefreshAuthSession } from "@carbon/auth/session.server";
 import { Button, Spinner } from "@carbon/react";
 import { useEffect } from "react";
@@ -13,6 +12,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data, Link, useFetcher, useParams } from "react-router";
 import Share from "~/components/Share";
 import { useProgress } from "~/hooks";
+import { insertLessonCompletion } from "~/services/database.server";
 import { path } from "~/utils/path";
 import {
   formatDuration,
@@ -64,15 +64,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   const { course } = context;
-  const client = getCarbon(session.accessToken);
 
-  const insert = await client.from("lessonCompletion").insert({
-    userId: session.userId,
-    courseId: course.id,
-    lessonId
-  });
-
-  if (insert.error) {
+  try {
+    await insertLessonCompletion({
+      userId: session.userId,
+      courseId: course.id,
+      lessonId
+    });
+  } catch {
     return data(
       { success: false, message: "Failed to complete lesson" },
       { status: 500 }

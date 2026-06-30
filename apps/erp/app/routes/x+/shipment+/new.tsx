@@ -1,6 +1,6 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { msg } from "@lingui/core/macro";
 import type { ActionFunctionArgs } from "react-router";
@@ -26,11 +26,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const sourceDocumentId = (formData.get("sourceDocumentId") as string) ?? "";
 
   const defaults = await getUserDefaults(client, userId, companyId);
-  const serviceRole = getCarbonServiceRole();
 
   switch (sourceDocument) {
     case "Sales Order":
-      const salesOrderShipment = await serviceRole.functions.invoke<{
+      const salesOrderShipment = await invokeCarbonServiceFunction<{
         id: string;
       }>("create", {
         body: {
@@ -55,7 +54,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       throw redirect(path.to.shipmentDetails(salesOrderShipment.data.id));
     case "Purchase Order":
-      const purchaseOrderShipment = await serviceRole.functions.invoke<{
+      const purchaseOrderShipment = await invokeCarbonServiceFunction<{
         id: string;
       }>("create", {
         body: {
@@ -80,7 +79,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       throw redirect(path.to.shipmentDetails(purchaseOrderShipment.data.id));
     case "Outbound Transfer":
-      const warehouseTransferShipment = await serviceRole.functions.invoke<{
+      const warehouseTransferShipment = await invokeCarbonServiceFunction<{
         id: string;
       }>("create", {
         body: {
@@ -106,7 +105,7 @@ export async function action({ request }: ActionFunctionArgs) {
         path.to.shipmentDetails(warehouseTransferShipment.data.id)
       );
     default:
-      const defaultShipment = await serviceRole.functions.invoke<{
+      const defaultShipment = await invokeCarbonServiceFunction<{
         id: string;
       }>("create", {
         body: {

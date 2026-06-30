@@ -6,7 +6,7 @@
  * When a row in any of those tables changes, the audit system attributes the change
  * to the correct business entity and records the actual field-level diff.
  *
- * The generated Supabase `Database` type (`./types`) is the source of truth for
+ * The generated Carbon `Database` type (`./types`) is the source of truth for
  * table names and column names used throughout this config.
  *
  * Table roles:

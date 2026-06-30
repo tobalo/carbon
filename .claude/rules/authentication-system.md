@@ -8,9 +8,10 @@ paths:
 
 # Authentication System
 
-Carbon auth is built on Supabase Auth with cookie sessions, Redis-cached claims, and
-per-company role/permission gating enforced through Postgres RLS. The `@carbon/auth`
-package is the single source of truth; ERP and MES consume it.
+Carbon auth is built on Better Auth provider tables, Carbon-owned cookie sessions,
+Carbon-signed RLS JWTs, Redis-cached claims, and per-company role/permission gating
+enforced through Postgres RLS. The `@carbon/auth` package is the single source of
+truth; ERP, MES, Academy, and Starter consume it.
 
 ## Package: `@carbon/auth` (`packages/auth/src`)
 
@@ -21,14 +22,14 @@ Export subpaths (`package.json`): `.` (`index.ts`), `./auth.server`, `./session.
 `getCompaniesForUser`, `makePermissionsFromClaims`) and `services/users.server.ts`
 (server-only: `getUserClaims`, deactivate flows).
 
-## Supabase client factories (`lib/supabase/client.ts`, `client.server.ts`)
+## Carbon client factories (`lib/carbon/client.ts`, `client.server.ts`)
 
 - `getCarbon(accessToken?)` — anon-key client, optionally Bearer-authed as a user.
 - `getCarbonServiceRole()` — service-role client, bypasses RLS (admin ops only).
 - `getCarbonAPIKeyClient(apiKey)` — anon client that sends the `carbon-key` header so
   RLS resolves the company via the key.
 - `getUserScopedClient(userId)` — mints a short-lived (5m) HS256 JWT with
-  `SUPABASE_JWT_SECRET` and returns a user-scoped client (RLS enforced).
+  `CARBON_AUTH_JWT_SECRET` and returns a user-scoped client (RLS enforced).
 - All clients use `fetchWithRetry` (timeout + retry on 5xx/408/524).
 
 ## Login (`apps/erp/app/routes/_public+/login.tsx`)
@@ -38,12 +39,13 @@ Magic link is the primary flow. The action rate-limits by IP (Upstash via `@carb
 (Cloud edition), then:
 
 - `DEV_BYPASS_EMAIL` match + active user → `signInWithBypassEmail` (local dev only).
-- Existing active user → `sendMagicLink` (Supabase OTP email).
+- Existing active user → `sendMagicLink` (Better Auth verification row + Carbon email).
 - Unknown user (non-Enterprise) → `sendVerificationCode`, redirect to `/verify` (email
   verification-code signup). Enterprise edition rejects unknown users.
 
-Other methods on the login page: Google + Azure OAuth (`signInWithOAuth`, redirect to
-`/callback`), and Passkey/WebAuthn (`@simplewebauthn`, `/api/passkey/authenticate/*`,
+Other methods on the login page: Google + Azure OAuth (`signInWithOAuth`, Better Auth
+under `/api/auth/*`, then `/callback` exchanges the Better Auth cookie for a Carbon
+session), and Passkey/WebAuthn (`@simplewebauthn`, `/api/passkey/authenticate/*`,
 backed by `passkey.server.ts`). Availability gated by `isAuthProviderEnabled(...)`.
 <!-- UNVERIFIED: there is no /signup route; the old cache doc's "/signup" + "Sign up for free" claims were stale (and contained a git merge-conflict artifact). Signup happens via the verification-code flow above. -->
 
@@ -57,6 +59,8 @@ Routes live under `_public+/` (`login`, `callback`, `logout`, `magic-link`, `ver
   under key `SESSION_KEY = "auth"`; `SESSION_MAX_AGE = 7 days`.
 - `requireAuthSession` reads/validates; `getOrRefreshAuthSession` refreshes within
   `REFRESH_ACCESS_TOKEN_THRESHOLD` (10 min) of expiry via `refreshAccessToken`.
+- `AuthSession.accessToken` is a Carbon-signed JWT for PostgREST/RLS; `refreshToken`
+  is a Better Auth session token stored in `better_auth_session`.
 - `destroyAuthSession` clears auth + company-id cookies, redirects to login.
   `updateCompanySession` / `updateSessionConsole` switch active company / console mode.
 
@@ -119,10 +123,15 @@ ERP exposes an OAuth 2.0 AS for use as a remote Claude/MCP connector. Routes und
   `carbon-key`) is hashed and looked up in `oauthToken`; on miss it falls back to
   `carbon-key` API-key auth. `companyId`/`userId` always come from the token context.
 
-## Schema (newest migrations; `packages/database/supabase/migrations`)
+## Schema (newest migrations; `packages/database/migrations`)
 
-- `user` / `userPermission` (`id`, `permissions` JSONB) — seeded by the
-  `create_public_user()` trigger (`on_auth_user_created` on `auth.users`).
+- `better_auth_user`, `better_auth_session`, `better_auth_account`,
+  `better_auth_verification` — Better Auth provider/session state. RLS is enabled with
+  no tenant policies; server-side Better Auth/direct DB access owns these tables.
+- `user` / `userPermission` (`id`, `permissions` JSONB) — Carbon tenant/profile
+  records. New Better Auth users are mirrored by the
+  `create_public_user_from_better_auth()` trigger; app-created accounts also upsert
+  these rows explicitly.
 - `userToCompany` — junction, PK `(userId, companyId)`, `role` enum
   `'employee' | 'supplier' | 'customer'`.
 - `apiKey` — `keyHash` (unique), `keyPreview`, `name`, `companyId`, `createdBy`, `scopes`
@@ -134,10 +143,11 @@ ERP exposes an OAuth 2.0 AS for use as a remote Claude/MCP connector. Routes und
 
 ## Config (`packages/env/src/index.ts`, re-exported by `@carbon/auth`)
 
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
-`SESSION_SECRET`, `SESSION_KEY` (`"auth"`), `SESSION_MAX_AGE`,
-`REFRESH_ACCESS_TOKEN_THRESHOLD`, `DOMAIN`, `RATE_LIMIT`, `CarbonEdition`,
-`STRIPE_BYPASS_COMPANY_IDS`, Turnstile + OAuth-provider keys.
+`CARBON_API_URL`, `CARBON_PUBLIC_KEY`, `CARBON_SERVICE_ROLE_KEY`,
+`CARBON_AUTH_JWT_SECRET`, `CARBON_DATABASE_URL`, `SESSION_SECRET`, `SESSION_KEY`
+(`"auth"`), `SESSION_MAX_AGE`, `REFRESH_ACCESS_TOKEN_THRESHOLD`, `DOMAIN`,
+`RATE_LIMIT`, `CarbonEdition`, `STRIPE_BYPASS_COMPANY_IDS`, Turnstile +
+OAuth-provider keys.
 
 ## Gotchas
 

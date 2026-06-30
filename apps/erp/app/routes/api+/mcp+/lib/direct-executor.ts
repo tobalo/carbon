@@ -1,7 +1,6 @@
 // Direct executor for ERP functions without MCP protocol wrapper
 
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import * as accountFunctions from "~/modules/account/account.service";
 import * as accountingFunctions from "~/modules/accounting/accounting.service";
 import * as documentsFunctions from "~/modules/documents/documents.service";
@@ -41,7 +40,7 @@ const functionRegistry = {
 };
 
 export interface ExecutorContext {
-  client: SupabaseClient<Database>;
+  client: CarbonClient;
   companyId: string;
   companyGroupId: string;
   userId: string;
@@ -197,8 +196,8 @@ export async function executeFunction(
     // Execute the function
     let result = await (func as Function)(...functionArgs);
 
-    // Check if result is a Supabase query builder (it's thenable but not yet executed)
-    // Supabase queries are thenable objects that need to be awaited
+    // Check if result is a PostgREST-style query builder.
+    // These query builders are thenable objects that need to be awaited.
     if (
       result &&
       typeof result === "object" &&

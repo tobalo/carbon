@@ -1,19 +1,21 @@
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { Database, Json } from "@carbon/database";
 import { fetchAllFromTable } from "@carbon/database";
 import type { Kysely, KyselyDatabase } from "@carbon/database/client";
+import {
+  isListedFileObject,
+  listObjectsResult
+} from "@carbon/object-storage/server";
 import type { PickPartial } from "@carbon/utils";
+import { sanitize } from "@carbon/utils";
 import { getLocalTimeZone, now, today } from "@internationalized/date";
-import type {
-  PostgrestError,
-  PostgrestSingleResponse,
-  SupabaseClient
-} from "@supabase/supabase-js";
 import type { z } from "zod";
 import { getSupplierPriceBreaksForItems } from "~/modules/items/items.service";
 import { getEmployeeJob } from "~/modules/people";
+import type { PostgrestError, PostgrestSingleResponse } from "~/types";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import { getCurrencyByCode } from "../accounting";
 import type {
   operationParameterValidator,
@@ -143,7 +145,7 @@ export function applyPriceRules(
 }
 
 export async function closeSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string,
   userId: string
 ) {
@@ -160,14 +162,14 @@ export async function closeSalesOrder(
 }
 
 export async function convertSalesRfqToQuote(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   payload: {
     id: string;
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke<{ convertedId: string }>("convert", {
+  return invokeCarbonServiceFunction<{ convertedId: string }>("convert", {
     body: {
       type: "salesRfqToQuote",
       ...payload
@@ -176,7 +178,7 @@ export async function convertSalesRfqToQuote(
 }
 
 export async function convertQuoteToOrder(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   payload: {
     id: string;
     selectedLines: z.infer<typeof selectedLinesValidator>;
@@ -187,7 +189,7 @@ export async function convertQuoteToOrder(
     digitalQuoteAcceptedByEmail?: string;
   }
 ) {
-  return client.functions.invoke<{ convertedId: string }>("convert", {
+  return invokeCarbonServiceFunction<{ convertedId: string }>("convert", {
     body: {
       type: "quoteToSalesOrder",
       ...payload
@@ -196,13 +198,13 @@ export async function convertQuoteToOrder(
 }
 
 export async function copyQuoteLine(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   payload: z.infer<typeof getMethodValidator> & {
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke<{ copiedId: string }>("get-method", {
+  return invokeCarbonServiceFunction<{ copiedId: string }>("get-method", {
     body: {
       ...payload,
       type: "quoteLineToQuoteLine",
@@ -219,13 +221,13 @@ export async function copyQuoteLine(
 }
 
 export async function copyQuote(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   payload: Omit<z.infer<typeof getMethodValidator>, "type"> & {
     companyId: string;
     userId: string;
   }
 ) {
-  return client.functions.invoke<{ newQuoteId: string }>("get-method", {
+  return invokeCarbonServiceFunction<{ newQuoteId: string }>("get-method", {
     body: {
       ...payload,
       type: "quoteToQuote"
@@ -234,7 +236,7 @@ export async function copyQuote(
 }
 
 export async function createPricingRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string,
   data: z.infer<typeof pricingRuleValidator>
@@ -265,15 +267,12 @@ export async function createPricingRule(
     .single();
 }
 
-export async function deleteCustomer(
-  client: SupabaseClient<Database>,
-  customerId: string
-) {
+export async function deleteCustomer(client: CarbonClient, customerId: string) {
   return client.from("customer").delete().eq("id", customerId);
 }
 
 export async function deleteCustomerContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string,
   customerContactId: string
 ) {
@@ -298,7 +297,7 @@ export async function deleteCustomerContact(
 }
 
 export async function deleteCustomerLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string,
   customerLocationId: string
 ) {
@@ -322,119 +321,113 @@ export async function deleteCustomerLocation(
 }
 
 export async function deleteCustomerStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerStatusId: string
 ) {
   return client.from("customerStatus").delete().eq("id", customerStatusId);
 }
 
 export async function deleteCustomerType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerTypeId: string
 ) {
   return client.from("customerType").delete().eq("id", customerTypeId);
 }
 
 export async function deleteNoQuoteReason(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   noQuoteReasonId: string
 ) {
   return client.from("noQuoteReason").delete().eq("id", noQuoteReasonId);
 }
 
 export async function deletePricingRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pricingRuleId: string
 ) {
   return client.from("pricingRule").delete().eq("id", pricingRuleId);
 }
 
-export async function deleteQuote(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function deleteQuote(client: CarbonClient, quoteId: string) {
   return client.from("quote").delete().eq("id", quoteId);
 }
 
 export async function deleteQuoteMakeMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteMakeMethodId: string
 ) {
   return client.from("quoteMakeMethod").delete().eq("id", quoteMakeMethodId);
 }
 
 export async function deleteQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   return client.from("quoteLine").delete().eq("id", quoteLineId);
 }
 
 export async function deleteQuoteMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteMaterialId: string
 ) {
   return client.from("quoteMaterial").delete().eq("id", quoteMaterialId);
 }
 
 export async function deleteQuoteOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteOperationId: string
 ) {
   return client.from("quoteOperation").delete().eq("id", quoteOperationId);
 }
 
 export async function deleteQuoteOperationStep(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string
 ) {
   return client.from("quoteOperationStep").delete().eq("id", id);
 }
 
 export async function deleteQuoteOperationParameter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string
 ) {
   return client.from("quoteOperationParameter").delete().eq("id", id);
 }
 
 export async function deleteQuoteOperationTool(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string
 ) {
   return client.from("quoteOperationTool").delete().eq("id", id);
 }
 
 export async function deleteSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client.from("salesOrder").delete().eq("id", salesOrderId);
 }
 
 export async function deleteSalesOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderLineId: string
 ) {
   return client.from("salesOrderLine").delete().eq("id", salesOrderLineId);
 }
 
-export async function deleteSalesRFQ(
-  client: SupabaseClient<Database>,
-  salesRfqId: string
-) {
+export async function deleteSalesRFQ(client: CarbonClient, salesRfqId: string) {
   return client.from("salesRfq").delete().eq("id", salesRfqId);
 }
 
 export async function deleteSalesRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesRFQLineId: string
 ) {
   return client.from("salesRfqLine").delete().eq("id", salesRFQLineId);
 }
 
 export async function duplicatePricingRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string,
   userId: string
@@ -472,7 +465,7 @@ export async function duplicatePricingRule(
 }
 
 export async function getConfigurationParametersByQuoteLineId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string,
   companyId: string
 ) {
@@ -512,15 +505,12 @@ export async function getConfigurationParametersByQuoteLineId(
   return { groups: groups.data ?? [], parameters: parameters.data ?? [] };
 }
 
-export async function getCustomer(
-  client: SupabaseClient<Database>,
-  customerId: string
-) {
+export async function getCustomer(client: CarbonClient, customerId: string) {
   return client.from("customers").select("*").eq("id", customerId).single();
 }
 
 export async function getCustomerContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerContactId: string
 ) {
   return client
@@ -533,7 +523,7 @@ export async function getCustomerContact(
 }
 
 export async function getCustomerContacts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string
 ) {
   return client
@@ -545,7 +535,7 @@ export async function getCustomerContacts(
 }
 
 export async function getCustomerItemPriceOverride(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string,
   itemId: string,
   companyId: string,
@@ -568,7 +558,7 @@ export async function getCustomerItemPriceOverride(
 }
 
 export async function getCustomerLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerLocationId: string
 ) {
   return client
@@ -581,7 +571,7 @@ export async function getCustomerLocation(
 }
 
 export async function getCustomerLocations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string
 ) {
   return client
@@ -593,7 +583,7 @@ export async function getCustomerLocations(
 }
 
 export async function getCustomerPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string
 ) {
   return client
@@ -604,7 +594,7 @@ export async function getCustomerPayment(
 }
 
 export async function getCustomerShipping(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string
 ) {
   return client
@@ -614,10 +604,7 @@ export async function getCustomerShipping(
     .single();
 }
 
-export async function getCustomerTax(
-  client: SupabaseClient<Database>,
-  customerId: string
-) {
+export async function getCustomerTax(client: CarbonClient, customerId: string) {
   return client
     .from("customerTax")
     .select("*")
@@ -626,7 +613,7 @@ export async function getCustomerTax(
 }
 
 export async function getCustomerTypeItemPriceOverride(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerTypeId: string,
   itemId: string,
   companyId: string,
@@ -649,7 +636,7 @@ export async function getCustomerTypeItemPriceOverride(
 }
 
 export async function getAllCustomersItemPriceOverride(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string,
   companyId: string,
   quantity: number = 1,
@@ -737,7 +724,7 @@ function pickBestBreak(
 }
 
 export async function getCustomers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -761,7 +748,7 @@ export async function getCustomers(
 }
 
 export async function getCustomersList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -773,7 +760,7 @@ export async function getCustomersList(
 }
 
 export async function getCustomerStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerStatusId: string
 ) {
   return client
@@ -784,7 +771,7 @@ export async function getCustomerStatus(
 }
 
 export async function getCustomerStatuses(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -807,7 +794,7 @@ export async function getCustomerStatuses(
 }
 
 export async function getCustomerStatusesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -818,7 +805,7 @@ export async function getCustomerStatusesList(
 }
 
 export async function getCustomerType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerTypeId: string
 ) {
   return client
@@ -829,7 +816,7 @@ export async function getCustomerType(
 }
 
 export async function getCustomerTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -852,7 +839,7 @@ export async function getCustomerTypes(
 }
 
 export async function getCustomerTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -863,7 +850,7 @@ export async function getCustomerTypesList(
 }
 
 export async function getExternalSalesOrderLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -891,7 +878,7 @@ export async function getExternalSalesOrderLines(
 }
 
 export async function getModelByQuoteLineId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   const quoteLine = await client
@@ -938,7 +925,7 @@ export async function getModelByQuoteLineId(
 }
 
 export async function getNoQuoteReasonsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -949,7 +936,7 @@ export async function getNoQuoteReasonsList(
 }
 
 export async function getNoQuoteReason(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   noQuoteReasonId: string
 ) {
   return client
@@ -960,7 +947,7 @@ export async function getNoQuoteReason(
 }
 
 export async function getNoQuoteReasons(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -983,7 +970,7 @@ export async function getNoQuoteReasons(
 }
 
 export async function getOpportunity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   opportunityId: string | null
 ): Promise<
   PostgrestSingleResponse<{
@@ -1023,34 +1010,37 @@ export async function getOpportunity(
 }
 
 export async function getOpportunityDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   opportunityId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/opportunity/${opportunityId}`);
+  const result = await listObjectsResult(
+    "private",
+    `${companyId}/opportunity/${opportunityId}`
+  );
 
   if (result.error) {
     console.error("Failed to list opportunity documents", result.error);
     return [];
   }
 
-  return result.data?.map((f) => ({ ...f, bucket: "opportunity" })) ?? [];
+  return (
+    result.data
+      ?.filter(isListedFileObject)
+      .map((f) => ({ ...f, bucket: "opportunity" })) ?? []
+  );
 }
 
 export async function getOpportunityLineDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   lineId: string,
   itemId?: string | null
 ) {
   const [opportunityLineResult, itemResult] = await Promise.all([
-    client.storage
-      .from("private")
-      .list(`${companyId}/opportunity-line/${lineId}`),
+    listObjectsResult("private", `${companyId}/opportunity-line/${lineId}`),
     itemId
-      ? client.storage.from("private").list(`${companyId}/parts/${itemId}`)
+      ? listObjectsResult("private", `${companyId}/parts/${itemId}`)
       : Promise.resolve({ data: [] as any[], error: null })
   ]);
 
@@ -1065,25 +1055,24 @@ export async function getOpportunityLineDocuments(
   }
 
   const opportunityLineDocs =
-    opportunityLineResult.data?.map((f) => ({
+    opportunityLineResult.data?.filter(isListedFileObject).map((f) => ({
       ...f,
       bucket: "opportunity-line"
     })) ?? [];
   const itemDocs =
-    itemResult.data?.map((f) => ({ ...f, bucket: "parts" })) ?? [];
+    itemResult.data
+      ?.filter(isListedFileObject)
+      .map((f) => ({ ...f, bucket: "parts" })) ?? [];
 
   return [...opportunityLineDocs, ...itemDocs];
 }
 
-export async function getPricingRule(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getPricingRule(client: CarbonClient, id: string) {
   return client.from("pricingRule").select("*").eq("id", id).single();
 }
 
 export async function getPricingRules(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search?: string }
 ) {
@@ -1111,15 +1100,12 @@ export const priceSourceTypes = [
   "Rule"
 ] as const;
 
-export async function getQuote(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function getQuote(client: CarbonClient, quoteId: string) {
   return client.from("quotes").select("*").eq("id", quoteId).single();
 }
 
 export async function getQuoteFavorites(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string
 ) {
@@ -1131,7 +1117,7 @@ export async function getQuoteFavorites(
 }
 
 export async function getQuotes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1154,10 +1140,7 @@ export async function getQuotes(
   return query;
 }
 
-export async function getQuotesList(
-  client: SupabaseClient<Database>,
-  companyId: string
-) {
+export async function getQuotesList(client: CarbonClient, companyId: string) {
   return fetchAllFromTable<{
     id: string;
     quoteId: string;
@@ -1168,7 +1151,7 @@ export async function getQuotesList(
 }
 
 export async function getQuoteAssembliesByLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   return client
@@ -1178,14 +1161,14 @@ export async function getQuoteAssembliesByLine(
 }
 
 export async function getQuoteAssemblies(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string
 ) {
   return client.from("quoteMakeMethod").select("*").eq("quoteId", quoteId);
 }
 
 export async function getQuoteCustomerDetails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string
 ) {
   return client
@@ -1195,17 +1178,11 @@ export async function getQuoteCustomerDetails(
     .single();
 }
 
-export async function getQuoteLine(
-  client: SupabaseClient<Database>,
-  quoteLineId: string
-) {
+export async function getQuoteLine(client: CarbonClient, quoteLineId: string) {
   return client.from("quoteLines").select("*").eq("id", quoteLineId).single();
 }
 
-export async function getQuoteLinesList(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function getQuoteLinesList(client: CarbonClient, quoteId: string) {
   return client
     .from("quoteLine")
     .select("id, description, ...item(readableIdWithRevision)")
@@ -1222,7 +1199,7 @@ type QuoteMethodTreeItem = {
 };
 
 export async function getQuoteMakeMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteMakeMethodId: string
 ) {
   return client
@@ -1233,7 +1210,7 @@ export async function getQuoteMakeMethod(
 }
 
 export async function getRootQuoteMakeMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   return client
@@ -1245,7 +1222,7 @@ export async function getRootQuoteMakeMethod(
 }
 
 export async function getQuoteMethodTrees(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string
 ) {
   const items = await getQuoteMethodTreeArray(client, quoteId);
@@ -1260,7 +1237,7 @@ export async function getQuoteMethodTrees(
 }
 
 export async function getQuoteMethodTreeArray(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string
 ) {
   return client.rpc("get_quote_methods", {
@@ -1311,10 +1288,7 @@ function getQuoteMethodTreeArrayToTree(
   // return rootItems.map((item) => traverseAndRenameIds(item));
 }
 
-export async function getQuoteLines(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function getQuoteLines(client: CarbonClient, quoteId: string) {
   return client
     .from("quoteLines")
     .select("*")
@@ -1324,7 +1298,7 @@ export async function getQuoteLines(
 }
 
 export async function getQuoteByExternalId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   externalId: string
 ) {
   return client
@@ -1335,7 +1309,7 @@ export async function getQuoteByExternalId(
 }
 
 export async function getQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   return client
@@ -1345,7 +1319,7 @@ export async function getQuoteLinePrices(
 }
 
 export async function getQuoteLinePricesByQuoteId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string
 ) {
   return client
@@ -1356,7 +1330,7 @@ export async function getQuoteLinePricesByQuoteId(
 }
 
 export async function getQuoteLinePricesByItemId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string,
   currentQuoteId: string
 ) {
@@ -1370,7 +1344,7 @@ export async function getQuoteLinePricesByItemId(
 }
 
 export async function getQuoteLinePricesByItemIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemIds: string[],
   currentQuoteId: string
 ) {
@@ -1384,15 +1358,12 @@ export async function getQuoteLinePricesByItemIds(
     .limit(10);
 }
 
-export async function getQuoteMaterials(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function getQuoteMaterials(client: CarbonClient, quoteId: string) {
   return client.from("quoteMaterial").select("*").eq("quoteId", quoteId);
 }
 
 export async function getQuoteMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   materialId: string
 ) {
   return client
@@ -1403,7 +1374,7 @@ export async function getQuoteMaterial(
 }
 
 export async function getQuoteMaterialsByLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   return client
@@ -1413,7 +1384,7 @@ export async function getQuoteMaterialsByLine(
 }
 
 export async function getQuoteMaterialsByMethodId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteMakeMethodId: string
 ) {
   return client
@@ -1424,7 +1395,7 @@ export async function getQuoteMaterialsByMethodId(
 }
 
 export async function getQuoteMaterialsByOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteOperationId: string
 ) {
   return client
@@ -1434,7 +1405,7 @@ export async function getQuoteMaterialsByOperation(
 }
 
 export async function getQuoteOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteOperationId: string
 ) {
   return client
@@ -1445,7 +1416,7 @@ export async function getQuoteOperation(
 }
 
 export async function getQuoteOperationsByLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string
 ) {
   return client
@@ -1455,7 +1426,7 @@ export async function getQuoteOperationsByLine(
 }
 
 export async function getQuoteOperationsByMethodId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteMakeMethodId: string
 ) {
   return client
@@ -1468,28 +1439,22 @@ export async function getQuoteOperationsByMethodId(
 }
 
 export async function getQuoteOperations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string
 ) {
   return client.from("quoteOperation").select("*").eq("quoteId", quoteId);
 }
 
-export async function getQuotePayment(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function getQuotePayment(client: CarbonClient, quoteId: string) {
   return client.from("quotePayment").select("*").eq("id", quoteId).single();
 }
 
-export async function getQuoteShipment(
-  client: SupabaseClient<Database>,
-  quoteId: string
-) {
+export async function getQuoteShipment(client: CarbonClient, quoteId: string) {
   return client.from("quoteShipment").select("*").eq("id", quoteId).single();
 }
 
 export async function getRelatedPricesForQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string,
   quoteId: string
 ) {
@@ -1517,7 +1482,7 @@ export async function getRelatedPricesForQuoteLine(
 }
 
 export async function getSalesDocumentsAssignedToMe(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -1549,14 +1514,14 @@ export async function getSalesDocumentsAssignedToMe(
 }
 
 export async function getSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client.from("salesOrders").select("*").eq("id", salesOrderId).single();
 }
 
 export async function getSalesOrderCustomerDetails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client
@@ -1567,7 +1532,7 @@ export async function getSalesOrderCustomerDetails(
 }
 
 export async function getSalesOrderFavorites(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string
 ) {
@@ -1579,7 +1544,7 @@ export async function getSalesOrderFavorites(
 }
 
 export async function getSalesOrderRelatedItems(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string,
   opportunityId: string
 ) {
@@ -1603,7 +1568,7 @@ export async function getSalesOrderRelatedItems(
 }
 
 export async function getSalesOrders(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1634,7 +1599,7 @@ export async function getSalesOrders(
 }
 
 export async function getSalesOrdersList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -1645,15 +1610,12 @@ export async function getSalesOrdersList(
   );
 }
 
-export async function getSalesOrdersByIds(
-  client: SupabaseClient<Database>,
-  ids: string[]
-) {
+export async function getSalesOrdersByIds(client: CarbonClient, ids: string[]) {
   return client.from("salesOrder").select("id, salesOrderId").in("id", ids);
 }
 
 export async function getSalesOrderPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client
@@ -1663,15 +1625,12 @@ export async function getSalesOrderPayment(
     .single();
 }
 
-export async function getSalesTerms(
-  client: SupabaseClient<Database>,
-  companyId: string
-) {
+export async function getSalesTerms(client: CarbonClient, companyId: string) {
   return client.from("terms").select("salesTerms").eq("id", companyId).single();
 }
 
 export async function getSalesOrderShipment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client
@@ -1681,12 +1640,12 @@ export async function getSalesOrderShipment(
     .single();
 }
 
-export async function getSalesOrderCustomers(client: SupabaseClient<Database>) {
+export async function getSalesOrderCustomers(client: CarbonClient) {
   return client.from("salesOrderCustomers").select("id, name");
 }
 
 export async function getSalesOrderLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client
@@ -1698,7 +1657,7 @@ export async function getSalesOrderLines(
 }
 
 export async function getSalesOrderInvoiceLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string
 ) {
   return client
@@ -1708,7 +1667,7 @@ export async function getSalesOrderInvoiceLines(
 }
 
 export async function getSalesOrderInvoicesByIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   invoiceIds: string[]
 ) {
   return client
@@ -1718,7 +1677,7 @@ export async function getSalesOrderInvoicesByIds(
 }
 
 export async function getSalesOrderLinesByItemId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string
 ) {
   return client
@@ -1730,7 +1689,7 @@ export async function getSalesOrderLinesByItemId(
 }
 
 export async function getSalesOrderLinesByItemIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemIds: string[]
 ) {
   return client
@@ -1743,7 +1702,7 @@ export async function getSalesOrderLinesByItemIds(
 }
 
 export async function getSalesOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderLineId: string
 ) {
   return client
@@ -1754,7 +1713,7 @@ export async function getSalesOrderLine(
 }
 
 export async function getSalesOrderLineShipments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderLineId: string
 ) {
   return client
@@ -1764,15 +1723,12 @@ export async function getSalesOrderLineShipments(
     .gt("shippedQuantity", 0);
 }
 
-export async function getSalesRFQ(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getSalesRFQ(client: CarbonClient, id: string) {
   return client.from("salesRfqs").select("*").eq("id", id).single();
 }
 
 export async function getSalesRFQFavorites(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string
 ) {
@@ -1784,7 +1740,7 @@ export async function getSalesRFQFavorites(
 }
 
 export async function getSalesRFQs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1807,15 +1763,12 @@ export async function getSalesRFQs(
   return query;
 }
 
-export async function getSalesRFQLine(
-  client: SupabaseClient<Database>,
-  lineId: string
-) {
+export async function getSalesRFQLine(client: CarbonClient, lineId: string) {
   return client.from("salesRfqLines").select("*").eq("id", lineId).single();
 }
 
 export async function getSalesRFQLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesRfqId: string
 ) {
   return client
@@ -1827,7 +1780,7 @@ export async function getSalesRFQLines(
 }
 
 export async function insertCustomerContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerContact: {
     customerId: string;
     companyId: string;
@@ -1871,7 +1824,7 @@ export async function insertCustomerContact(
 }
 
 export async function insertCustomerLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerLocation: {
     customerId: string;
     companyId: string;
@@ -1918,7 +1871,7 @@ export async function insertCustomerLocation(
 }
 
 export async function insertSalesOrderLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderLines: (Omit<z.infer<typeof salesOrderLineValidator>, "id"> & {
     companyId: string;
     createdBy: string;
@@ -1938,7 +1891,7 @@ export async function insertSalesOrderLines(
 }
 
 export async function finalizeQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string,
   userId: string
 ) {
@@ -1967,7 +1920,7 @@ export async function finalizeQuote(
 }
 
 export async function releaseSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderId: string,
   userId: string
 ) {
@@ -1982,7 +1935,7 @@ export async function releaseSalesOrder(
 }
 
 export async function resolvePrice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   input: PriceResolutionInput
 ): Promise<PriceResolutionResult> {
@@ -2177,7 +2130,7 @@ export async function resolvePrice(
 // return the remaining filters to apply normally. Returns { itemIds: null }
 // when no posting-group filter is present.
 async function resolvePostingGroupFilter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   filters: GenericQueryFilters["filters"]
 ): Promise<{
@@ -2208,7 +2161,7 @@ async function resolvePostingGroupFilter(
 }
 
 export async function resolvePriceList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     customerId?: string;
@@ -2519,7 +2472,7 @@ export async function resolvePriceList(
 }
 
 export async function getBaseCatalog(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & { search?: string }
 ): Promise<PriceListResult> {
@@ -2588,7 +2541,7 @@ export async function getBaseCatalog(
 }
 
 export async function upsertCustomer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customer:
     | (Omit<z.infer<typeof customerValidator>, "id"> & {
         companyId: string;
@@ -2620,7 +2573,7 @@ export async function upsertCustomer(
 }
 
 export async function upsertCustomerItemPriceOverride(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string,
   data: {
@@ -2796,7 +2749,7 @@ export async function upsertCustomerItemPriceOverride(
 }
 
 export async function deleteCustomerItemPriceOverride(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -2808,7 +2761,7 @@ export async function deleteCustomerItemPriceOverride(
 }
 
 export async function getCustomerItemPriceOverrideById(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -2829,7 +2782,7 @@ export async function getCustomerItemPriceOverrideById(
 }
 
 export async function getCustomerItemPriceOverridesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search?: string;
@@ -2877,7 +2830,7 @@ export async function getCustomerItemPriceOverridesList(
 }
 
 export async function updateCustomerAccounting(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerAccounting: z.infer<typeof customerAccountingValidator> & {
     updatedBy: string;
   }
@@ -2889,7 +2842,7 @@ export async function updateCustomerAccounting(
 }
 
 export async function updateCustomerContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerContact: {
     contactId: string;
     contact: z.infer<typeof customerContactValidator>;
@@ -2919,7 +2872,7 @@ export async function updateCustomerContact(
 }
 
 export async function updateCustomerLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerLocation: {
     addressId: string;
     name: string;
@@ -2955,7 +2908,7 @@ export async function updateCustomerLocation(
     .single();
 }
 export async function updateCustomerPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerPayment: z.infer<typeof customerPaymentValidator> & {
     updatedBy: string;
   }
@@ -2967,7 +2920,7 @@ export async function updateCustomerPayment(
 }
 
 export async function updateCustomerShipping(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerShipping: z.infer<typeof customerShippingValidator> & {
     updatedBy: string;
   }
@@ -2979,7 +2932,7 @@ export async function updateCustomerShipping(
 }
 
 export async function updateCustomerTax(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerTax: z.infer<typeof customerTaxValidator> & {
     updatedBy: string;
     taxExemptionCertificatePath?: string | null;
@@ -2992,7 +2945,7 @@ export async function updateCustomerTax(
 }
 
 export async function updatePricingRule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string,
   data: Partial<z.infer<typeof pricingRuleValidator>>
@@ -3012,7 +2965,7 @@ export async function updatePricingRule(
 }
 
 export async function upsertCustomerStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerStatus:
     | (Omit<z.infer<typeof customerStatusValidator>, "id"> & {
         companyId: string;
@@ -3036,7 +2989,7 @@ export async function upsertCustomerStatus(
 }
 
 export async function upsertCustomerType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customerType:
     | (Omit<z.infer<typeof customerTypeValidator>, "id"> & {
         companyId: string;
@@ -3060,7 +3013,7 @@ export async function upsertCustomerType(
 }
 
 export async function upsertNoQuoteReason(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   noQuoteReason:
     | (Omit<z.infer<typeof noQuoteReasonValidator>, "id"> & {
         companyId: string;
@@ -3084,7 +3037,7 @@ export async function upsertNoQuoteReason(
 }
 
 export async function updateSalesRFQFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     favorite: boolean;
@@ -3106,7 +3059,7 @@ export async function updateSalesRFQFavorite(
 }
 
 export async function updateQuoteExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     exchangeRate: number;
@@ -3122,7 +3075,7 @@ export async function updateQuoteExchangeRate(
 }
 
 export async function updateQuoteLinePrecision(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteLineId: string,
   precision: number
 ) {
@@ -3135,7 +3088,7 @@ export async function updateQuoteLinePrecision(
 }
 
 export async function updateSalesOrderExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     exchangeRate: number;
@@ -3151,7 +3104,7 @@ export async function updateSalesOrderExchangeRate(
 }
 
 export async function updateQuoteFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     favorite: boolean;
@@ -3171,7 +3124,7 @@ export async function updateQuoteFavorite(
 }
 
 export async function updateSalesRFQStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof salesRFQStatusType)[number];
@@ -3197,7 +3150,7 @@ export async function updateSalesRFQStatus(
 }
 
 export async function updateQuoteMaterialOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   updates: {
     id: string;
     order: number;
@@ -3211,7 +3164,7 @@ export async function updateQuoteMaterialOrder(
 }
 
 export async function updateQuoteOperationOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   updates: {
     id: string;
     order: number;
@@ -3225,7 +3178,7 @@ export async function updateQuoteOperationOrder(
 }
 
 export async function updateQuoteStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof quoteStatusType)[number];
@@ -3247,7 +3200,7 @@ export async function updateQuoteStatus(
 }
 
 export async function upsertMakeMethodFromQuoteLine(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   lineMethod: {
     itemId: string;
     quoteId: string;
@@ -3264,7 +3217,7 @@ export async function upsertMakeMethodFromQuoteLine(
     };
   }
 ) {
-  return client.functions.invoke("get-method", {
+  return invokeCarbonServiceFunction("get-method", {
     body: {
       type: "quoteLineToItem",
       sourceId: `${lineMethod.quoteId}:${lineMethod.quoteLineId}`,
@@ -3277,7 +3230,7 @@ export async function upsertMakeMethodFromQuoteLine(
 }
 
 export async function upsertMakeMethodFromQuoteMethod(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   quoteMethod: {
     sourceId: string;
     targetId: string;
@@ -3293,7 +3246,7 @@ export async function upsertMakeMethodFromQuoteMethod(
     };
   }
 ) {
-  const { error } = await client.functions.invoke("get-method", {
+  const { error } = await invokeCarbonServiceFunction("get-method", {
     body: {
       type: "quoteMakeMethodToItem",
       sourceId: quoteMethod.sourceId,
@@ -3315,7 +3268,7 @@ export async function upsertMakeMethodFromQuoteMethod(
 }
 
 export async function insertQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     customerId: string;
     companyId: string;
@@ -3486,7 +3439,7 @@ export async function insertQuote(
 }
 
 export async function updateQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -3565,7 +3518,7 @@ export async function updateQuote(
 
 /** @deprecated Use insertQuote for new quotes, updateQuote for existing quotes */
 export async function upsertQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quote:
     | (Omit<z.infer<typeof quoteValidator>, "id" | "quoteId"> & {
         quoteId: string;
@@ -3738,7 +3691,7 @@ export async function upsertQuote(
 }
 
 export async function upsertQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quotationLine:
     | (Omit<z.infer<typeof quoteLineValidator>, "id"> & {
         companyId: string;
@@ -3793,7 +3746,7 @@ export async function updateQuoteLineOrder(
 }
 
 export async function upsertQuoteLineAdditionalCharges(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   lineId: string,
   update: {
     additionalCharges: z.infer<typeof quoteLineAdditionalChargesValidator>;
@@ -3804,7 +3757,7 @@ export async function upsertQuoteLineAdditionalCharges(
 }
 
 export async function upsertQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string,
   lineId: string,
   quoteLinePrices: {
@@ -3886,10 +3839,7 @@ export async function upsertQuoteLinePrices(
   );
 }
 
-async function buildCostEffects(
-  client: SupabaseClient<Database>,
-  quoteLineId: string
-) {
+async function buildCostEffects(client: CarbonClient, quoteLineId: string) {
   const operationsResult = await client
     .from("quoteOperation")
     .select("*")
@@ -4156,7 +4106,7 @@ async function buildCostEffects(
 }
 
 export async function calculatePricesForQuantities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string,
   quoteLineId: string,
   quantities: number[],
@@ -4263,7 +4213,7 @@ export async function calculatePricesForQuantities(
 }
 
 export async function resolveQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   quoteId: string,
   quoteLineId: string,
@@ -4327,7 +4277,7 @@ export async function resolveQuoteLinePrices(
 }
 
 export async function resolvePurchaseToOrderPrices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   quoteId: string,
   quoteLineId: string,
@@ -4394,7 +4344,7 @@ export async function resolvePurchaseToOrderPrices(
 }
 
 export async function recalculateQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteId: string,
   quoteLineId: string,
   userId: string
@@ -4523,7 +4473,7 @@ export async function recalculateQuoteLinePrices(
 }
 
 export async function upsertQuoteLineMethod(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   lineMethod: {
     itemId: string;
     quoteId: string;
@@ -4574,13 +4524,13 @@ export async function upsertQuoteLineMethod(
     body.parts = lineMethod.parts;
   }
 
-  return client.functions.invoke("get-method", {
+  return invokeCarbonServiceFunction("get-method", {
     body
   });
 }
 
 export async function upsertQuoteMaterial(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteMaterial:
     | (z.infer<typeof quoteMaterialValidator> & {
         quoteId: string;
@@ -4614,7 +4564,7 @@ export async function upsertQuoteMaterial(
 }
 
 export async function upsertQuoteMaterialMakeMethod(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   quoteMethod: {
     sourceId: string;
     targetId: string;
@@ -4664,7 +4614,7 @@ export async function upsertQuoteMaterialMakeMethod(
     body.parts = quoteMethod.parts;
   }
 
-  const { error } = await client.functions.invoke("get-method", {
+  const { error } = await invokeCarbonServiceFunction("get-method", {
     body
   });
 
@@ -4679,7 +4629,7 @@ export async function upsertQuoteMaterialMakeMethod(
 }
 
 export async function upsertQuoteOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operation:
     | (Omit<z.infer<typeof quoteOperationValidator>, "id"> & {
         quoteId: string;
@@ -4719,7 +4669,7 @@ export async function upsertQuoteOperation(
 }
 
 export async function upsertQuoteOperationStep(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteOperationStep:
     | (Omit<z.infer<typeof operationStepValidator>, "id"> & {
         companyId: string;
@@ -4753,7 +4703,7 @@ export async function upsertQuoteOperationStep(
 }
 
 export async function upsertQuoteOperationParameter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteOperationParameter:
     | (Omit<z.infer<typeof operationParameterValidator>, "id"> & {
         companyId: string;
@@ -4782,7 +4732,7 @@ export async function upsertQuoteOperationParameter(
 }
 
 export async function upsertQuoteOperationTool(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteOperationTool:
     | (Omit<z.infer<typeof operationToolValidator>, "id"> & {
         companyId: string;
@@ -4811,7 +4761,7 @@ export async function upsertQuoteOperationTool(
 }
 
 export async function upsertQuotePayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quotePayment:
     | (z.infer<typeof quotePaymentValidator> & {
         createdBy: string;
@@ -4839,7 +4789,7 @@ export async function upsertQuotePayment(
 }
 
 export async function upsertQuoteShipment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   quoteShipment:
     | (z.infer<typeof quoteShipmentValidator> & {
         createdBy: string;
@@ -4865,7 +4815,7 @@ export async function upsertQuoteShipment(
 }
 
 export async function updateSalesOrderFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     favorite: boolean;
@@ -4887,7 +4837,7 @@ export async function updateSalesOrderFavorite(
 }
 
 export async function updateSalesOrderStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof salesOrderStatusType)[number];
@@ -4910,7 +4860,7 @@ export async function updateSalesOrderStatus(
 }
 
 export async function insertSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     customerId: string;
     companyId: string;
@@ -5074,7 +5024,7 @@ export async function insertSalesOrder(
 }
 
 export async function updateSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -5151,7 +5101,7 @@ export const LIVE_JOB_STATUSES: Database["public"]["Enums"]["jobStatus"][] = [
 ];
 
 export async function cancelSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     userId: string;
@@ -5239,7 +5189,7 @@ export async function cancelSalesOrder(
 
 /** @deprecated Use insertSalesOrder for new orders, updateSalesOrder for existing orders */
 export async function upsertSalesOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrder:
     | (Omit<z.infer<typeof salesOrderValidator>, "id" | "salesOrderId"> & {
         salesOrderId: string;
@@ -5415,7 +5365,7 @@ export async function upsertSalesOrder(
 }
 
 export async function upsertSalesOrderShipment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderShipment:
     | (z.infer<typeof salesOrderShipmentValidator> & {
         createdBy: string;
@@ -5443,7 +5393,7 @@ export async function upsertSalesOrderShipment(
 }
 
 export async function upsertSalesOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderLine:
     | (Omit<z.infer<typeof salesOrderLineValidator>, "id"> & {
         companyId: string;
@@ -5513,7 +5463,7 @@ export async function updateSalesOrderLineOrder(
 }
 
 export async function upsertSalesOrderPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesOrderPayment:
     | (z.infer<typeof salesOrderPaymentValidator> & {
         createdBy: string;
@@ -5541,7 +5491,7 @@ export async function upsertSalesOrderPayment(
 }
 
 export async function insertSalesRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     customerId: string;
     companyId: string;
@@ -5621,7 +5571,7 @@ export async function insertSalesRFQ(
 }
 
 export async function updateSalesRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -5674,7 +5624,7 @@ export async function updateSalesRFQ(
 
 /** @deprecated Use insertSalesRFQ for new RFQs, updateSalesRFQ for existing RFQs */
 export async function upsertSalesRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   rfq:
     | (Omit<z.infer<typeof salesRfqValidator>, "id" | "rfqId"> & {
         rfqId: string;
@@ -5742,7 +5692,7 @@ export async function upsertSalesRFQ(
 }
 
 export async function upsertSalesRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
 
   salesRfqLine:
     | (Omit<z.infer<typeof salesRfqLineValidator>, "id"> & {

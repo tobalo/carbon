@@ -28,7 +28,6 @@ import {
 } from "@carbon/react";
 import { convertKbToString } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 import { LuEllipsisVertical, LuUpload } from "react-icons/lu";
@@ -39,9 +38,19 @@ import { Enumerable } from "~/components/Enumerable";
 import { useDateFormatter, usePermissions, useUser } from "~/hooks";
 import type { OptimisticFileObject } from "~/modules/shared";
 import { getDocumentType } from "~/modules/shared";
-import type { ModelUpload } from "~/types";
+import type { FileObject, ModelUpload } from "~/types";
 import { path } from "~/utils/path";
+import {
+  movePrivateFile,
+  removePrivateFiles,
+  uploadPrivateFile
+} from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
+
+type JobDocumentBucket = "job" | "parts";
+
+const getStoragePermission = (bucket: JobDocumentBucket) =>
+  bucket === "parts" ? "parts" : "production";
 
 const useJobDocuments = ({
   jobId,
@@ -75,19 +84,19 @@ const useJobDocuments = ({
   const deleteFile = useCallback(
     async (file: FileObject & { bucket?: string }) => {
       const bucket = file.bucket === "parts" ? "parts" : "job";
-      const fileDelete = await carbon?.storage
-        .from("private")
-        .remove([getPath(file, bucket as "job" | "parts")]);
+      const fileDelete = await removePrivateFiles([getPath(file, bucket)], {
+        permission: getStoragePermission(bucket)
+      });
 
-      if (!fileDelete || fileDelete.error) {
-        toast.error(fileDelete?.error?.message || "Error deleting file");
+      if (fileDelete.error) {
+        toast.error(fileDelete.error.message || "Error deleting file");
         return;
       }
 
       toast.success(t`${file.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [getPath, carbon?.storage, revalidator, t]
+    [getPath, revalidator, t]
   );
 
   const deleteModel = useCallback(async () => {
@@ -197,12 +206,7 @@ const useJobDocuments = ({
   );
 
   const upload = useCallback(
-    async (files: File[], bucket: "job" | "parts" = "job") => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
+    async (files: File[], bucket: JobDocumentBucket = "job") => {
       if (bucket === "parts" && !itemId) {
         toast.error(t`Cannot upload to parts bucket without item ID`);
         return;
@@ -211,12 +215,10 @@ const useJobDocuments = ({
       for (const file of files) {
         const fileName = getPath(file, bucket);
 
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadPrivateFile(fileName, file, {
+          permission: getStoragePermission(bucket),
+          cacheControl: `${12 * 60 * 60}`
+        });
 
         if (fileUpload.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -231,19 +233,14 @@ const useJobDocuments = ({
       }
       revalidator.revalidate();
     },
-    [getPath, createDocumentRecord, carbon, revalidator, itemId, t]
+    [getPath, createDocumentRecord, revalidator, itemId, t]
   );
 
   const moveFile = useCallback(
     async (
       file: FileObject & { bucket?: string },
-      targetBucket: "job" | "parts"
+      targetBucket: JobDocumentBucket
     ) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       if (targetBucket === "parts" && !itemId) {
         toast.error(t`Cannot move to parts bucket without item ID`);
         return;
@@ -257,38 +254,15 @@ const useJobDocuments = ({
       }
 
       try {
-        // Download the file first
         const sourcePath = getPath(file, currentBucket);
-        const { data: downloadData } = await carbon.storage
-          .from("private")
-          .download(sourcePath);
-
-        if (!downloadData) {
-          toast.error(t`Failed to download file for moving`);
-          return;
-        }
-
-        // Upload to new location
         const targetPath = getPath(file, targetBucket);
-        const { error: uploadError } = await carbon.storage
-          .from("private")
-          .upload(targetPath, downloadData, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileMove = await movePrivateFile(sourcePath, targetPath, {
+          sourcePermission: getStoragePermission(currentBucket),
+          destinationPermission: getStoragePermission(targetBucket)
+        });
 
-        if (uploadError) {
-          toast.error(t`Failed to upload file to new location`);
-          return;
-        }
-
-        // Delete from old location
-        const { error: deleteError } = await carbon.storage
-          .from("private")
-          .remove([sourcePath]);
-
-        if (deleteError) {
-          toast.error(t`Failed to delete file from old location`);
+        if (fileMove.error) {
+          toast.error(fileMove.error.message || t`Failed to move file`);
           return;
         }
 
@@ -303,7 +277,7 @@ const useJobDocuments = ({
         console.error(error);
       }
     },
-    [carbon, itemId, getPath, revalidator, t]
+    [itemId, getPath, revalidator, t]
   );
 
   return {

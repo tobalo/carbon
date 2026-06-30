@@ -1,16 +1,18 @@
-import type { Database, Json } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
+import type { Json } from "@carbon/database";
 import type { Kysely, KyselyDatabase } from "@carbon/database/client";
+import { sanitize } from "@carbon/utils";
 import { getLocalTimeZone, now, today } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
 import {
   getSupplierPayment,
   getSupplierShipping,
   insertSupplierInteraction
 } from "~/modules/purchasing";
+import type { PostgrestError } from "~/types";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import { getCurrencyByCode } from "../accounting/accounting.service";
 import { getEmployeeJob } from "../people/people.service";
 import {
@@ -29,12 +31,12 @@ import type {
 } from "./invoicing.models";
 
 export async function createPurchaseInvoiceFromPurchaseOrder(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   purchaseOrderId: string,
   companyId: string,
   userId: string
 ) {
-  return client.functions.invoke<{ id: string }>("convert", {
+  return invokeCarbonServiceFunction<{ id: string }>("convert", {
     body: {
       type: "purchaseOrderToPurchaseInvoice",
       id: purchaseOrderId,
@@ -45,12 +47,12 @@ export async function createPurchaseInvoiceFromPurchaseOrder(
 }
 
 export async function createSalesInvoiceFromSalesOrder(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   salesOrderId: string,
   companyId: string,
   userId: string
 ) {
-  return client.functions.invoke<{ id: string }>("convert", {
+  return invokeCarbonServiceFunction<{ id: string }>("convert", {
     body: {
       type: "salesOrderToSalesInvoice",
       id: salesOrderId,
@@ -61,12 +63,12 @@ export async function createSalesInvoiceFromSalesOrder(
 }
 
 export async function createSalesInvoiceFromShipment(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   shipmentId: string,
   companyId: string,
   userId: string
 ) {
-  return client.functions.invoke<{ id: string }>("convert", {
+  return invokeCarbonServiceFunction<{ id: string }>("convert", {
     body: {
       type: "shipmentToSalesInvoice",
       id: shipmentId,
@@ -77,7 +79,7 @@ export async function createSalesInvoiceFromShipment(
 }
 
 export async function deletePurchaseInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceId: string
 ) {
   // Check if invoice is in Draft status before deleting
@@ -105,7 +107,7 @@ export async function deletePurchaseInvoice(
 }
 
 export async function deletePurchaseInvoiceLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceLineId: string
 ) {
   return client
@@ -115,7 +117,7 @@ export async function deletePurchaseInvoiceLine(
 }
 
 export async function deleteSalesInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceId: string
 ) {
   // Check if invoice is in Draft status before deleting
@@ -143,14 +145,14 @@ export async function deleteSalesInvoice(
 }
 
 export async function deleteSalesInvoiceLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceLineId: string
 ) {
   return client.from("salesInvoiceLine").delete().eq("id", salesInvoiceLineId);
 }
 
 export async function getPurchaseInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceId: string
 ) {
   return client
@@ -161,7 +163,7 @@ export async function getPurchaseInvoice(
 }
 
 export async function getPurchaseInvoices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -188,7 +190,7 @@ export async function getPurchaseInvoices(
 }
 
 export async function getPurchaseInvoiceDelivery(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceId: string
 ) {
   return client
@@ -199,7 +201,7 @@ export async function getPurchaseInvoiceDelivery(
 }
 
 export async function getPurchaseInvoiceLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceId: string
 ) {
   return client
@@ -211,7 +213,7 @@ export async function getPurchaseInvoiceLines(
 }
 
 export async function getPurchaseInvoiceLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceLineId: string
 ) {
   return client
@@ -222,7 +224,7 @@ export async function getPurchaseInvoiceLine(
 }
 
 export async function getSalesInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceId: string
 ) {
   return client
@@ -233,7 +235,7 @@ export async function getSalesInvoice(
 }
 
 export async function getSalesInvoiceCustomerDetails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceId: string
 ) {
   return client
@@ -244,7 +246,7 @@ export async function getSalesInvoiceCustomerDetails(
 }
 
 export async function getSalesInvoices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -271,7 +273,7 @@ export async function getSalesInvoices(
 }
 
 export async function getSalesInvoiceShipment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceId: string
 ) {
   return client
@@ -282,7 +284,7 @@ export async function getSalesInvoiceShipment(
 }
 
 export async function getSalesInvoiceLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceId: string
 ) {
   return client
@@ -294,7 +296,7 @@ export async function getSalesInvoiceLines(
 }
 
 export async function getSalesInvoiceLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceLineId: string
 ) {
   return client
@@ -305,7 +307,7 @@ export async function getSalesInvoiceLine(
 }
 
 export async function updatePurchaseInvoiceExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     exchangeRate: number;
@@ -321,7 +323,7 @@ export async function updatePurchaseInvoiceExchangeRate(
 }
 
 export async function updatePurchaseInvoiceStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof purchaseInvoiceStatusType)[number];
@@ -344,7 +346,7 @@ export async function updatePurchaseInvoiceStatus(
 }
 
 export async function updateSalesInvoiceExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     exchangeRate: number;
@@ -360,7 +362,7 @@ export async function updateSalesInvoiceExchangeRate(
 }
 
 export async function updateSalesInvoiceStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof salesInvoiceStatusType)[number];
@@ -382,7 +384,7 @@ export async function updateSalesInvoiceStatus(
 }
 
 export async function insertPurchaseInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     supplierId: string;
     companyId: string;
@@ -404,7 +406,7 @@ export async function insertPurchaseInvoice(
   }
 ): Promise<{
   data: { id: string; invoiceId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let invoiceId: string;
   if (input.invoiceId) {
@@ -421,7 +423,7 @@ export async function insertPurchaseInvoice(
           seq.error ??
           ({
             message: "Failed to generate purchaseInvoice sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     invoiceId = seq.data;
@@ -514,7 +516,7 @@ export async function insertPurchaseInvoice(
 }
 
 export async function updatePurchaseInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -535,7 +537,7 @@ export async function updatePurchaseInvoice(
   }
 ): Promise<{
   data: { id: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const { id, ...rest } = input;
   const result = await client
@@ -554,7 +556,7 @@ export async function updatePurchaseInvoice(
 
 /** @deprecated Use insertPurchaseInvoice for new invoices, updatePurchaseInvoice for existing invoices */
 export async function upsertPurchaseInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoice:
     | (Omit<z.infer<typeof purchaseInvoiceValidator>, "id" | "invoiceId"> & {
         invoiceId: string;
@@ -665,7 +667,7 @@ export async function upsertPurchaseInvoice(
 }
 
 export async function upsertPurchaseInvoiceDelivery(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceDelivery:
     | (z.infer<typeof purchaseInvoiceDeliveryValidator> & {
         companyId: string;
@@ -694,7 +696,7 @@ export async function upsertPurchaseInvoiceDelivery(
 }
 
 export async function upsertPurchaseInvoiceLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseInvoiceLine:
     | (Omit<z.infer<typeof purchaseInvoiceLineValidator>, "id"> & {
         companyId: string;
@@ -749,7 +751,7 @@ export async function updatePurchaseInvoiceLineOrder(
 }
 
 export async function insertSalesInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     customerId: string;
     companyId: string;
@@ -771,7 +773,7 @@ export async function insertSalesInvoice(
   }
 ): Promise<{
   data: { id: string; invoiceId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let invoiceId: string;
   if (input.invoiceId) {
@@ -788,7 +790,7 @@ export async function insertSalesInvoice(
           seq.error ??
           ({
             message: "Failed to generate salesInvoice sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     invoiceId = seq.data;
@@ -888,7 +890,7 @@ export async function insertSalesInvoice(
 }
 
 export async function updateSalesInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -909,7 +911,7 @@ export async function updateSalesInvoice(
   }
 ): Promise<{
   data: { id: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const { id, ...rest } = input;
   const result = await client
@@ -928,7 +930,7 @@ export async function updateSalesInvoice(
 
 /** @deprecated Use insertSalesInvoice for new invoices, updateSalesInvoice for existing invoices */
 export async function upsertSalesInvoice(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoice:
     | (Omit<z.infer<typeof salesInvoiceValidator>, "id" | "invoiceId"> & {
         invoiceId: string;
@@ -1039,7 +1041,7 @@ export async function upsertSalesInvoice(
 }
 
 export async function upsertSalesInvoiceShipment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceShipment:
     | (z.infer<typeof salesInvoiceShipmentValidator> & {
         companyId: string;
@@ -1068,7 +1070,7 @@ export async function upsertSalesInvoiceShipment(
 }
 
 export async function upsertSalesInvoiceLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   salesInvoiceLine:
     | (Omit<z.infer<typeof salesInvoiceLineValidator>, "id"> & {
         companyId: string;

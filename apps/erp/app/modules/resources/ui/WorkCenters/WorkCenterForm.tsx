@@ -20,7 +20,6 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -31,6 +30,7 @@ import Processes from "~/components/Form/Processes";
 import StandardFactor from "~/components/Form/StandardFactor";
 import { usePermissions, useUser } from "~/hooks";
 import { workCenterValidator } from "~/modules/resources";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 
 type WorkCenterFormProps = {

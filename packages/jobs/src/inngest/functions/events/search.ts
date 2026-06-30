@@ -3,7 +3,7 @@ import { groupBy } from "@carbon/utils";
 import { z } from "zod";
 import { inngest } from "../../client";
 
-// Type for the Supabase client with our custom RPC functions
+// Type for the Carbon data client with our custom RPC functions
 type SearchRpcClient = ReturnType<typeof getCarbonServiceRole> & {
   rpc(
     fn: "delete_from_search_index",

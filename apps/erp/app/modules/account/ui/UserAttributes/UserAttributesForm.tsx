@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { ValidatedForm } from "@carbon/form";
 import {
   Button,
@@ -34,6 +33,7 @@ import SupplierAvatar from "~/components/SupplierAvatar";
 import { usePermissions, useUser } from "~/hooks";
 import { DataType } from "~/modules/shared";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadAuthenticatedFile } from "~/utils/storage.client";
 import {
   attributeBooleanValidator,
   attributeCustomerValidator,
@@ -745,7 +745,6 @@ function FileAttributeForm({
   onClose: () => void;
 }) {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [filePath, setFilePath] = useState<string | null>(
@@ -753,7 +752,7 @@ function FileAttributeForm({
   );
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!acceptedFiles[0] || !carbon) return;
+    if (!acceptedFiles[0]) return;
     const fileUpload = acceptedFiles[0];
 
     setFile(fileUpload);
@@ -761,12 +760,9 @@ function FileAttributeForm({
 
     const fileName = `${company.id}/person/${userId}/${fileUpload.name}`;
 
-    const upload = await carbon?.storage
-      .from("private")
-      .upload(fileName, fileUpload, {
-        cacheControl: `${12 * 60 * 60}`,
-        upsert: true
-      });
+    const upload = await uploadAuthenticatedFile(fileName, fileUpload, {
+      cacheControl: `${12 * 60 * 60}`
+    });
 
     if (upload.error) {
       toast.error(t`Failed to upload file: ${fileUpload.name}`);

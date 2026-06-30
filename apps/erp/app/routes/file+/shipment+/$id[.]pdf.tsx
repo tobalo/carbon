@@ -35,7 +35,7 @@ import {
   getDocumentTemplate,
   resolveSections
 } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { client, companyId } = await requirePermissions(request, {
@@ -157,7 +157,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(serviceRole, path).then(
+                  return getBase64ImageFromStorage(serviceRole, path).then(
                     (data) => ({
                       id,
                       data
@@ -278,7 +278,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(serviceRole, path).then(
+                  return getBase64ImageFromStorage(serviceRole, path).then(
                     (data) => ({
                       id,
                       data
@@ -394,7 +394,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(client, path).then(
+                  return getBase64ImageFromStorage(client, path).then(
                     (data) => ({
                       id,
                       data
@@ -506,7 +506,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   if (!path) {
                     return null;
                   }
-                  return getBase64ImageFromSupabase(client, path).then(
+                  return getBase64ImageFromStorage(client, path).then(
                     (data) => ({
                       id,
                       data

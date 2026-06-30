@@ -148,6 +148,7 @@ import type { action as editJobOperationToolAction } from "~/routes/x+/job+/meth
 import type { action as newJobOperationToolAction } from "~/routes/x+/job+/methods+/operation.tool.new";
 import { useItems, usePeople, useTools } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import {
   jobOperationValidator,
   jobOperationValidatorForReleasedJob,
@@ -636,10 +637,10 @@ const JobBillOfProcess = ({
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${selectedItemId}/${nanoid()}.${fileType}`;
-    const result = await carbon?.storage
-      .from("private")
-      .upload(fileName, file, { upsert: true });
+    const fileName = `${companyId}/job/${selectedItemId}/${nanoid()}.${fileType}`;
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "production"
+    });
 
     if (result?.error) {
       throw new Error(result.error.message);
@@ -807,7 +808,7 @@ const JobBillOfProcess = ({
         content: (
           <div className="flex flex-col">
             <div>
-              {permissions.can("update", "parts") ? (
+              {permissions.can("update", "production") ? (
                 <Editor
                   initialValue={
                     workInstructions[item.id] ?? ({} as JSONContent)
@@ -1162,7 +1163,6 @@ function StepsForm({
     []
   );
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
@@ -1187,9 +1187,11 @@ function StepsForm({
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/job/${operationId}/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "production"
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -1490,16 +1492,17 @@ function StepsListItem({
   const date = updatedAt ?? createdAt;
 
   const unitOfMeasures = useUnitOfMeasure();
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/job/${operationId}/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "production"
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

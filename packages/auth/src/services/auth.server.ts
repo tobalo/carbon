@@ -1,22 +1,24 @@
-import type { Database } from "@carbon/database";
 import { checkApiKeyRateLimit } from "@carbon/database/ratelimit";
 import { Edition, Plan } from "@carbon/utils";
-import type {
-  AuthSession as SupabaseAuthSession,
-  SupabaseClient
-} from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { redirect } from "react-router";
+import { CarbonEdition, STRIPE_BYPASS_COMPANY_IDS } from "../config/env";
 import {
-  CarbonEdition,
-  REFRESH_ACCESS_TOKEN_THRESHOLD,
-  STRIPE_BYPASS_COMPANY_IDS,
-  VERCEL_URL
-} from "../config/env";
-import { getCarbon } from "../lib/supabase";
-import { getCarbonAPIKeyClient } from "../lib/supabase/client";
-import { getCarbonServiceRole } from "../lib/supabase/client.server";
-import type { AuthSession } from "../types";
+  createBetterAuthSessionForUser,
+  createBetterAuthUser,
+  deleteBetterAuthUser,
+  getBetterAuthUserByAccessToken,
+  getBetterAuthUserByEmail,
+  refreshBetterAuthSession,
+  sendBetterAuthMagicLink,
+  setBetterAuthUserPassword,
+  signInBetterAuthUserWithPassword,
+  verifyBetterAuthSession
+} from "../lib/better-auth/session.server";
+import { getCarbon } from "../lib/carbon";
+import { getCarbonAPIKeyClient } from "../lib/carbon/client";
+import { getCarbonServiceRole } from "../lib/carbon/client.server";
+import type { AuthSession, CarbonClient } from "../types";
 import { path } from "../utils/path";
 import { error } from "../utils/result";
 import { isCarbonOwnedCompany } from "./company.server";
@@ -28,46 +30,48 @@ import {
 import { getCompaniesForUser } from "./users";
 import { getUserClaims } from "./users.server";
 
+export { getBetterAuthCallbackSession } from "../lib/better-auth/session.server";
+
 export async function createEmailAuthAccount(
   email: string,
   password: string,
   meta?: Record<string, unknown>
 ) {
-  const { data, error } = await getCarbonServiceRole().auth.admin.createUser({
+  const user = await createBetterAuthUser({
+    id: typeof meta?.id === "string" ? meta.id : undefined,
     email,
     password,
-    email_confirm: true,
-    app_metadata: {
-      ...meta
-    }
+    emailVerified: true,
+    firstName: typeof meta?.firstName === "string" ? meta.firstName : "",
+    lastName: typeof meta?.lastName === "string" ? meta.lastName : "",
+    name: typeof meta?.name === "string" ? meta.name : undefined
   });
 
-  if (!data.user || error) return null;
-
-  return data.user;
+  return user;
 }
 
-export async function deleteAuthAccount(
-  client: SupabaseClient<Database>,
-  userId: string
-) {
-  const [supabaseDelete, carbonDelete] = await Promise.all([
-    client.auth.admin.deleteUser(userId),
+export async function deleteAuthAccount(client: CarbonClient, userId: string) {
+  const [authDelete, userDelete] = await Promise.all([
+    deleteBetterAuthUser(userId).then(
+      () => ({ error: null }),
+      (error) => ({
+        error: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      })
+    ),
     client.from("user").delete().eq("id", userId)
   ]);
 
-  if (supabaseDelete.error || carbonDelete.error) return null;
+  if (authDelete.error || userDelete.error) return null;
 
   return true;
 }
 
 export async function getAuthAccountByAccessToken(accessToken: string) {
-  const { data, error } =
-    await getCarbonServiceRole().auth.getUser(accessToken);
+  const user = await getBetterAuthUserByAccessToken(accessToken);
 
-  if (!data.user || error) return null;
-
-  return data.user;
+  return user;
 }
 
 /** Hash an API key using SHA-256 for secure storage/lookup */
@@ -101,32 +105,6 @@ function getCompanyIdFromAPIKey(apiKey: string) {
     )
     .eq("keyHash", keyHash)
     .single();
-}
-
-function makeAuthSession(
-  supabaseSession: SupabaseAuthSession | null,
-  companyId: string,
-  companyGroupId: string
-): AuthSession | null {
-  if (!supabaseSession) return null;
-
-  if (!supabaseSession.refresh_token)
-    throw new Error("User should have a refresh token");
-
-  if (!supabaseSession.user?.email)
-    throw new Error("User should have an email");
-
-  return {
-    accessToken: supabaseSession.access_token,
-    companyId,
-    companyGroupId,
-    refreshToken: supabaseSession.refresh_token,
-    userId: supabaseSession.user.id,
-    email: supabaseSession.user.email,
-    expiresIn:
-      (supabaseSession.expires_in ?? 3000) - REFRESH_ACCESS_TOKEN_THRESHOLD,
-    expiresAt: supabaseSession.expires_at ?? -1
-  };
 }
 
 /**
@@ -180,7 +158,7 @@ export async function requirePermissions(
     bypassRls?: boolean;
   }
 ): Promise<{
-  client: SupabaseClient<Database>;
+  client: CarbonClient;
   companyId: string;
   companyGroupId: string;
   email: string;
@@ -382,87 +360,85 @@ export async function requirePermissions(
 }
 
 export async function resetPassword(accessToken: string, password: string) {
-  const { error } = await getCarbon(accessToken).auth.updateUser({
-    password
-  });
+  const user = await getBetterAuthUserByAccessToken(accessToken);
+  if (!user) return null;
 
-  if (error) return null;
+  return setBetterAuthUserPassword(user.id, password);
+}
 
-  return true;
+export async function setAuthAccountPassword(userId: string, password: string) {
+  return setBetterAuthUserPassword(userId, password);
 }
 
 export async function sendInviteByEmail(
   email: string,
   data?: Record<string, unknown>
 ) {
-  return getCarbonServiceRole().auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${VERCEL_URL}/callback`,
-    data
-  });
+  return sendBetterAuthMagicLink(
+    email,
+    typeof data?.redirectTo === "string" ? data.redirectTo : undefined
+  );
 }
 
-export async function sendMagicLink(email: string) {
-  return getCarbonServiceRole().auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${VERCEL_URL}/callback`
-    }
-  });
+export async function sendMagicLink(email: string, redirectTo?: string) {
+  return sendBetterAuthMagicLink(email, redirectTo);
+}
+
+async function getDefaultCompanyForUser(
+  userId: string,
+  preferredCompanyId?: string,
+  preferredCompanyGroupId?: string
+) {
+  if (preferredCompanyId) {
+    return {
+      companyId: preferredCompanyId,
+      companyGroupId: preferredCompanyGroupId ?? ""
+    };
+  }
+
+  const client = getCarbonServiceRole();
+  const companies = await getCompaniesForUser(client, userId);
+  const companyId = companies?.[0] ?? "";
+  const { data: companyRecord } = await client
+    .from("company")
+    .select("companyGroupId")
+    .eq("id", companyId)
+    .single();
+
+  return {
+    companyId,
+    companyGroupId: companyRecord?.companyGroupId ?? ""
+  };
 }
 
 export async function signInWithBypassEmail(
-  email: string
+  email: string,
+  preferredCompanyId?: string,
+  preferredCompanyGroupId?: string
 ): Promise<AuthSession | null> {
-  const client = getCarbonServiceRole();
+  const user = await getBetterAuthUserByEmail(email);
+  if (!user) return null;
 
-  const { data: linkData, error: linkError } =
-    await client.auth.admin.generateLink({ type: "magiclink", email });
-
-  if (linkError || !linkData?.properties?.hashed_token) return null;
-
-  const { data: sessionData, error: verifyError } = await client.auth.verifyOtp(
-    { token_hash: linkData.properties.hashed_token, type: "magiclink" }
+  const { companyId, companyGroupId } = await getDefaultCompanyForUser(
+    user.id,
+    preferredCompanyId,
+    preferredCompanyGroupId
   );
 
-  if (verifyError || !sessionData?.session) return null;
-
-  const companies = await getCompaniesForUser(
-    client,
-    sessionData.session.user.id
-  );
-  const { data: companyRecord } = await client
-    .from("company")
-    .select("companyGroupId")
-    .eq("id", companies?.[0] ?? "")
-    .single();
-
-  return makeAuthSession(
-    sessionData.session,
-    companies?.[0] ?? "",
-    companyRecord?.companyGroupId ?? ""
-  );
+  return createBetterAuthSessionForUser(user.id, companyId, companyGroupId);
 }
 
 export async function signInWithEmail(email: string, password: string) {
-  const client = getCarbonServiceRole();
-  const { data, error } = await client.auth.signInWithPassword({
+  const user = await getBetterAuthUserByEmail(email);
+  if (!user) return null;
+
+  const { companyId, companyGroupId } = await getDefaultCompanyForUser(user.id);
+
+  return signInBetterAuthUserWithPassword(
     email,
-    password
-  });
-
-  if (!data.session || error) return null;
-  const companies = await getCompaniesForUser(client, data.user.id);
-
-  const { data: companyRecord } = await client
-    .from("company")
-    .select("companyGroupId")
-    .eq("id", companies?.[0] ?? "")
-    .single();
-
-  return makeAuthSession(
-    data.session,
-    companies?.[0] ?? "",
-    companyRecord?.companyGroupId ?? ""
+    password,
+    companyId,
+    companyGroupId
   );
 }
 
@@ -473,60 +449,20 @@ export async function refreshAccessToken(
 ): Promise<AuthSession | null> {
   if (!refreshToken) return null;
 
-  const client = getCarbonServiceRole();
-
-  const { data, error } = await client.auth.refreshSession({
-    refresh_token: refreshToken
-  });
-
-  if (!data.session || error) return null;
-
-  return makeAuthSession(data.session, companyId!, companyGroupId!);
+  return refreshBetterAuthSession(refreshToken, companyId!, companyGroupId!);
 }
 
 export async function verifyAuthSession(authSession: AuthSession) {
-  const authAccount = await getAuthAccountByAccessToken(
-    authSession.accessToken
-  );
-
-  return Boolean(authAccount);
+  return verifyBetterAuthSession(authSession);
 }
 
 export async function signInWithPasskey(
   userId: string,
   email: string
 ): Promise<AuthSession | null> {
-  const serviceRole = getCarbonServiceRole();
+  const user = await getBetterAuthUserByEmail(email);
+  if (!user || user.id !== userId) return null;
 
-  // Generate a one-time magic link without sending an email
-  const { data: linkData, error: linkError } =
-    await serviceRole.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-      options: { redirectTo: VERCEL_URL }
-    });
-
-  if (linkError || !linkData.properties?.hashed_token) return null;
-
-  // Verify the token server-side to obtain a Supabase session
-  const { data: sessionData, error: sessionError } =
-    await serviceRole.auth.verifyOtp({
-      token_hash: linkData.properties.hashed_token,
-      type: "magiclink"
-    });
-
-  if (sessionError || !sessionData.session) return null;
-
-  const companies = await getCompaniesForUser(serviceRole, userId);
-  const { data: companyRecord } = await serviceRole
-    .from("company")
-    .select("companyGroupId")
-    .eq("id", companies?.[0] ?? "")
-    .single();
-
-  return makeAuthSession(
-    sessionData.session,
-    companies?.[0] ?? "",
-    companyRecord?.companyGroupId ?? ""
-  );
+  const { companyId, companyGroupId } = await getDefaultCompanyForUser(userId);
+  return createBetterAuthSessionForUser(userId, companyId, companyGroupId);
 }

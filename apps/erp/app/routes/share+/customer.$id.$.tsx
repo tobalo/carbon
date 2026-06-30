@@ -1,6 +1,7 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { companyHasPlan } from "@carbon/ee/plan.server";
 import { Ratelimit, redis } from "@carbon/kv";
+import { downloadObjectWithRetry } from "@carbon/object-storage/server";
 import { supportedModelTypes } from "@carbon/utils";
 import type { LoaderFunctionArgs } from "react-router";
 import { getJobByOperationId } from "~/modules/production";
@@ -122,28 +123,17 @@ export let loader = async ({ params, request }: LoaderFunctionArgs) => {
     return new Response(null, { status: 403 });
   }
 
-  async function downloadFile() {
-    const result = await serviceRole.storage.from(bucket!).download(`${path}`);
-    if (result.error) {
-      console.error(result.error);
-      return null;
-    }
-    return result.data;
-  }
-
-  let fileData = await downloadFile();
+  const fileData = await downloadObjectWithRetry({
+    bucket,
+    key: path
+  });
   if (!fileData) {
-    // Wait for a second and try again
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    fileData = await downloadFile();
-    if (!fileData) {
-      throw new Error("Failed to download file after retry");
-    }
+    throw new Error("Failed to download file after retry");
   }
 
   const headers = new Headers({
     "Content-Type": contentType,
     "Cache-Control": "private, max-age=31536000, immutable"
   });
-  return new Response(fileData, { status: 200, headers });
+  return new Response(fileData.body, { status: 200, headers });
 };

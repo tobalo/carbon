@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/database/supabase/migrations/*tracked*.sql"
+  - "packages/database/migrations/*tracked*.sql"
   - "apps/erp/app/modules/inventory/{lineage.server,inventory.service,types}.ts"
   - "apps/erp/app/routes/x+/traceability+/**"
   - "apps/mes/app/services/operations.service.ts"
@@ -20,7 +20,7 @@ avoid an entity appearing as its own ancestor/descendant within a single activit
 
 ## Tables (current schema — newest migrations win)
 
-`trackedEntity` (`packages/database/supabase/migrations/20250225145619_tracked-entities.sql`
+`trackedEntity` (`packages/database/migrations/20250225145619_tracked-entities.sql`
 + later columns):
 
 | Column | Notes |

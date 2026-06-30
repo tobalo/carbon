@@ -2,6 +2,7 @@ import { assertIsPost, notFound } from "@carbon/auth";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
+import { uploadObject } from "@carbon/object-storage/server";
 import type { ActionFunctionArgs } from "react-router";
 import {
   convertQuoteToOrder,
@@ -148,12 +149,14 @@ export async function action(args: ActionFunctionArgs) {
       if (file && file instanceof File) {
         const purchaseOrderDocumentPath = `${companySettings.data.id}/opportunity/${quote.data.opportunityId}/${file.name}`;
 
-        const fileUpload = await serviceRole.storage
-          .from("private")
-          .upload(purchaseOrderDocumentPath, file);
-
-        if (fileUpload.error) {
-          console.error("Failed to upload file", fileUpload.error);
+        try {
+          await uploadObject({
+            bucket: "private",
+            key: purchaseOrderDocumentPath,
+            body: file
+          });
+        } catch (err) {
+          console.error("Failed to upload file", err);
           return {
             success: false,
             message: "Failed to upload file"

@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import {
   createIssueSlackThread,
   syncIssueAssignmentToSlack,
@@ -14,7 +13,7 @@ export class SlackNotificationService implements NotificationService {
 
   async send(
     event: NotificationEvent,
-    context: { serviceRole: SupabaseClient<Database> }
+    context: { serviceRole: CarbonClient }
   ): Promise<void> {
     switch (event.type) {
       case "issue.created":

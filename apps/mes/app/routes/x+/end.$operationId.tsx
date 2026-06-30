@@ -1,6 +1,9 @@
 import { error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import {
   evaluateLinesForSurface,
@@ -167,7 +170,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       }
 
       if (jobMakeMethod.data.requiresSerialTracking) {
-        const response = await serviceRole.functions.invoke("issue", {
+        const response = await invokeCarbonServiceFunction<{
+          newTrackedEntityId?: string;
+        }>("issue", {
           body: {
             type: "jobOperationSerialComplete",
             quantity: 1,
@@ -216,7 +221,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           );
         }
       } else if (jobMakeMethod.data.requiresBatchTracking) {
-        const response = await serviceRole.functions.invoke("issue", {
+        const response = await invokeCarbonServiceFunction("issue", {
           body: {
             type: "jobOperationBatchComplete",
             quantity: quantityToComplete,
@@ -261,7 +266,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         );
       }
 
-      const issue = await serviceRole.functions.invoke("issue", {
+      const issue = await invokeCarbonServiceFunction("issue", {
         body: {
           id: operationId,
           type: "jobOperation",

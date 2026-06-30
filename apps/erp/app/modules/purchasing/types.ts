@@ -1,5 +1,5 @@
 import type { Database } from "@carbon/database";
-import type { FileObject } from "@supabase/storage-js";
+import type { FileObject } from "~/types";
 import type {
   getPurchaseOrderDelivery,
   getPurchaseOrderLines,

@@ -5,8 +5,8 @@ description: Every variable that configures a Carbon instance, grouped by concer
 
 Carbon reads its configuration from environment variables. The registry lives in `packages/env`;
 `.env.example` is the template; infrastructure-only variables are read by `sst.config.ts`. A minimal
-instance needs the Supabase connection, a session secret, and Redis. Everything else activates features
-as you need them.
+instance needs the Carbon API/database connection, a session secret, and Redis. Everything else activates
+features as you need them.
 
 ## Core
 
@@ -23,28 +23,51 @@ Platform-wide behavior and edition.
 <EnvVar name="RATE_LIMIT" type="number">Requests per window allowed against the API.</EnvVar>
 </EnvVars>
 
-## Database — Supabase
+## API & database
 
-Carbon's single Postgres database. All five are required.
+Carbon's API endpoint, auth signing keys, and single Postgres database. All five are required.
 
 <EnvVars>
-<EnvVar name="SUPABASE_URL" type="url" required>Supabase project URL.</EnvVar>
-<EnvVar name="SUPABASE_ANON_KEY" type="string" required>Public anon key, browser-safe.</EnvVar>
-<EnvVar name="SUPABASE_SERVICE_ROLE_KEY" type="string" required>Service-role key, server only, never exposed to the client.</EnvVar>
-<EnvVar name="SUPABASE_DB_URL" type="url" required>Direct Postgres connection string.</EnvVar>
-<EnvVar name="SUPABASE_JWT_SECRET" type="string" required>Secret used to sign and verify session JWTs.</EnvVar>
+<EnvVar name="CARBON_API_URL" type="url" required>Carbon API base URL.</EnvVar>
+<EnvVar name="CARBON_PUBLIC_KEY" type="string" required>Public auth/API key, browser-safe.</EnvVar>
+<EnvVar name="CARBON_SERVICE_ROLE_KEY" type="string" required>Service-role key, server only, never exposed to the client.</EnvVar>
+<EnvVar name="CARBON_DATABASE_URL" type="url" required>Direct Postgres connection string.</EnvVar>
+<EnvVar name="CARBON_AUTH_JWT_SECRET" type="string" required>Secret used to sign and verify session JWTs.</EnvVar>
+</EnvVars>
+
+Legacy deployments may still provide `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`SUPABASE_DB_URL`, and `SUPABASE_JWT_SECRET`; Carbon treats them as fallback aliases while the
+self-hosted data plane is being migrated.
+
+## Object storage
+
+Carbon stores files through an S3-compatible object store. The Docker with Caddy recipe wires these
+to its bundled MinIO service and generates the access keys as Docker secrets.
+
+<EnvVars>
+<EnvVar name="CARBON_STORAGE_ENDPOINT" type="url" required>S3-compatible endpoint used for uploads, downloads, and signed URLs.</EnvVar>
+<EnvVar name="CARBON_STORAGE_REGION" type="string">S3 region. Defaults to `us-east-1`.</EnvVar>
+<EnvVar name="CARBON_STORAGE_BUCKET" type="string">Optional shared bucket. When set, Carbon stores logical buckets as key prefixes inside this bucket.</EnvVar>
+<EnvVar name="CARBON_STORAGE_BUCKET_PREFIX" type="string">Prefix for physical bucket names when `CARBON_STORAGE_BUCKET` is not set.</EnvVar>
+<EnvVar name="CARBON_STORAGE_FORCE_PATH_STYLE" type="boolean">Use path-style S3 URLs. Required for the bundled MinIO service.</EnvVar>
+<EnvVar name="CARBON_STORAGE_ACCESS_KEY_ID" type="string">S3 access key id. The Docker with Caddy recipe injects this from `minio_access_key`.</EnvVar>
+<EnvVar name="CARBON_STORAGE_SECRET_ACCESS_KEY" type="string">S3 secret access key. The Docker with Caddy recipe injects this from `minio_secret_key`.</EnvVar>
+<EnvVar name="CARBON_STORAGE_PUBLIC_URL" type="url">Public base URL for rendering stored file paths.</EnvVar>
 </EnvVars>
 
 ## Auth & sessions
 
 <EnvVars>
 <EnvVar name="SESSION_SECRET" type="string" required>Signs the session cookie.</EnvVar>
-<EnvVar name="SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID" type="string">Google OAuth client id, when `google` is in `AUTH_PROVIDERS`.</EnvVar>
-<EnvVar name="SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET" type="string">Google OAuth client secret.</EnvVar>
-<EnvVar name="SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID" type="string">Azure OAuth client id, when `azure` is enabled.</EnvVar>
-<EnvVar name="SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_SECRET" type="string">Azure OAuth client secret.</EnvVar>
+<EnvVar name="CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID" type="string">Google OAuth client id, when `google` is in `AUTH_PROVIDERS`.</EnvVar>
+<EnvVar name="CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET" type="string">Google OAuth client secret, when `google` is enabled.</EnvVar>
+<EnvVar name="CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID" type="string">Azure OAuth client id, when `azure` is enabled.</EnvVar>
+<EnvVar name="CARBON_AUTH_EXTERNAL_AZURE_CLIENT_SECRET" type="string">Azure OAuth client secret, when `azure` is enabled.</EnvVar>
 <EnvVar name="DEV_BYPASS_EMAIL" type="string">Local only. Sign in as this email without a magic link.</EnvVar>
 </EnvVars>
+
+Configure OAuth providers with the app's Better Auth callback route:
+`/api/auth/callback/google` for Google and `/api/auth/callback/microsoft` for Microsoft.
 
 Sign-in bot protection uses Cloudflare Turnstile: `CLOUDFLARE_TURNSTILE_SITE_KEY` and
 `CLOUDFLARE_TURNSTILE_SECRET_KEY`.

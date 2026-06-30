@@ -1,11 +1,10 @@
-import { SupabaseClient } from "@supabase/supabase-js";
 import { serve } from "https://deno.land/std@0.175.0/http/server.ts";
 import { experimental_transcribe as transcribe } from "npm:ai@5.0.87";
 import { z } from "npm:zod@^3.24.1";
 import { openai } from "../lib/ai/openai.ts";
 import { corsHeaders } from "../lib/headers.ts";
+import type { LegacyPostgrestClient } from "../lib/legacy-client.ts";
 import { getSupabase } from "../lib/supabase.ts";
-import { Database } from "../lib/types.ts";
 
 const transcriptionRequestSchema = z.object({
   audio: z.string().describe("Base64 encoded audio data"),
@@ -21,7 +20,7 @@ serve(async (req: Request) => {
     function: "transcription",
   });
 
-  let client: SupabaseClient<Database> | null = null;
+  let client: LegacyPostgrestClient | null = null;
   let userId: string | null = null;
   let companyId: string | null = null;
 

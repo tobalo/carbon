@@ -1,9 +1,8 @@
+import type { CarbonClient } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionFunctionArgs } from "react-router";
 import { qualityDocumentStatus } from "~/modules/quality/quality.models";
 import {
@@ -26,8 +25,8 @@ type DocRow = { id: string; status: string | null };
  * Otherwise: update to Active immediately.
  */
 async function processToActive(
-  client: SupabaseClient<Database>,
-  serviceRole: SupabaseClient<Database>,
+  client: CarbonClient,
+  serviceRole: CarbonClient,
   companyId: string,
   userId: string,
   docList: DocRow[],
@@ -124,7 +123,7 @@ async function processToActive(
  * - Draft: only the requester or an approver may change to Draft (withdraw); others get an error.
  */
 async function cancelPendingApprovalsForArchiveOrDraft(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   userId: string,
   docList: DocRow[],
   allowAnyUpdater: boolean

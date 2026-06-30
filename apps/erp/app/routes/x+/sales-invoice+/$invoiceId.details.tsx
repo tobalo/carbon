@@ -4,7 +4,6 @@ import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import { useRef } from "react";
 import { Fragment } from "react/jsx-runtime";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
@@ -30,6 +29,7 @@ import {
   OpportunityDocuments,
   OpportunityNotes
 } from "~/modules/sales/ui/Opportunity";
+import type { FileObject } from "~/types";
 import { getCustomFields, setCustomFields } from "~/utils/form";
 import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";

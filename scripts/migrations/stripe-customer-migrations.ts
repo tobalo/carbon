@@ -1,10 +1,9 @@
 import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import Redis from "ioredis";
 import { Stripe } from "stripe";
-import { z } from 'zod/v3';
+import { z } from "zod/v3";
+import { getPostgresConnectionPool } from "../../packages/database/src/client.ts";
 import { localCompanies, productionCompanies } from "./data/stripe-customers";
 config();
 
@@ -26,26 +25,26 @@ if (!redisUrl) {
 
 const redis = new Redis(redisUrl);
 
-const supabaseUrl = PROD
-  ? process.env.PROD_SUPABASE_URL
-  : process.env.SUPABASE_URL;
-const supabaseServiceRoleKey = PROD
-  ? process.env.PROD_SUPABASE_SERVICE_ROLE_KEY
-  : process.env.SUPABASE_SERVICE_ROLE_KEY;
+const databaseUrl = PROD
+  ? (process.env.PROD_CARBON_DATABASE_URL ??
+    process.env.PROD_DATABASE_URL ??
+    process.env.PROD_POSTGRES_URL ??
+    process.env.CARBON_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL)
+  : (process.env.CARBON_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL);
 
-if (!supabaseUrl) {
-  throw new Error(
-    PROD ? "PROD_SUPABASE_URL is not defined" : "SUPABASE_URL is not defined"
-  );
-}
-
-if (!supabaseServiceRoleKey) {
+if (!databaseUrl) {
   throw new Error(
     PROD
-      ? "PROD_SUPABASE_SERVICE_ROLE_KEY is not defined"
-      : "SUPABASE_SERVICE_ROLE_KEY is not defined"
+      ? "PROD_CARBON_DATABASE_URL, PROD_DATABASE_URL, PROD_POSTGRES_URL, CARBON_DATABASE_URL, DATABASE_URL, or POSTGRES_URL is not defined"
+      : "CARBON_DATABASE_URL, DATABASE_URL, or POSTGRES_URL is not defined"
   );
 }
+
+process.env.CARBON_DATABASE_URL = databaseUrl;
 
 const stripeSecretKey = PROD
   ? process.env.PROD_STRIPE_SECRET_KEY!
@@ -59,7 +58,7 @@ if (!stripeSecretKey) {
   );
 }
 
-const client = createClient(supabaseUrl, supabaseServiceRoleKey);
+const pgPool = getPostgresConnectionPool(1);
 
 const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2025-06-30.basil",
@@ -115,10 +114,7 @@ const KvStripeCustomerSchema = z.object({
       return null;
     }
 
-    const plan = await getPlanByPriceId(
-      client,
-      subscription.items.data[0].price.id
-    );
+    const plan = await getPlanByPriceId(subscription.items.data[0].price.id);
 
     if (plan.error) {
       console.error("Failed to get plan by price id:", plan.error);
@@ -129,7 +125,7 @@ const KvStripeCustomerSchema = z.object({
       subscriptionId: subscription.id,
       status: subscription.status,
       priceId: subscription.items.data[0].price.id,
-      planId: plan.data?.id ?? null,
+      planId: plan.data.id,
       currentPeriodStart: subscription.items.data[0].current_period_start,
       currentPeriodEnd: subscription.items.data[0].current_period_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
@@ -154,7 +150,7 @@ const KvStripeCustomerSchema = z.object({
       const companyPlanData: Database["public"]["Tables"]["companyPlan"]["Insert"] =
         {
           id: companyId,
-          planId: plan.data?.id ?? null,
+          planId: plan.data.id,
           tasksLimit: plan.data.tasksLimit,
           aiTokensLimit: plan.data.aiTokensLimit,
           usersLimit: 10, // Default value as defined in the migration
@@ -172,8 +168,8 @@ const KvStripeCustomerSchema = z.object({
 
       const [, companyPlan] = await Promise.all([
         redis.set(customerKey, JSON.stringify(subData)),
-        upsertCompanyPlan(client, companyPlanData),
-        updateCompanyOwner(client, companyId, company.ownerId),
+        upsertCompanyPlan(companyPlanData),
+        updateCompanyOwner(companyId, company.ownerId),
       ]);
 
       if (companyPlan.error) {
@@ -183,7 +179,10 @@ const KvStripeCustomerSchema = z.object({
       console.error("no company id, skipping company plan upsert");
     }
   }
-})();
+})().finally(async () => {
+  redis.disconnect();
+  await pgPool.end();
+});
 
 async function getSubscription(customerId: string) {
   const subscriptions = await stripe.subscriptions.list({
@@ -196,28 +195,81 @@ async function getSubscription(customerId: string) {
   return subscriptions.data[0];
 }
 
-async function getPlanByPriceId(
-  client: SupabaseClient<Database>,
-  priceId: string
-) {
-  return await client
-    .from("plan")
-    .select("*")
-    .eq("stripePriceId", priceId)
-    .single();
+type PlanRow = Database["public"]["Tables"]["plan"]["Row"];
+type DbResult<T> = { data: T; error: null } | { data: null; error: Error };
+
+async function getPlanByPriceId(priceId: string): Promise<DbResult<PlanRow>> {
+  const result = await pgPool.query<PlanRow>(
+    `SELECT * FROM "plan" WHERE "stripePriceId" = $1 LIMIT 1`,
+    [priceId]
+  );
+  const plan = result.rows[0];
+
+  if (!plan) {
+    return {
+      data: null,
+      error: new Error(`No plan found for Stripe price ${priceId}`),
+    };
+  }
+
+  return { data: plan, error: null };
 }
 
-async function updateCompanyOwner(
-  client: SupabaseClient<Database>,
-  companyId: string,
-  ownerId: string
-) {
-  return client.from("company").update({ ownerId }).eq("id", companyId);
+async function updateCompanyOwner(companyId: string, ownerId: string) {
+  try {
+    await pgPool.query(`UPDATE company SET "ownerId" = $1 WHERE id = $2`, [
+      ownerId,
+      companyId,
+    ]);
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
 }
 
 async function upsertCompanyPlan(
-  client: SupabaseClient<Database>,
   companyPlan: Database["public"]["Tables"]["companyPlan"]["Insert"]
 ) {
-  return client.from("companyPlan").upsert(companyPlan);
+  try {
+    await pgPool.query(
+      `
+      INSERT INTO "companyPlan" (
+        id,
+        "planId",
+        "tasksLimit",
+        "aiTokensLimit",
+        "usersLimit",
+        "stripeSubscriptionStatus",
+        "stripeCustomerId",
+        "stripeSubscriptionId",
+        "subscriptionStartDate"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (id)
+      DO UPDATE SET
+        "planId" = EXCLUDED."planId",
+        "tasksLimit" = EXCLUDED."tasksLimit",
+        "aiTokensLimit" = EXCLUDED."aiTokensLimit",
+        "usersLimit" = EXCLUDED."usersLimit",
+        "stripeSubscriptionStatus" = EXCLUDED."stripeSubscriptionStatus",
+        "stripeCustomerId" = EXCLUDED."stripeCustomerId",
+        "stripeSubscriptionId" = EXCLUDED."stripeSubscriptionId",
+        "subscriptionStartDate" = EXCLUDED."subscriptionStartDate"
+      `,
+      [
+        companyPlan.id,
+        companyPlan.planId,
+        companyPlan.tasksLimit,
+        companyPlan.aiTokensLimit,
+        companyPlan.usersLimit,
+        companyPlan.stripeSubscriptionStatus,
+        companyPlan.stripeCustomerId,
+        companyPlan.stripeSubscriptionId,
+        companyPlan.subscriptionStartDate,
+      ]
+    );
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
 }

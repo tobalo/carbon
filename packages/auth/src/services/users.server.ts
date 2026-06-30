@@ -1,8 +1,7 @@
-import type { Database, Json } from "@carbon/database";
+import type { Json } from "@carbon/database";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCarbonServiceRole } from "../lib/supabase/client.server";
-import type { Permission, Result } from "../types";
+import { getCarbonServiceRole } from "../lib/carbon/client.server";
+import type { CarbonClient, Permission, Result } from "../types";
 import { error, success } from "../utils/result";
 import {
   getClaims,
@@ -64,7 +63,7 @@ export async function getUserClaims(userId: string, companyId: string) {
 }
 
 export async function deactivateCustomer(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   userId: string,
   companyId: string
 ): Promise<Result> {
@@ -141,7 +140,7 @@ export async function deactivateCustomer(
 }
 
 export async function deactivateEmployee(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   userId: string,
   companyId: string
 ): Promise<Result> {
@@ -220,7 +219,7 @@ export async function deactivateEmployee(
 }
 
 export async function deactivateUser(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -304,7 +303,7 @@ export async function deactivateUser(
 }
 
 export async function deactivateSupplier(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   userId: string,
   companyId: string
 ): Promise<Result> {

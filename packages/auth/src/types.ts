@@ -1,3 +1,4 @@
+import type { getCarbonClient } from "./lib/carbon/client";
 import type { getCompanies } from "./services/users";
 
 export interface AuthSession {
@@ -15,6 +16,8 @@ export interface AuthSession {
 export type Company = NonNullable<
   Awaited<ReturnType<typeof getCompanies>>["data"]
 >[number];
+
+export type CarbonClient = ReturnType<typeof getCarbonClient>;
 
 export type CompanyPermission = {
   view: boolean;

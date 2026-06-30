@@ -1,4 +1,4 @@
-import { SUPABASE_URL, useCarbon } from "@carbon/auth";
+import { CARBON_API_URL, useCarbon } from "@carbon/auth";
 import { Button, File as FileUpload, HStack, toast } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { nanoid } from "nanoid";
@@ -6,6 +6,7 @@ import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useUser } from "~/hooks";
 import { getPrivateUrl } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 export function ItemThumbnailUpload({
   path,
   itemId,
@@ -82,7 +83,7 @@ export function ItemThumbnailUpload({
 
         try {
           const response = await fetch(
-            `${SUPABASE_URL}/functions/v1/image-resizer`,
+            `${CARBON_API_URL}/functions/v1/image-resizer`,
             {
               method: "POST",
               body: formData
@@ -113,17 +114,15 @@ export function ItemThumbnailUpload({
             type: contentType
           });
 
-          const { data, error } = await carbon.storage
-            .from("private")
-            .upload(
-              `${company.id}/thumbnails/${itemId}/${fileName}`,
-              thumbnailFile,
-              {
-                upsert: true
-              }
-            );
+          const upload = await uploadPrivateFile(
+            `${company.id}/thumbnails/${itemId}/${fileName}`,
+            thumbnailFile,
+            {
+              permission: "parts"
+            }
+          );
 
-          if (error) {
+          if (upload.error) {
             toast.error(t`Failed to upload thumbnail`);
             return;
           }
@@ -131,7 +130,7 @@ export function ItemThumbnailUpload({
           const result = await carbon
             .from("item")
             .update({
-              thumbnailPath: data?.path
+              thumbnailPath: upload.data?.path
             })
             .eq("id", itemId);
 
@@ -140,8 +139,8 @@ export function ItemThumbnailUpload({
             return;
           }
 
-          if (data) {
-            setThumbnailPath(getPrivateUrl(data.path));
+          if (upload.data) {
+            setThumbnailPath(getPrivateUrl(upload.data.path));
             toast.success(t`Thumbnail uploaded`);
           }
         } catch (error) {

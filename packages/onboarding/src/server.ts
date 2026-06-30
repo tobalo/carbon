@@ -1,10 +1,10 @@
-// Server-only DB helpers for the Implementation Hub. Each takes the supabase
-// client as its first arg and returns the raw { data, error } (does not throw),
-// matching Carbon's service convention. The enrollment + structural writes are
-// authorized at the route (isInternal / requirePermissions); RLS is the backstop.
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+// Server-only DB helpers for the Implementation Hub. Each takes the current
+// PostgREST-style client as its first arg and returns the raw { data, error }
+// (does not throw), matching Carbon's service convention. The enrollment +
+// structural writes are authorized at the route (isInternal / requirePermissions);
+// RLS is the backstop.
 import { DEFAULT_EXCLUSIONS, TEMPLATE_KEY, TEMPLATE_VERSION } from "./content";
+import type { LegacyPostgrestClient } from "./database-client";
 import type { Signals } from "./logic";
 import type {
   HubContacts,
@@ -14,7 +14,7 @@ import type {
   Tier
 } from "./types";
 
-type Client = SupabaseClient<Database>;
+type Client = LegacyPostgrestClient;
 
 export function getImplementationHub(client: Client, companyId: string) {
   return client

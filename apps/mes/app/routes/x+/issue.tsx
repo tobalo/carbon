@@ -1,6 +1,9 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import {
   evaluateLinesForSurface,
@@ -77,7 +80,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
-  const issue = await serviceRole.functions.invoke("issue", {
+  const issue = await invokeCarbonServiceFunction("issue", {
     body: {
       id: jobOperationId,
       type: "partToOperation",

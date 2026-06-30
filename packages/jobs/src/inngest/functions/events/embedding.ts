@@ -1,6 +1,6 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { z } from "zod";
 import { inngest } from "../../client.js";
+import { invokeCarbonFunction } from "../invoke-carbon-function";
 
 // Fields that affect embeddings for each table
 const EMBEDDING_FIELDS: Record<string, string[]> = {
@@ -38,8 +38,6 @@ export const embeddingFunction = inngest.createFunction(
       const payload = EmbeddingPayloadSchema.parse(event.data);
 
       const results = { processed: 0, skipped: 0, failed: 0 };
-      const client = getCarbonServiceRole();
-
       // Filter to only records that need embedding
       const jobs: { id: string; table: string }[] = [];
 
@@ -83,7 +81,7 @@ export const embeddingFunction = inngest.createFunction(
         ...job
       }));
 
-      const { error } = await client.functions.invoke("embed", {
+      const { error } = await invokeCarbonFunction("embed", {
         body: batch
       });
 

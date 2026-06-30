@@ -1,5 +1,5 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { downloadObjectWithRetry } from "@carbon/object-storage/server";
 import type { LoaderFunctionArgs } from "react-router";
 
 const supportedFileTypes: Record<string, string> = {
@@ -40,9 +40,6 @@ export let loader = async ({ request, params }: LoaderFunctionArgs) => {
   if (!bucket) throw new Error("Bucket not found");
   if (!path) throw new Error("Path not found");
 
-  // Don't decode the path here - let Supabase handle the URL encoding
-  // path = decodeURIComponent(path);
-
   const fileType = path.split(".").pop()?.toLowerCase();
 
   if (!fileType) {
@@ -56,27 +53,12 @@ export let loader = async ({ request, params }: LoaderFunctionArgs) => {
     return new Response(null, { status: 403 });
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
-  async function downloadFile() {
-    if (!path) throw new Error("Path not found");
-    // Use the original encoded path for the storage API call
-    const result = await serviceRole.storage.from(bucket!).download(path);
-    if (result.error) {
-      console.error(result.error);
-      return null;
-    }
-    return result.data;
-  }
-
-  let fileData = await downloadFile();
+  const fileData = await downloadObjectWithRetry({
+    bucket,
+    key: decodedPath
+  });
   if (!fileData) {
-    // Wait for a second and try again
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    fileData = await downloadFile();
-    if (!fileData) {
-      throw new Error("Failed to download file after retry");
-    }
+    throw new Error("Failed to download file after retry");
   }
 
   const headers = new Headers({
@@ -87,5 +69,5 @@ export let loader = async ({ request, params }: LoaderFunctionArgs) => {
     headers.set("Content-Type", contentType);
   }
 
-  return new Response(fileData, { status: 200, headers });
+  return new Response(fileData.body, { status: 200, headers });
 };

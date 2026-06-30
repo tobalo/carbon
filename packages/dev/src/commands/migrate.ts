@@ -9,9 +9,8 @@ import { getWorktreeRoot } from "../worktree.js";
 
 // Run database migrations against the worktree's local stack without booting
 // the full compose stack. Reads PORT_DB from `.env.local` (written by
-// `crbn up`). Bare `pnpm db:migrate` resolves dotenv relative to cwd and falls
-// through to the supabase CLI's linked-project path — `crbn migrate` removes
-// that footgun by always targeting the current worktree's DB.
+// `crbn up`). `crbn migrate` removes cwd/env ambiguity by loading .env.local
+// from the worktree root before running the Carbon migration runner.
 export async function migrate(opts: { regen?: boolean } = {}) {
   const shouldRegen = opts.regen ?? true;
   intro("Carbon · dev migrate");

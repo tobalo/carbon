@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import { z } from "zod";
 import {
   incoterms,
@@ -66,7 +65,7 @@ const supplierPartImportFields = {
     enumData: {
       description:
         "Optional — link this item to a supplier (match by Supplier ID or name)",
-      fetcher: async (client: SupabaseClient<Database>, companyId: string) => {
+      fetcher: async (client: CarbonClient, companyId: string) => {
         const { data, error } = await client
           .from("supplier")
           .select("id, name, readableId")
@@ -98,7 +97,7 @@ const supplierPartImportFields = {
     type: "enum",
     enumData: {
       description: "How the supplier sells this part (e.g., BOX)",
-      fetcher: async (client: SupabaseClient<Database>, companyId: string) => {
+      fetcher: async (client: CarbonClient, companyId: string) => {
         const { data, error } = await client
           .from("unitOfMeasure")
           .select("name, code")
@@ -165,7 +164,7 @@ const itemCostImportFields = {
 const methodRowTypes = ["PART", "BOM", "BOP", "STEP", "TOOL", "PARAM"] as const;
 
 const unitOfMeasureFetcher = async (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) => {
   const { data, error } = await client
@@ -565,7 +564,7 @@ const partnerLocationImportFields = {
     type: "enum",
     enumData: {
       description: "Country — match by full name (e.g., United States)",
-      fetcher: async (client: SupabaseClient<Database>, _companyId: string) => {
+      fetcher: async (client: CarbonClient, _companyId: string) => {
         const { data, error } = await client
           .from("country")
           .select("alpha2, name");
@@ -589,7 +588,7 @@ const partnerPaymentImportFields = {
     enumData: {
       description: "Payment term (e.g., Net 30)",
       creatableForm: "paymentTerm",
-      fetcher: async (client: SupabaseClient<Database>, companyId: string) => {
+      fetcher: async (client: CarbonClient, companyId: string) => {
         return client
           .from("paymentTerm")
           .select("id, name")
@@ -612,7 +611,7 @@ const supplierShippingImportFields = {
     enumData: {
       description: "Carrier / shipping method (e.g., FedEx Ground)",
       creatableForm: "shippingMethod",
-      fetcher: async (client: SupabaseClient<Database>, companyId: string) => {
+      fetcher: async (client: CarbonClient, companyId: string) => {
         return client
           .from("shippingMethod")
           .select("id, name")
@@ -658,10 +657,7 @@ export const fieldMappings = {
       enumData: {
         description:
           "The account manager — match by employee email (e.g. jane@company.com)",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("employees")
             .select("id, name, email, avatarUrl")
@@ -678,10 +674,7 @@ export const fieldMappings = {
         description:
           "The status of the customer (from your configured statuses)",
         creatableLookup: "customerStatus",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("customerStatus")
             .select("id, name")
@@ -698,10 +691,7 @@ export const fieldMappings = {
         description:
           "The category/type of the customer (from your configured types)",
         creatableLookup: "customerType",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("customerType")
             .select("id, name")
@@ -808,10 +798,7 @@ export const fieldMappings = {
       enumData: {
         description:
           "The account manager — match by employee email (e.g. jane@company.com)",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("employees")
             .select("id, name, email, avatarUrl")
@@ -839,10 +826,7 @@ export const fieldMappings = {
         description:
           "The category/type of the supplier (from your configured types)",
         creatableLookup: "supplierType",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("supplierType")
             .select("id, name")
@@ -1006,10 +990,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The unit of measure of the part",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           const { data, error } = await client
             .from("unitOfMeasure")
             .select("name, code")
@@ -1098,10 +1079,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The unit of measure of the part",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           const { data, error } = await client
             .from("unitOfMeasure")
             .select("name, code")
@@ -1190,10 +1168,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The unit of measure of the part",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           const { data, error } = await client
             .from("unitOfMeasure")
             .select("name, code")
@@ -1250,10 +1225,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The substance of the material",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("materialSubstance")
             .select("id, name")
@@ -1269,10 +1241,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The form of the material",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("materialForm")
             .select("id, name")
@@ -1324,10 +1293,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The unit of measure of the part",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           const { data, error } = await client
             .from("unitOfMeasure")
             .select("name, code")
@@ -1432,10 +1398,7 @@ export const fieldMappings = {
       type: "enum",
       enumData: {
         description: "The location of the work center",
-        fetcher: async (
-          client: SupabaseClient<Database>,
-          companyId: string
-        ) => {
+        fetcher: async (client: CarbonClient, companyId: string) => {
           return client
             .from("location")
             .select("id, name")

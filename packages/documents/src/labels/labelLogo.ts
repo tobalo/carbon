@@ -17,14 +17,14 @@ export interface ResolvedLabelLogo {
  * If the tracking-label template has a visible logo block, resolve the company
  * logo into a color URL (PDF), a monochrome PNG (PDF B&W) and a ZPL `^GFA`
  * graphic — the last two via the `logo-resizer` edge function (ImageMagick).
- * Returns null when there's no logo block or no company logo. `supabaseUrl` is
+ * Returns null when there's no logo block or no company logo. `apiUrl` is
  * passed in so this stays free of app-specific auth imports.
  */
 export async function resolveLabelLogo(
   company: { logoLight?: string | null; logoLightIcon?: string | null } | null,
   template: DocumentTemplate | null,
   labelSize: LabelSize,
-  { supabaseUrl }: { supabaseUrl: string }
+  { apiUrl }: { apiUrl: string }
 ): Promise<ResolvedLabelLogo | null> {
   const resolved = resolveTemplate("trackingLabel", template);
   const logoBlock = resolved.blocks.find(
@@ -56,7 +56,7 @@ export async function resolveLabelLogo(
       formData.append("cropW", String(crop.width));
       formData.append("cropH", String(crop.height));
     }
-    const res = await fetch(`${supabaseUrl}/functions/v1/logo-resizer`, {
+    const res = await fetch(`${apiUrl}/functions/v1/logo-resizer`, {
       method: "POST",
       body: formData
     });

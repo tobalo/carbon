@@ -62,8 +62,8 @@ export async function bootStack(root: string, slug: string) {
 }
 
 // `docker compose restart` a subset of services. Used by the storage-stuck
-// heal path: after re-applying init.sql we restart storage/gotrue/postgrest so
-// they reconnect with the freshly-rotated supabase role passwords.
+// heal path: after re-applying init.sql we restart storage/postgrest so they
+// reconnect with the freshly-rotated local role passwords.
 export async function restartServices(
   root: string,
   slug: string,

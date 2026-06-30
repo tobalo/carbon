@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/database/supabase/migrations/*material*.sql"
+  - "packages/database/migrations/*material*.sql"
   - "apps/erp/app/modules/items/items.service.ts"
   - "apps/erp/app/modules/items/items.models.ts"
 ---

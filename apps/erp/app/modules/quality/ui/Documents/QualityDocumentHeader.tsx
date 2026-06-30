@@ -20,7 +20,6 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { Suspense, useEffect, useState } from "react";
 import {
   LuCheckCheck,
@@ -39,6 +38,7 @@ import { usePanels } from "~/components/Layout";
 import ConfirmDelete from "~/components/Modals/ConfirmDelete";
 import { usePermissions, useRouteData } from "~/hooks";
 import type { ApprovalDecision } from "~/modules/shared/types";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import type { QualityDocument } from "../../types";
 import QualityDocumentApprovalModal from "./QualityDocumentApprovalModal";

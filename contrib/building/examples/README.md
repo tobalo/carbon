@@ -7,8 +7,6 @@ Examples are intended to be as small as possible so that the behavior can be com
 In most examples, we first define an API client like this, and then selectively add methods. Each example will have different methods to accomplish some task. For more details, we recommend checking out the `.service.ts` files in the `/apps` repo.
 
 ```ts
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import {
   CARBON_API_KEY,
   CARBON_API_URL,
@@ -16,18 +14,20 @@ import {
   CARBON_COMPANY_ID,
   CARBON_PUBLIC_KEY,
 } from "~/config";
+import {
+  createPostgrestClient,
+  type PostgrestClient,
+} from "~/lib/postgrest-client";
 
 class CarbonClient {
   private readonly appUrl: string = CARBON_APP_URL;
-  private readonly client: SupabaseClient;
+  private readonly client: PostgrestClient;
   private readonly companyId: string = CARBON_COMPANY_ID;
   constructor() {
-    this.client = createClient(CARBON_API_URL, CARBON_PUBLIC_KEY, {
-      global: {
-        headers: {
-          "carbon-key": CARBON_API_KEY,
-        },
-      },
+    this.client = createPostgrestClient({
+      apiUrl: CARBON_API_URL,
+      carbonKey: CARBON_API_KEY,
+      publicKey: CARBON_PUBLIC_KEY,
     });
   }
 }

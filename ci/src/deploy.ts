@@ -1,6 +1,6 @@
 import { $ } from "execa";
 
-import { client } from "./client";
+import { closeWorkspaceDatabase, getDeployWorkspaces } from "./workspaces";
 
 export type Workspace = {
   id: number;
@@ -20,13 +20,9 @@ export type Workspace = {
   cert_arn_mes: string | null;
 
   // Database Configuration
-  connection_string: string | null;
   database_url: string | null;
   database_connection_pooler_url: string | null;
-  project_id: string | null;
-  access_token: string | null;
   anon_key: string | null;
-  database_password: string | null;
   jwt_secret: string | null;
   service_role_key: string | null;
 
@@ -82,14 +78,7 @@ async function deploy(): Promise<void> {
 
   console.log(`✅ 🏷️ Using image tag: ${imageTag}`);
 
-  const { data: workspaces, error } = await client
-    .from("workspaces")
-    .select("*");
-
-  if (error) {
-    console.error("🔴 🍳 Failed to fetch workspaces", error);
-    process.exit(1);
-  }
+  const workspaces = await getDeployWorkspaces();
 
   let hasErrors = false;
 
@@ -111,7 +100,6 @@ async function deploy(): Promise<void> {
         cloudflare_turnstile_site_key,
         controlled_environment,
         database_connection_pooler_url,
-        database_password,
         database_url,
         domain_name,
         exchange_rates_api_key,
@@ -193,11 +181,6 @@ async function deploy(): Promise<void> {
         continue;
       }
 
-      if (!database_password) {
-        console.log(`🔴🍳 Missing database password for ${workspace.id}`);
-        continue;
-      }
-
       if (!anon_key) {
         console.log(`🔴🍳 Missing anon key for ${workspace.id}`);
         continue;
@@ -268,6 +251,11 @@ async function deploy(): Promise<void> {
           INNGEST_BASE_URL: inngest_base_url ?? undefined,
           INNGEST_EVENT_KEY: inngest_event_key,
           INNGEST_SIGNING_KEY: inngest_signing_key,
+          CARBON_API_URL: database_url,
+          CARBON_AUTH_JWT_SECRET: jwt_secret ?? undefined,
+          CARBON_DATABASE_URL: database_connection_pooler_url,
+          CARBON_PUBLIC_KEY: anon_key,
+          CARBON_SERVICE_ROLE_KEY: service_role_key,
           JIRA_CLIENT_ID: jira_client_id ?? undefined,
           JIRA_CLIENT_SECRET: jira_client_secret ?? undefined,
           JIRA_OAUTH_REDIRECT_URL: jira_oauth_redirect_url ?? undefined,
@@ -291,11 +279,6 @@ async function deploy(): Promise<void> {
           STRIPE_BYPASS_COMPANY_IDS: stripe_bypass_company_ids ?? undefined,
           STRIPE_SECRET_KEY: stripe_secret_key ?? undefined,
           STRIPE_WEBHOOK_SECRET: stripe_webhook_secret ?? undefined,
-          SUPABASE_ANON_KEY: anon_key,
-          SUPABASE_DB_URL: database_connection_pooler_url,
-          SUPABASE_JWT_SECRET: jwt_secret ?? undefined,
-          SUPABASE_SERVICE_ROLE_KEY: service_role_key,
-          SUPABASE_URL: database_url,
           URL_ERP: url_erp,
           URL_MES: url_mes,
           VERCEL_ENV: "production",
@@ -327,7 +310,9 @@ async function deploy(): Promise<void> {
   console.log("✅ All deployments completed successfully");
 }
 
-deploy().catch((error) => {
-  console.error("🔴 Unexpected error during deployment", error);
-  process.exit(1);
-});
+deploy()
+  .catch((error) => {
+    console.error("🔴 Unexpected error during deployment", error);
+    process.exitCode = 1;
+  })
+  .finally(closeWorkspaceDatabase);

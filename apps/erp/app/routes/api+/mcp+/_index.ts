@@ -1,3 +1,4 @@
+import type { CarbonClient } from "@carbon/auth";
 import { hashOAuthSecret, requirePermissions } from "@carbon/auth/auth.server";
 import {
   getCarbonServiceRole,
@@ -5,7 +6,6 @@ import {
 } from "@carbon/auth/client.server";
 import { getAppUrl } from "@carbon/env";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionFunctionArgs } from "react-router";
 import { createMcpServer } from "./lib/server";
 
@@ -28,7 +28,7 @@ function addCorsHeaders(response: Response): Response {
 }
 
 type McpContext = {
-  client: SupabaseClient;
+  client: CarbonClient;
   companyId: string;
   companyGroupId: string;
   userId: string;

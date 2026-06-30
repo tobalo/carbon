@@ -1,10 +1,12 @@
 import { assertIsPost, ERP_URL, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { notifyIssueCreated } from "@carbon/ee/notifications";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import { FunctionRegion } from "@supabase/supabase-js";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import invariant from "tiny-invariant";
@@ -242,14 +244,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   }
 
-  const tasks = await serviceRole.functions.invoke("create", {
+  const tasks = await invokeCarbonServiceFunction("create", {
     body: {
       type: "nonConformanceTasks",
       id: ncrId,
       companyId,
       userId
-    },
-    region: FunctionRegion.UsEast1
+    }
   });
   if (tasks.error) {
     await deleteIssue(serviceRole, ncrId);

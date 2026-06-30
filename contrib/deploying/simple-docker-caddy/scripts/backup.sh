@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Back up the Carbon Swarm stack: a Postgres logical dump + the storage volume.
+# Back up the Carbon Swarm stack: a Postgres logical dump + object storage data.
 #
 #   ./scripts/backup.sh                # -> ./backups/carbon-<timestamp>/
 #   BACKUP_DIR=/mnt/backups ./scripts/backup.sh
 #
 # Restore (DB):  gunzip -c db.sql.gz | docker exec -i <pg> psql -U postgres postgres
-# Restore (storage): untar into the `<stack>_storage` volume with a helper container.
+# Restore (objects): untar into the `<stack>_minio-data` volume with a helper container.
 #
 # Run from cron for regular backups, and ship ./backups offsite (S3/Spaces/rclone)
 # — a local copy on the same droplet is not a backup. For point-in-time recovery,
@@ -31,12 +31,12 @@ docker exec "$PG_CID" sh -c \
 	'PGPASSWORD="$(cat /run/secrets/postgres_password)" pg_dump -U postgres -Fp postgres' \
 	| gzip >"$BACKUP_DIR/db.sql.gz"
 
-# ── Storage objects (Supabase file backend) ──────────────────────────────────
-log "Archiving storage volume -> storage.tar.gz"
+# ── Object storage data (MinIO) ──────────────────────────────────────────────
+log "Archiving object storage volume -> objects.tar.gz"
 docker run --rm \
-	-v "${STACK_NAME}_storage:/data:ro" \
+	-v "${STACK_NAME}_minio-data:/data:ro" \
 	-v "$(cd "$BACKUP_DIR" && pwd):/out" \
-	alpine:3 sh -c 'tar czf /out/storage.tar.gz -C /data .'
+	alpine:3 sh -c 'tar czf /out/objects.tar.gz -C /data .'
 
 log "Backup complete: $BACKUP_DIR"
 ls -lh "$BACKUP_DIR"

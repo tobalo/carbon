@@ -1,16 +1,20 @@
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
+import {
+  isListedFileObject,
+  listObjectsResult
+} from "@carbon/object-storage/server";
 import type { JSONContent } from "@carbon/react";
 import {
   type FlatTree,
   flattenTree,
   generateBomIds,
+  sanitize,
   type TrackedActivityAttributes
 } from "@carbon/utils";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 import type { z } from "zod";
-import { sanitize } from "~/utils/supabase";
 import { getPickedQuantitiesByJobMaterial } from "./inventory.service";
 import type {
   documentTypes,
@@ -22,7 +26,7 @@ import type {
 import type { BaseOperationWithDetails, Job, StorageItem } from "./types";
 
 export async function getOpenJobs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { companyId: string; locationId: string }
 ) {
   return client
@@ -37,7 +41,7 @@ export async function getOpenJobs(
 }
 
 export async function getTrackedEntitiesByJobMakeMethodIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobMakeMethodIds: string[],
   companyId: string
 ) {
@@ -63,10 +67,7 @@ export async function getTrackedEntitiesByJobMakeMethodIds(
   }, {});
 }
 
-export async function getJobOperations(
-  client: SupabaseClient<Database>,
-  jobId: string
-) {
+export async function getJobOperations(client: CarbonClient, jobId: string) {
   return client
     .from("jobOperation")
     .select("*, jobMakeMethod(parentMaterialId, item(readableIdWithRevision))")
@@ -74,7 +75,7 @@ export async function getJobOperations(
 }
 
 export async function getJobOperationDependencies(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobId: string
 ) {
   return client
@@ -84,7 +85,7 @@ export async function getJobOperationDependencies(
 }
 
 export async function getUpstreamOperations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   const operation = await client
@@ -134,7 +135,7 @@ export async function getUpstreamOperations(
 }
 
 export async function deleteAttributeRecord(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { id: string; companyId: string; userId: string }
 ) {
   return client
@@ -146,7 +147,7 @@ export async function deleteAttributeRecord(
 }
 
 export async function finishJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     jobOperationId: string;
     userId: string;
@@ -172,7 +173,7 @@ export async function finishJobOperation(
         if (unpostedEvents.data?.length) {
           Promise.all(
             unpostedEvents.data.map((event) =>
-              client.functions.invoke("post-production-event", {
+              invokeCarbonServiceFunction("post-production-event", {
                 body: {
                   productionEventId: event.id,
                   userId: args.userId,
@@ -189,7 +190,7 @@ export async function finishJobOperation(
 }
 
 export async function getActiveJobOperationsByEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -202,7 +203,7 @@ export async function getActiveJobOperationsByEmployee(
 }
 
 export async function getActiveJobOperationsByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string,
   workCenterIds: string[] = []
 ) {
@@ -213,7 +214,7 @@ export async function getActiveJobOperationsByLocation(
 }
 
 export async function getActiveJobCount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -226,7 +227,7 @@ export async function getActiveJobCount(
 }
 
 export async function getCustomers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   customerIds: string[]
 ) {
@@ -238,7 +239,7 @@ export async function getCustomers(
 }
 
 export async function getFailureModesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -249,7 +250,7 @@ export async function getFailureModesList(
 }
 
 export async function getQualityIssueTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -301,7 +302,7 @@ export function getFileType(fileName: string): (typeof documentTypes)[number] {
 }
 
 export async function getJobOperationProcedure(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   const [attributes, parameters] = await Promise.all([
@@ -322,7 +323,7 @@ export async function getJobOperationProcedure(
 }
 
 export async function getJobAttributesByOperationId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   return client
@@ -332,7 +333,7 @@ export async function getJobAttributesByOperationId(
 }
 
 export async function getJobByOperationId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   const operation = await client
@@ -349,18 +350,18 @@ export async function getJobByOperationId(
 }
 
 const getItemFiles = async (
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   items: Array<{ itemId: string }>
 ) => {
   const getFile = async (id: string) => {
-    const res = await client.storage
-      .from("private")
-      .list(`${companyId}/parts/${id}`);
+    const res = await listObjectsResult("private", `${companyId}/parts/${id}`);
 
     if (res.error || !res.data) return null;
 
-    return res.data.map((f) => ({ ...f, bucket: "parts", itemId: id }));
+    return res.data
+      .filter(isListedFileObject)
+      .map((f) => ({ ...f, bucket: "parts", itemId: id }));
   };
 
   const elems = items.map((el) => getFile(el.itemId));
@@ -371,7 +372,7 @@ const getItemFiles = async (
 };
 
 export async function getJobFiles(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   job: Job,
   items: Array<{ itemId: string }>
@@ -380,44 +381,46 @@ export async function getJobFiles(
     const opportunityLine = job.salesOrderLineId || job.quoteLineId;
 
     const [opportunityLineFiles, jobFiles, itemFiles] = await Promise.all([
-      client.storage
-        .from("private")
-        .list(`${companyId}/opportunity-line/${opportunityLine}`),
-      client.storage.from("private").list(`${companyId}/job/${job.id}`),
+      listObjectsResult(
+        "private",
+        `${companyId}/opportunity-line/${opportunityLine}`
+      ),
+      listObjectsResult("private", `${companyId}/job/${job.id}`),
       getItemFiles(client, companyId, items)
     ]);
 
     // Combine and return both sets of files
     return [
-      ...(opportunityLineFiles.data?.map((f) => ({
+      ...(opportunityLineFiles.data?.filter(isListedFileObject).map((f) => ({
         ...f,
         bucket: "opportunity-line"
       })) || []),
-      ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
+      ...(jobFiles.data
+        ?.filter(isListedFileObject)
+        .map((f) => ({ ...f, bucket: "job" })) || []),
       ...itemFiles
     ];
   } else {
     const [jobFiles, itemFiles] = await Promise.all([
-      client.storage.from("private").list(`${companyId}/job/${job.id}`),
+      listObjectsResult("private", `${companyId}/job/${job.id}`),
       getItemFiles(client, companyId, items)
     ]);
 
     return [
-      ...(jobFiles.data?.map((f) => ({ ...f, bucket: "job" })) || []),
+      ...(jobFiles.data
+        ?.filter(isListedFileObject)
+        .map((f) => ({ ...f, bucket: "job" })) || []),
       ...itemFiles
     ];
   }
 }
 
-export async function getJobMakeMethod(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getJobMakeMethod(client: CarbonClient, id: string) {
   return client.from("jobMakeMethod").select("*").eq("id", id).single();
 }
 
 export async function getJobMaterialsByOperationId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     operation: BaseOperationWithDetails;
     trackedEntityId: string | undefined;
@@ -563,7 +566,7 @@ export async function getJobMaterialsByOperationId(
 }
 
 export async function getJobOperationsAssignedToEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeId: string,
   companyId: string
 ) {
@@ -574,7 +577,7 @@ export async function getJobOperationsAssignedToEmployee(
 }
 
 export async function getJobOperationById(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   return client.rpc("get_job_operation_by_id", {
@@ -583,7 +586,7 @@ export async function getJobOperationById(
 }
 
 export async function getJobOperationsByWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   { locationId, workCenterId }: { locationId: string; workCenterId: string }
 ) {
   return client.rpc("get_job_operations_by_work_center", {
@@ -593,7 +596,7 @@ export async function getJobOperationsByWorkCenter(
 }
 
 export async function getJobParametersByOperationId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   return client
@@ -603,7 +606,7 @@ export async function getJobParametersByOperationId(
 }
 
 export async function getKanbanByJobId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobId: string | null
 ) {
   if (!jobId) return { data: null, error: null };
@@ -611,7 +614,7 @@ export async function getKanbanByJobId(
 }
 
 export async function getLocationsByCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -622,7 +625,7 @@ export async function getLocationsByCompany(
 }
 
 export async function getNonConformanceActions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     processId: string;
@@ -645,7 +648,7 @@ export async function getNonConformanceActions(
 }
 
 export async function getProcessesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -656,7 +659,7 @@ export async function getProcessesList(
 }
 
 export async function getProductionEventsForJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     operationId: string;
     userId: string;
@@ -669,7 +672,7 @@ export async function getProductionEventsForJobOperation(
 }
 
 export async function getProductionQuantitiesForJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   return client
@@ -679,7 +682,7 @@ export async function getProductionQuantitiesForJobOperation(
 }
 
 export async function getRecentJobOperationsByEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -692,7 +695,7 @@ export async function getRecentJobOperationsByEmployee(
 }
 
 export async function getScrapReasonsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -703,7 +706,7 @@ export async function getScrapReasonsList(
 }
 
 export async function getTrackedEntitiesByMakeMethodId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobMakeMethodId: string
 ) {
   return client
@@ -713,15 +716,12 @@ export async function getTrackedEntitiesByMakeMethodId(
     .order("createdAt", { ascending: true });
 }
 
-export async function getTrackedEntity(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getTrackedEntity(client: CarbonClient, id: string) {
   return client.from("trackedEntity").select("*").eq("id", id).single();
 }
 
 export async function getTrackedEntitiesByOperationId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   const jobOperation = await client
@@ -743,7 +743,7 @@ export async function getTrackedEntitiesByOperationId(
 }
 
 export async function getTrackedInputs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   trackedEntityId?: string
 ) {
   if (!trackedEntityId) return { data: [] };
@@ -794,7 +794,7 @@ export async function getTrackedInputs(
 }
 
 export async function getThumbnailPathByItemId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string
 ) {
   const { data: item } = await client
@@ -824,7 +824,7 @@ export async function getThumbnailPathByItemId(
 }
 
 export async function getWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   workCenterId: string
 ) {
   return client
@@ -837,7 +837,7 @@ export async function getWorkCenter(
 }
 
 export async function getWorkCentersByLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string
 ) {
   // Query both views and merge - workCenters has processes, workCentersWithBlockingStatus has blocking info
@@ -880,7 +880,7 @@ export async function getWorkCentersByLocation(
 }
 
 export async function getWorkCentersByCompany(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -891,7 +891,7 @@ export async function getWorkCentersByCompany(
 }
 
 export async function insertAttributeRecord(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: z.infer<typeof stepRecordValidator> & {
     companyId: string;
     createdBy: string;
@@ -904,7 +904,7 @@ export async function insertAttributeRecord(
 }
 
 export async function insertReworkQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: z.infer<typeof nonScrapQuantityValidator> & {
     companyId: string;
     createdBy: string;
@@ -928,7 +928,7 @@ export async function insertReworkQuantity(
 }
 
 export async function insertProductionQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: z.infer<typeof nonScrapQuantityValidator> & {
     companyId: string;
     createdBy: string;
@@ -946,7 +946,7 @@ export async function insertProductionQuantity(
 }
 
 export async function insertScrapQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: z.infer<typeof scrapQuantityValidator> & {
     companyId: string;
     createdBy: string;
@@ -964,7 +964,7 @@ export async function insertScrapQuantity(
 }
 
 export async function endProductionEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     endTime: string;
@@ -979,7 +979,7 @@ export async function endProductionEvent(
 }
 
 export async function endProductionEventsForJobOperation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     jobOperationId: string;
     employeeId: string;
@@ -996,7 +996,7 @@ export async function endProductionEventsForJobOperation(
 }
 
 export async function endProductionEvents(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { companyId: string; employeeId: string; endTime: string }
 ) {
   return client
@@ -1010,7 +1010,7 @@ export async function endProductionEvents(
 }
 
 export async function endProductionEventsByWorkCenter(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { workCenterId: string; companyId: string; endTime: string }
 ) {
   return client
@@ -1024,7 +1024,7 @@ export async function endProductionEventsByWorkCenter(
 }
 
 export async function startProductionEvent(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: Omit<
     z.infer<typeof productionEventValidator>,
     "id" | "action" | "timezone" | "hasActiveEvents"
@@ -1145,7 +1145,7 @@ function arrayToTree(items: JobMethod[]): JobMethodTreeItem[] {
  * Returns a map of methodMaterialId to hierarchical BOM ID (e.g., "1.2.3").
  */
 export async function getJobMethodBomIdMap(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobId: string
 ): Promise<Map<string, string>> {
   const result = await client.rpc("get_job_method", { jid: jobId });

@@ -1,5 +1,5 @@
 ---
-paths: ["packages/database/supabase/migrations/**"]
+paths: ["packages/database/migrations/**"]
 ---
 
 # Workflow: Add a Database Migration
@@ -7,7 +7,7 @@ paths: ["packages/database/supabase/migrations/**"]
 The canonical step-by-step for creating and applying a DB migration in Carbon.
 Commands and patterns here are grounded in the root + `packages/database`
 `package.json` scripts and the newest migrations
-(`packages/database/supabase/migrations/`).
+(`packages/database/migrations/`).
 
 For the detail this workflow deliberately does NOT repeat:
 
@@ -21,8 +21,8 @@ For the detail this workflow deliberately does NOT repeat:
 
 | Command | Resolves to | Purpose |
 | --- | --- | --- |
-| `pnpm db:migrate:new <name>` | `supabase migration new` | **Create** a new timestamped migration file. |
-| `pnpm db:migrate` | `crbn migrate` | **Apply** pending migrations to the local DB, then regenerate types + swagger. |
+| `pnpm db:migrate:new <name>` | `tsx packages/database/src/migrations/new.ts` | **Create** a new timestamped migration file. |
+| `pnpm db:migrate` | `crbn migrate` → Carbon Postgres migration runner | **Apply** pending migrations to the local DB, then regenerate types + swagger. |
 | `pnpm db:types` | `tsx scripts/generate-db-types.ts` | Regenerate generated DB types only (after migrations). |
 
 - **There is NO `db:build` script.** Older docs/cache told people to run
@@ -49,7 +49,7 @@ For the detail this workflow deliberately does NOT repeat:
 pnpm db:migrate:new <name-of-migration>
 ```
 
-Creates `packages/database/supabase/migrations/<timestamp>_<name>.sql`.
+Creates `packages/database/migrations/<timestamp>_<name>.sql`.
 
 > **Timestamp warning:** never use `000000` for the HHMMSS portion (e.g.
 > `…000000_foo.sql`). The timestamp is the migration's primary key; randomize

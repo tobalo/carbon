@@ -1,11 +1,10 @@
 import { Readable } from "node:stream";
+import type { CarbonClient } from "@carbon/auth";
 import { CarbonEdition } from "@carbon/auth";
 import type { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import { trigger } from "@carbon/jobs";
 import { Edition } from "@carbon/utils";
 import { getLocalTimeZone } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 import type { z } from "zod";
 import { insertEmployeeJob } from "~/modules/people";
@@ -63,11 +62,7 @@ export async function provisionCompanyData(
   const source = Readable.fromWeb(
     backup.stream() as Parameters<typeof Readable.fromWeb>[0]
   );
-  const { name: filePath } = await unpackBackupArchive(
-    serviceRole,
-    companyId,
-    source
-  );
+  const { name: filePath } = await unpackBackupArchive(companyId, source);
 
   // Kick off the import. The job runs asynchronously (the company's data
   // populates shortly after onboarding finishes), but the *enqueue* is awaited
@@ -97,7 +92,7 @@ export async function provisionCompanyData(
  */
 export async function provisionOnboardingCompany(
   serviceRole: ServiceRole,
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     userId,
     companyData,

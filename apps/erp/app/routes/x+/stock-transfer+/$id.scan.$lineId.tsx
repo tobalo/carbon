@@ -1,6 +1,7 @@
 import type { Result } from "@carbon/auth";
 import { error, success, useCarbon } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { Hidden, ValidatedForm } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
@@ -132,9 +133,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
   };
 
   const { data: transferResult, error: functionError } =
-    await client.functions.invoke("post-stock-transfer", {
-      body: JSON.stringify(functionPayload)
-    });
+    await invokeCarbonServiceFunction<{ splitEntityId?: string }>(
+      "post-stock-transfer",
+      {
+        body: functionPayload
+      }
+    );
 
   if (functionError) {
     return data(

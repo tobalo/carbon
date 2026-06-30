@@ -12,7 +12,6 @@ import {
   parseAbsolute,
   toZoned
 } from "@internationalized/date";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRevalidator } from "react-router";
 import { useUrlParams, useUser } from "~/hooks";
@@ -24,6 +23,7 @@ import type {
   ProductionEvent,
   TrackedEntity
 } from "~/services/types";
+import type { RealtimeChannel } from "~/types";
 import { path } from "~/utils/path";
 
 export function useOperation({

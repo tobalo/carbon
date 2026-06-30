@@ -151,7 +151,7 @@ function createBody(attrs) {
 // ── code samples (httpsnippet) ────────────────────────────────────────────────
 const AUTH_HEADERS = [{ name: "Authorization", value: "Bearer <api-key>" }];
 
-// cURL / Python / PHP via httpsnippet (raw REST); JS uses the supabase-js SDK.
+// cURL / Python / PHP via httpsnippet (raw REST); JS uses Carbon data client snippets.
 function samplesFor(har, js) {
   const s = new HTTPSnippet(har);
   const conv = (target, client) => {
@@ -170,7 +170,7 @@ function samplesFor(har, js) {
   };
 }
 
-// supabase-js SDK snippet per endpoint, matching Carbon's JS API docs (carbon.from(...)).
+// Carbon data client snippet per endpoint, matching Carbon's JS API docs (carbon.from(...)).
 function jsObject(obj) {
   return JSON.stringify(obj, null, 2).replace(/\n/g, "\n  ");
 }

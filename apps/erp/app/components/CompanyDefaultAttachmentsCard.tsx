@@ -1,15 +1,16 @@
 import { Trans } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
+import type { DefaultAttachmentFile } from "./DefaultAttachmentsPanel";
 import DefaultAttachmentsPanel from "./DefaultAttachmentsPanel";
 
 type Props = {
-  files: FileObject[];
+  files: DefaultAttachmentFile[];
 };
 
 export default function CompanyDefaultAttachmentsCard({ files }: Props) {
   return (
     <DefaultAttachmentsPanel
       files={files}
+      permission="settings"
       storagePathPrefix="default-attachments/company"
       title={<Trans>Default Attachments</Trans>}
       description={

@@ -1,8 +1,7 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
-import { FunctionRegion } from "@supabase/supabase-js";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { path } from "~/utils/path";
@@ -12,17 +11,14 @@ export async function action({ request }: ActionFunctionArgs) {
     create: "accounting"
   });
 
-  const serviceRole = getCarbonServiceRole();
-
-  const journalEntry = await serviceRole.functions.invoke<{
+  const journalEntry = await invokeCarbonServiceFunction<{
     id: string;
   }>("create", {
     body: {
       type: "journalEntry",
       companyId,
       userId
-    },
-    region: FunctionRegion.UsEast1
+    }
   });
 
   if (!journalEntry.data || journalEntry.error) {

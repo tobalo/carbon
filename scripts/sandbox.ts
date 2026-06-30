@@ -1,22 +1,37 @@
-import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 
 config();
 
-const carbon = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!,
-  {
-    global: {
-      headers: {
-        "carbon-key": "crbn_yPkz1hszqh6mVLDf4jiDv",
-      },
-    },
-  }
-);
+const apiUrl = process.env.CARBON_API_URL;
+const apiKey = process.env.CARBON_API_KEY ?? "crbn_yPkz1hszqh6mVLDf4jiDv";
+const publicKey = process.env.CARBON_PUBLIC_KEY;
+
+if (!apiUrl) {
+  throw new Error("CARBON_API_URL must be set");
+}
 
 (async () => {
-  const employees = await carbon.from("salesOrder").select("*").limit(1000);
+  const url = new URL("/rest/v1/salesOrder", apiUrl);
+  url.searchParams.set("select", "*");
+  url.searchParams.set("limit", "1000");
 
-  console.log(employees);
+  const response = await fetch(url, {
+    headers: {
+      "carbon-key": apiKey,
+      ...(publicKey
+        ? {
+            apikey: publicKey,
+            Authorization: `Bearer ${publicKey}`,
+          }
+        : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `${response.status} ${response.statusText}: ${await response.text()}`
+    );
+  }
+
+  console.log(await response.json());
 })();

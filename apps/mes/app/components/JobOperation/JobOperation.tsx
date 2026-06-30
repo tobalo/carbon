@@ -56,7 +56,6 @@ import {
   getItemReadableId
 } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestSingleResponse } from "@supabase/supabase-js";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { FaTasks } from "react-icons/fa";
@@ -114,6 +113,7 @@ import type {
   TrackedInput
 } from "~/services/types";
 import { useItems } from "~/stores";
+import type { PostgrestSingleResponse } from "~/types";
 import { path } from "~/utils/path";
 import ItemThumbnail from "../ItemThumbnail";
 import { OperationChat } from "./components/Chat";

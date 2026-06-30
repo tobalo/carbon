@@ -5,6 +5,7 @@ import { sql } from "npm:kysely@0.27.6";
 import z from "npm:zod@^3.24.1";
 import { DB, getConnectionPool, getDatabaseClient } from "../lib/database.ts";
 import { corsHeaders } from "../lib/headers.ts";
+import { downloadObjectText } from "../lib/object-storage.ts";
 import { requirePermissions } from "../lib/supabase.ts";
 import { Database } from "../lib/types.ts";
 import { getReadableIdWithRevision } from "../lib/utils.ts";
@@ -845,15 +846,12 @@ serve(async (req: Request) => {
       userId,
     });
 
-    const client = await requirePermissions(req, companyId, userId, { create: "resources" });
+    await requirePermissions(req, companyId, userId, { create: "resources" });
 
-    const csvFile = await client.storage.from("private").download(filePath);
-    if (!csvFile.data) {
-      throw new Error("Failed to download file");
-    }
-    const csvText = new TextDecoder().decode(
-      new Uint8Array(await csvFile.data.arrayBuffer())
-    );
+    const csvText = await downloadObjectText({
+      bucket: "private",
+      key: filePath,
+    });
     // std/csv is strict on row-length mismatches; fall back to the
     // permissive parser for real-world CSVs with quoting/comma issues.
     let parsedCsv: Record<string, string>[];

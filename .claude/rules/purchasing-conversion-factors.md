@@ -3,7 +3,7 @@ paths:
   - "apps/erp/app/modules/purchasing/**"
   - "apps/erp/app/components/Form/ConversionFactor.tsx"
   - "packages/database/supabase/functions/{create,convert,update-purchased-prices}/index.ts"
-  - "packages/database/supabase/migrations/*conversion*.sql"
+  - "packages/database/migrations/*conversion*.sql"
 ---
 
 # Purchasing Conversion Factors

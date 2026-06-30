@@ -4,7 +4,7 @@
 //
 // All functions here are server-only. Never import from a client module.
 
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import {
   type CompiledRule,
   type Condition,
@@ -20,7 +20,6 @@ import {
   type ValueOptionsLoader,
   type Violation
 } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { companyHasPlan } from "../plan.server";
 import {
   buildLineContext,
@@ -36,7 +35,7 @@ import {
   getStorageRulesList
 } from "./service";
 
-type Client = SupabaseClient<Database>;
+type Client = CarbonClient;
 
 // ---------------------------------------------------------------------------
 // Plan gate

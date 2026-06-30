@@ -1,6 +1,5 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { isCarbonOwnedCompany } from "@carbon/auth/company.server";
-import type { Database } from "@carbon/database";
 import {
   CarbonEdition,
   getAppUrl,
@@ -11,9 +10,9 @@ import {
 import { redis } from "@carbon/kv";
 import { trigger } from "@carbon/lib/trigger";
 import { Edition, Plan } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { Stripe } from "stripe";
 import { z } from "zod";
+import type { LegacyPostgrestClient } from "./database-client";
 import { forwardToGtm } from "./gtm-events.server";
 
 export const stripe = STRIPE_SECRET_KEY
@@ -73,6 +72,18 @@ const allowedEventTypes = [
 ] as const;
 type AllowedEventType = (typeof allowedEventTypes)[number];
 
+type CompanyPlanInsert = {
+  id: string;
+  planId: string;
+  tasksLimit: number;
+  aiTokensLimit: number;
+  usersLimit: number;
+  stripeSubscriptionStatus: "Active" | "Inactive" | "Canceled";
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+  subscriptionStartDate: string;
+};
+
 export async function createStripeCustomer({
   userId,
   companyId,
@@ -113,11 +124,11 @@ export async function createStripeCustomer({
   }
 }
 
-function getPlanById(client: SupabaseClient<Database>, planId: string) {
+function getPlanById(client: LegacyPostgrestClient, planId: string) {
   return client.from("plan").select("*").eq("id", planId).single();
 }
 
-function getPlanByPriceId(client: SupabaseClient<Database>, priceId: string) {
+function getPlanByPriceId(client: LegacyPostgrestClient, priceId: string) {
   return client.from("plan").select("*").eq("stripePriceId", priceId).single();
 }
 
@@ -352,8 +363,8 @@ export async function getBillingPortalRedirectUrl({
 }
 
 async function upsertCompanyPlan(
-  client: SupabaseClient<Database>,
-  companyPlan: Database["public"]["Tables"]["companyPlan"]["Insert"]
+  client: LegacyPostgrestClient,
+  companyPlan: CompanyPlanInsert
 ) {
   return client.from("companyPlan").upsert(companyPlan);
 }
@@ -584,24 +595,23 @@ export async function syncStripeDataToKV(
   const subData = subDataResult.data;
 
   if (companyId) {
-    const companyPlanData: Database["public"]["Tables"]["companyPlan"]["Insert"] =
-      {
-        id: companyId,
-        planId: plan.data?.id ?? "",
-        tasksLimit: plan.data?.tasksLimit ?? 0,
-        aiTokensLimit: plan.data?.aiTokensLimit ?? 0,
-        usersLimit: 10, // Default value as defined in the migration
-        stripeSubscriptionStatus: (subData.cancelAtPeriodEnd
-          ? "Canceled"
-          : ["active", "trialing"].includes(subData.status)
-            ? "Active"
-            : "Inactive") as "Active" | "Inactive" | "Canceled",
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subData.subscriptionId,
-        subscriptionStartDate: new Date(
-          subData.currentPeriodStart * 1000
-        ).toISOString()
-      };
+    const companyPlanData: CompanyPlanInsert = {
+      id: companyId,
+      planId: plan.data?.id ?? "",
+      tasksLimit: plan.data?.tasksLimit ?? 0,
+      aiTokensLimit: plan.data?.aiTokensLimit ?? 0,
+      usersLimit: 10, // Default value as defined in the migration
+      stripeSubscriptionStatus: subData.cancelAtPeriodEnd
+        ? "Canceled"
+        : ["active", "trialing"].includes(subData.status)
+          ? "Active"
+          : "Inactive",
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subData.subscriptionId,
+      subscriptionStartDate: new Date(
+        subData.currentPeriodStart * 1000
+      ).toISOString()
+    };
 
     const [, companyPlan] = await Promise.all([
       redis.set(key, JSON.stringify(subData)),

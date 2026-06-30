@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Button,
   cn,
@@ -18,11 +17,11 @@ import { useDropzone } from "react-dropzone";
 import { LuDownload, LuFileSpreadsheet } from "react-icons/lu";
 import { useUser } from "~/hooks/useUser";
 import { fieldMappings, type importSchemas } from "~/modules/shared";
+import { uploadAuthenticatedFile } from "~/utils/storage.client";
 import { useCsvContext } from "./useCsvContext";
 
 export const UploadCSV = ({ table }: { table: keyof typeof importSchemas }) => {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const { setFile, setFileColumns, setFirstRows, setFilePath } =
     useCsvContext();
@@ -117,17 +116,7 @@ export const UploadCSV = ({ table }: { table: keyof typeof importSchemas }) => {
     toast.info(t`Uploading ${file.name}`);
     const fileName = `${company.id}/imports/${nanoid()}.csv`;
 
-    if (!carbon) {
-      setError(t`Carbon client not available`);
-      setFileColumns(null);
-      setFirstRows(null);
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await carbon.storage
-      .from("private")
-      .upload(fileName, file);
+    const { data, error } = await uploadAuthenticatedFile(fileName, file);
 
     if (error) {
       setError(t`Failed to upload CSV file.`);
@@ -141,11 +130,6 @@ export const UploadCSV = ({ table }: { table: keyof typeof importSchemas }) => {
   };
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!carbon) {
-      toast.error(t`Carbon client not available`);
-      return;
-    }
-
     if (acceptedFiles.length > 0) {
       flushSync(() => {
         setUploading(true);

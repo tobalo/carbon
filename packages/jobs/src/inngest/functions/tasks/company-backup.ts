@@ -8,7 +8,12 @@ import {
   getPostgresConnectionPool,
   type KyselyDatabase
 } from "@carbon/database/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  copyObject,
+  downloadObjectWithRetry,
+  removeObjectsByPrefix,
+  uploadObject
+} from "@carbon/object-storage/server";
 import { type Kysely, PostgresDriver, type RawBuilder, sql } from "kysely";
 import { nanoid } from "nanoid";
 
@@ -50,7 +55,7 @@ export const STORAGE_PATH_COLUMNS = new Set(["modelPath", "thumbnailPath"]);
 
 /**
  * Prefix in the `private` bucket where onboarding demo-template assets live ONCE
- * per workspace (3D models, etc.), uploaded at deploy from the committed
+ * in object storage (3D models, etc.), uploaded from the committed
  * template gz. A template import references these instead of copying the files
  * into every onboarded company's `{companyId}/` prefix.
  *
@@ -356,18 +361,16 @@ export function backupAssetsDir(name: string): string {
  * restore/import refuse to read one until its manifest exists.
  */
 export async function writeBackupManifest(
-  client: SupabaseClient,
   companyId: string,
   name: string,
   manifest: Manifest
 ): Promise<void> {
-  const up = await client.storage
-    .from(companyId)
-    .upload(backupManifestPath(name), Buffer.from(JSON.stringify(manifest)), {
-      contentType: "application/json",
-      upsert: true
-    });
-  if (up.error) throw new Error(`manifest: ${up.error.message}`);
+  await uploadObject({
+    bucket: companyId,
+    key: backupManifestPath(name),
+    body: Buffer.from(JSON.stringify(manifest)),
+    contentType: "application/json"
+  });
 }
 
 /**
@@ -431,21 +434,18 @@ export function backupNameFromSource(source: string): string {
  * parallel, into the in-memory `CompanyBackup` the load pipeline expects.
  */
 export async function readBackup(
-  client: SupabaseClient,
   companyId: string,
   name: string
 ): Promise<CompanyBackup> {
-  const mf = await client.storage
-    .from(companyId)
-    .download(backupManifestPath(name));
-  if (mf.error || !mf.data) {
-    throw new Error(
-      `Failed to download backup manifest ${name}: ${
-        mf.error?.message || JSON.stringify(mf.error) || "not found"
-      }`
-    );
-  }
-  const manifest = JSON.parse(await mf.data.text()) as Manifest;
+  const mf = await downloadObjectWithRetry(
+    {
+      bucket: companyId,
+      key: backupManifestPath(name)
+    },
+    { attempts: 1 }
+  );
+  if (!mf) throw new Error(`Failed to download backup manifest ${name}`);
+  const manifest = JSON.parse(new TextDecoder().decode(mf.body)) as Manifest;
   if (manifest.kind !== BACKUP_KIND) {
     throw new Error("Not a Carbon company backup");
   }
@@ -455,17 +455,15 @@ export async function readBackup(
     manifest.tables,
     BACKUP_TABLE_CONCURRENCY,
     async (t) => {
-      const f = await client.storage
-        .from(companyId)
-        .download(backupTablePath(name, t.name));
-      if (f.error || !f.data) {
-        throw new Error(
-          `Failed to download table ${t.name} for ${name}: ${
-            f.error?.message || JSON.stringify(f.error) || "not found"
-          }`
-        );
-      }
-      data[t.name] = await deserializeTable(await f.data.arrayBuffer());
+      const f = await downloadObjectWithRetry(
+        {
+          bucket: companyId,
+          key: backupTablePath(name, t.name)
+        },
+        { attempts: 1 }
+      );
+      if (!f) throw new Error(`Failed to download table ${t.name} for ${name}`);
+      data[t.name] = await deserializeTable(f.body);
     }
   );
   return { manifest, data };
@@ -631,7 +629,7 @@ export async function getCompanyTableCatalog(
   let schemaVersion = "unknown";
   try {
     const migration = await sql<{ version: string }>`
-      SELECT version FROM supabase_migrations.schema_migrations
+      SELECT version FROM carbon_migrations.schema_migrations
       ORDER BY version DESC LIMIT 1
     `.execute(db);
     schemaVersion = migration.rows[0]?.version ?? "unknown";
@@ -996,8 +994,8 @@ export async function filterUnpopulated(
 
 /**
  * Probe whether this connection may disable triggers/FK enforcement via
- * `session_replication_role`. True on local dev (superuser); on hosted
- * Supabase it depends on the grants of the connecting role.
+ * `session_replication_role`. True on local dev (superuser); in hosted
+ * Postgres it depends on the grants of the connecting role.
  */
 export async function canSetReplicationRole(
   db: Kysely<KyselyDatabase>
@@ -1132,30 +1130,33 @@ const ASSET_COPY_CONCURRENCY = 8;
 
 /**
  * Copy one storage object server-side, overwriting the destination if it already
- * exists. `copy` has no upsert, so on a duplicate we remove the destination and
- * retry — the bytes never pass through this process either way.
+ * exists. The bytes never pass through this process.
  */
-async function copyStorageObject(
-  client: SupabaseClient,
-  args: {
-    srcBucket: string;
-    srcPath: string;
-    destBucket: string;
-    destPath: string;
-  }
-): Promise<{ ok: boolean; error?: string }> {
+async function copyStorageObject(args: {
+  srcBucket: string;
+  srcPath: string;
+  destBucket: string;
+  destPath: string;
+}): Promise<{ ok: boolean; error?: string }> {
   const { srcBucket, srcPath, destBucket, destPath } = args;
-  const run = () =>
-    client.storage
-      .from(srcBucket)
-      .copy(srcPath, destPath, { destinationBucket: destBucket });
-
-  let { error } = await run();
-  if (error && /exist|duplicate|409/i.test(error.message)) {
-    await client.storage.from(destBucket).remove([destPath]);
-    ({ error } = await run());
+  try {
+    await copyObject({
+      source: {
+        bucket: srcBucket,
+        key: srcPath
+      },
+      destination: {
+        bucket: destBucket,
+        key: destPath
+      }
+    });
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
-  return { ok: !error, error: error?.message };
 }
 
 /**
@@ -1166,7 +1167,6 @@ async function copyStorageObject(
  * non-transactional storage semantics of restore/import.
  */
 export async function copyAssetsToBackup(
-  client: SupabaseClient,
   args: { sourcePaths: string[]; destBucket: string; destPrefix: string },
   onProgress?: (done: number, total: number) => Promise<void>
 ): Promise<{ copied: number; failed: number }> {
@@ -1179,7 +1179,7 @@ export async function copyAssetsToBackup(
     sourcePaths,
     ASSET_COPY_CONCURRENCY,
     async (path) => {
-      const { ok, error } = await copyStorageObject(client, {
+      const { ok, error } = await copyStorageObject({
         srcBucket: STORAGE_BUCKET,
         srcPath: path,
         destBucket,
@@ -1205,7 +1205,6 @@ export async function copyAssetsToBackup(
  * another tenant's space.
  */
 export async function restoreAssetsFromBackup(
-  client: SupabaseClient,
   args: {
     files: Array<{ path: string; included: boolean }>;
     srcBucket: string;
@@ -1238,7 +1237,7 @@ export async function restoreAssetsFromBackup(
       await onProgress?.(++done, total);
       return;
     }
-    const { ok, error } = await copyStorageObject(client, {
+    const { ok, error } = await copyStorageObject({
       srcBucket,
       srcPath: `${srcPrefix}/${file.path}`,
       destBucket: STORAGE_BUCKET,
@@ -1265,24 +1264,8 @@ export async function restoreAssetsFromBackup(
  * orphaned files.
  */
 export async function removeStoragePrefix(
-  client: SupabaseClient,
   bucket: string,
   prefix: string
 ): Promise<void> {
-  const { data, error } = await client.storage
-    .from(bucket)
-    .list(prefix, { limit: 1000 });
-  if (error || !data) return;
-  const files: string[] = [];
-  for (const entry of data) {
-    const path = `${prefix}/${entry.name}`;
-    if (entry.id === null) {
-      await removeStoragePrefix(client, bucket, path);
-    } else {
-      files.push(path);
-    }
-  }
-  if (files.length > 0) {
-    await client.storage.from(bucket).remove(files);
-  }
+  await removeObjectsByPrefix(bucket, prefix);
 }

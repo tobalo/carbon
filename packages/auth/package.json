@@ -13,7 +13,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./auth.server": "./src/services/auth.server.ts",
-    "./client.server": "./src/lib/supabase/client.server.ts",
+    "./better-auth.server": "./src/lib/better-auth/server.ts",
+    "./client.server": "./src/lib/carbon/client.server.ts",
     "./company.server": "./src/services/company.server.ts",
     "./session.server": "./src/services/session.server.ts",
     "./users.server": "./src/services/users.server.ts",
@@ -29,8 +30,6 @@
     "@carbon/react": "workspace:*",
     "@carbon/utils": "workspace:*",
     "@react-router/dev": "catalog:",
-    "@supabase/functions-js": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "@vercel/analytics": "catalog:",
     "@vercel/react-router": "catalog:",
     "react": "catalog:",
@@ -54,9 +53,10 @@
     "@carbon/lib": "workspace:*",
     "@react-email/components": "catalog:",
     "@simplewebauthn/server": "^13.1.0",
+    "better-auth": "^1.6.22",
     "cookie": "catalog:",
     "dompurify": "catalog:",
-    "jose": "catalog:",
+    "jose": "^6.1.0",
     "nanoid": "catalog:",
     "zustand": "catalog:"
   }

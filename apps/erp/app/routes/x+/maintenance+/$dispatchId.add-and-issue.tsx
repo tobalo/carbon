@@ -1,6 +1,6 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { trigger } from "@carbon/jobs";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
@@ -75,11 +75,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const serviceRole = await getCarbonServiceRole();
-
   if (children && children.length > 0) {
     // Tracked entities (serial/batch)
-    const issue = await serviceRole.functions.invoke("issue", {
+    const issue = await invokeCarbonServiceFunction<{
+      splitEntities?: Array<{ newId: string }>;
+    }>("issue", {
       body: {
         type: "maintenanceDispatchTrackedEntities",
         maintenanceDispatchId: dispatchId,
@@ -116,7 +116,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   } else {
     // Inventory item
-    const issue = await serviceRole.functions.invoke("issue", {
+    const issue = await invokeCarbonServiceFunction("issue", {
       body: {
         type: "maintenanceDispatchInventory",
         maintenanceDispatchId: dispatchId,

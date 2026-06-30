@@ -24,7 +24,7 @@ export const metadata = pageSeo({
 });
 
 const REQUEST = `curl 'https://rest.carbon.ms/item?limit=1' \\
-  -H "Authorization: Bearer <api-key>"`;
+  -H "carbon-key: <api-key>"`;
 
 function Row({
   cells,
@@ -77,8 +77,8 @@ export default async function AuthenticationPage() {
         <DocLink href="https://app.carbon.ms/x/settings/api-keys">
           Settings → API Keys
         </DocLink>
-        , then send it on every request as a bearer token:{" "}
-        <Code>Authorization: Bearer &lt;api-key&gt;</Code>.
+        , then send it on every request with the <Code>carbon-key</Code>{" "}
+        header.
       </P>
       <CodeBlock html={html} code={REQUEST} label="Example request" />
 

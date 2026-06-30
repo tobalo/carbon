@@ -28,7 +28,7 @@ import {
 import { SalesStatus } from "~/modules/sales/ui/SalesOrder";
 import { getCompany } from "~/modules/settings/settings.service";
 import {
-  getBase64ImageFromSupabase,
+  getBase64ImageFromStorage,
   getCustomerPortal
 } from "~/modules/shared/shared.service";
 import { path } from "~/utils/path";
@@ -110,7 +110,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
             if (!path) {
               return null;
             }
-            return getBase64ImageFromSupabase(serviceRole, path).then(
+            return getBase64ImageFromStorage(serviceRole, path).then(
               (data) => ({
                 id,
                 data

@@ -1,7 +1,7 @@
 import { CarbonEdition, DOMAIN } from "@carbon/auth";
 import { Edition, isInternalEmail } from "@carbon/utils";
 import * as cookie from "cookie";
-import { getCarbonServiceRole } from "../lib/supabase/client.server";
+import { getCarbonServiceRole } from "../lib/carbon/client.server";
 import { getCookieDomain } from "../utils/cookie";
 
 const cookieName = "companyId";

@@ -127,7 +127,7 @@ export async function updateLineOrder(db: Kysely<KyselyDatabase>, updates: {...}
 
 ## Migrations
 
-- Live in `packages/database/supabase/migrations/`, timestamp-prefixed and applied in order via the
+- Live in `packages/database/migrations/`, timestamp-prefixed and applied in order via the
   Supabase CLI. Read the **newest** relevant migration for current schema/RLS truth — not the first.
 - New migration: `npm run db:migrate <name>` (avoid `000000` HHMMSS to prevent cross-branch collisions).
 - Follow `workflow-database-migration.md` and `conventions-database.md` when adding tables.

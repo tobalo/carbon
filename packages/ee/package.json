@@ -37,6 +37,7 @@
     "@carbon/database": "workspace:*",
     "@carbon/kv": "workspace:*",
     "@carbon/lib": "workspace:*",
+    "@carbon/object-storage": "workspace:*",
     "@carbon/react": "workspace:*",
     "@carbon/utils": "workspace:*",
     "@internationalized/date": "catalog:",
@@ -44,7 +45,6 @@
     "@slack/oauth": "3.0.5",
     "@slack/types": "2.20.1",
     "@slack/web-api": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "ai": "5.0.172",
     "axios": "catalog:",
     "cookie": "catalog:",
@@ -57,7 +57,6 @@
     "react-pdf": "catalog:",
     "react-router": "catalog:",
     "sst": "catalog:",
-    "supabase": "catalog:",
     "tsup": "catalog:",
     "zod": "catalog:",
     "zod-form-data": "catalog:"

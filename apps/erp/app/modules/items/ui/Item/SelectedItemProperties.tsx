@@ -1,5 +1,4 @@
 import { Spinner } from "@carbon/react";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect, useMemo } from "react";
 import { useFetcher, useSearchParams } from "react-router";
 import type { FlatTreeItem } from "~/components/TreeView";
@@ -8,6 +7,7 @@ import { MaterialProperties } from "~/modules/items/ui/Materials";
 import { PartProperties } from "~/modules/items/ui/Parts";
 import { ToolProperties } from "~/modules/items/ui/Tools";
 import type { loader as itemPropertiesLoader } from "~/routes/x+/items+/$itemId.properties";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import type { MakeMethod, Method } from "../../types";
 

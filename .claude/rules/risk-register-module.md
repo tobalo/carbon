@@ -2,7 +2,7 @@
 paths:
   - "apps/erp/app/modules/quality/ui/RiskRegister/**"
   - "apps/erp/app/routes/x+/quality+/risks*.tsx"
-  - "packages/database/supabase/migrations/*risk*.sql"
+  - "packages/database/migrations/*risk*.sql"
 ---
 
 # Risk Register Module (Quality)

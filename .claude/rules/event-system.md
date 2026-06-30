@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/database/supabase/migrations/**"
+  - "packages/database/migrations/**"
   - "packages/jobs/src/inngest/functions/events/**"
   - "packages/database/src/event.ts"
 ---

@@ -4,6 +4,10 @@ import { flash } from "@carbon/auth/session.server";
 import { QuoteEmail } from "@carbon/documents/email";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
+import {
+  createSignedDownloadUrl,
+  uploadObject
+} from "@carbon/object-storage/server";
 import { getLocalTimeZone, now } from "@internationalized/date";
 import { renderAsync } from "@react-email/components";
 import type { ActionFunctionArgs } from "react-router";
@@ -79,21 +83,18 @@ export async function action(args: ActionFunctionArgs) {
 
     documentFilePath = `${companyId}/opportunity/${quote.data.opportunityId}/${fileName}`;
 
-    const documentFileUpload = await client.storage
-      .from("private")
-      .upload(documentFilePath, file, {
+    try {
+      await uploadObject({
+        bucket: "private",
+        key: documentFilePath,
+        body: file,
         cacheControl: `${12 * 60 * 60}`,
-        contentType: "application/pdf",
-        upsert: true
+        contentType: "application/pdf"
       });
-
-    if (documentFileUpload.error) {
+    } catch (err) {
       throw redirect(
         path.to.quote(quoteId),
-        await flash(
-          request,
-          error(documentFileUpload.error, "Failed to upload file")
-        )
+        await flash(request, error(err, "Failed to upload file"))
       );
     }
 
@@ -189,9 +190,11 @@ export async function action(args: ActionFunctionArgs) {
 
         const html = await renderAsync(emailTemplate);
         const text = await renderAsync(emailTemplate, { plainText: true });
-        const { data: signedUrlData } = await client.storage
-          .from("private")
-          .createSignedUrl(documentFilePath, 3600);
+        const signedUrl = await createSignedDownloadUrl({
+          bucket: "private",
+          key: documentFilePath,
+          expiresIn: 3600
+        }).catch(() => null);
 
         await trigger("send-email", {
           to: [user.data.email, customerContact.data.contact!.email!],
@@ -200,10 +203,10 @@ export async function action(args: ActionFunctionArgs) {
           subject: `Quote ${quote.data.quoteId}`,
           html,
           text,
-          attachments: signedUrlData?.signedUrl
+          attachments: signedUrl
             ? [
                 {
-                  path: signedUrlData.signedUrl,
+                  path: signedUrl,
                   filename: fileName
                 }
               ]

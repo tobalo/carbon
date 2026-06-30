@@ -107,16 +107,16 @@ content_path = "./supabase/templates/magic-link.html"
 
 [auth.external.google]
 enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
-redirect_uri = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI)"
+client_id = "env(CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
+redirect_uri = "env(CARBON_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI)"
 
 
 [auth.external.azure]
 enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_SECRET)"
-redirect_uri = "env(SUPABASE_AUTH_EXTERNAL_AZURE_REDIRECT_URI)"
+client_id = "env(CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID)"
+secret = "env(CARBON_AUTH_EXTERNAL_AZURE_CLIENT_SECRET)"
+redirect_uri = "env(CARBON_AUTH_EXTERNAL_AZURE_REDIRECT_URI)"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]

@@ -4,7 +4,6 @@ import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import { useRef } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData, useParams } from "react-router";
@@ -33,6 +32,7 @@ import {
   QuoteSummary
 } from "~/modules/sales/ui/Quotes";
 import type { QuoteShipmentFormRef } from "~/modules/sales/ui/Quotes/QuoteShipmentForm";
+import type { FileObject } from "~/types";
 import { setCustomFields } from "~/utils/form";
 import { requireUnlocked } from "~/utils/lockedGuard.server";
 import { path } from "~/utils/path";

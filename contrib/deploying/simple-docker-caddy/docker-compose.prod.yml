@@ -57,6 +57,8 @@ services:
       - jwt_secret
       - anon_key
       - service_role_key
+      - minio_access_key
+      - minio_secret_key
       - session_secret
       - inngest_signing_key
       - inngest_event_key
@@ -69,11 +71,23 @@ services:
       DOMAIN: ${DOMAIN}
       ERP_URL: ${ERP_URL}
       MES_URL: ${MES_URL}
-      SUPABASE_URL: ${SUPABASE_URL}
+      CARBON_API_URL: ${CARBON_API_URL}
+      CARBON_PUBLIC_KEY: __ANON_KEY__
+      CARBON_SERVICE_ROLE_KEY: __SERVICE_ROLE_KEY__
+      CARBON_AUTH_JWT_SECRET: __JWT_SECRET__
+      CARBON_DATABASE_URL: postgresql://postgres:__POSTGRES_PASSWORD__@postgres:5432/postgres?sslmode=disable
+      SUPABASE_URL: ${CARBON_API_URL}
       SUPABASE_ANON_KEY: __ANON_KEY__
       SUPABASE_SERVICE_ROLE_KEY: __SERVICE_ROLE_KEY__
       SUPABASE_JWT_SECRET: __JWT_SECRET__
       SUPABASE_DB_URL: postgresql://postgres:__POSTGRES_PASSWORD__@postgres:5432/postgres?sslmode=disable
+      CARBON_STORAGE_ENDPOINT: ${CARBON_STORAGE_ENDPOINT}
+      CARBON_STORAGE_REGION: ${CARBON_STORAGE_REGION:-us-east-1}
+      CARBON_STORAGE_BUCKET: ${CARBON_STORAGE_BUCKET:-carbon}
+      CARBON_STORAGE_FORCE_PATH_STYLE: "true"
+      CARBON_STORAGE_ACCESS_KEY_ID: __MINIO_ACCESS_KEY__
+      CARBON_STORAGE_SECRET_ACCESS_KEY: __MINIO_SECRET_KEY__
+      CARBON_STORAGE_PUBLIC_URL: ${CARBON_STORAGE_PUBLIC_URL:-}
       REDIS_URL: redis://redis:6379
       SESSION_SECRET: __SESSION_SECRET__
       INNGEST_SIGNING_KEY: __INNGEST_SIGNING_KEY__
@@ -100,6 +114,8 @@ services:
       - jwt_secret
       - anon_key
       - service_role_key
+      - minio_access_key
+      - minio_secret_key
       - session_secret
       - inngest_signing_key
       - inngest_event_key
@@ -111,11 +127,23 @@ services:
       DOMAIN: ${DOMAIN}
       ERP_URL: ${ERP_URL}
       MES_URL: ${MES_URL}
-      SUPABASE_URL: ${SUPABASE_URL}
+      CARBON_API_URL: ${CARBON_API_URL}
+      CARBON_PUBLIC_KEY: __ANON_KEY__
+      CARBON_SERVICE_ROLE_KEY: __SERVICE_ROLE_KEY__
+      CARBON_AUTH_JWT_SECRET: __JWT_SECRET__
+      CARBON_DATABASE_URL: postgresql://postgres:__POSTGRES_PASSWORD__@postgres:5432/postgres?sslmode=disable
+      SUPABASE_URL: ${CARBON_API_URL}
       SUPABASE_ANON_KEY: __ANON_KEY__
       SUPABASE_SERVICE_ROLE_KEY: __SERVICE_ROLE_KEY__
       SUPABASE_JWT_SECRET: __JWT_SECRET__
       SUPABASE_DB_URL: postgresql://postgres:__POSTGRES_PASSWORD__@postgres:5432/postgres?sslmode=disable
+      CARBON_STORAGE_ENDPOINT: ${CARBON_STORAGE_ENDPOINT}
+      CARBON_STORAGE_REGION: ${CARBON_STORAGE_REGION:-us-east-1}
+      CARBON_STORAGE_BUCKET: ${CARBON_STORAGE_BUCKET:-carbon}
+      CARBON_STORAGE_FORCE_PATH_STYLE: "true"
+      CARBON_STORAGE_ACCESS_KEY_ID: __MINIO_ACCESS_KEY__
+      CARBON_STORAGE_SECRET_ACCESS_KEY: __MINIO_SECRET_KEY__
+      CARBON_STORAGE_PUBLIC_URL: ${CARBON_STORAGE_PUBLIC_URL:-}
       REDIS_URL: redis://redis:6379
       SESSION_SECRET: __SESSION_SECRET__
       INNGEST_SIGNING_KEY: __INNGEST_SIGNING_KEY__
@@ -153,8 +181,8 @@ services:
     environment:
       ERP_HOST: ${ERP_HOST}
       MES_HOST: ${MES_HOST}
-      SUPABASE_HOST: ${SUPABASE_HOST}
-      STUDIO_HOST: ${STUDIO_HOST:-}
+      STORAGE_HOST: ${STORAGE_HOST}
+      CARBON_API_HOST: ${CARBON_API_HOST}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - type: bind
@@ -246,56 +274,6 @@ services:
         reservations:
           memory: 512M
 
-  gotrue:
-    image: supabase/gotrue:v2.189.0
-    entrypoint: ["/usr/local/bin/carbon-secrets-entrypoint.sh"]
-    command: ["auth"]
-    networks: [internal]
-    secrets:
-      - postgres_password
-      - jwt_secret
-      - smtp_password
-    environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: "9999"
-      API_EXTERNAL_URL: ${SUPABASE_URL}
-      GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:__POSTGRES_PASSWORD__@postgres:5432/postgres
-      GOTRUE_SITE_URL: ${ERP_URL}
-      GOTRUE_URI_ALLOW_LIST: ${ERP_URL},${MES_URL}
-      GOTRUE_DISABLE_SIGNUP: ${GOTRUE_DISABLE_SIGNUP:-true}
-      GOTRUE_JWT_SECRET: __JWT_SECRET__
-      GOTRUE_JWT_EXP: "3600"
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
-      GOTRUE_JWT_ADMIN_ROLES: service_role
-      GOTRUE_JWT_AUD: authenticated
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
-      GOTRUE_MAILER_AUTOCONFIRM: "false"
-      GOTRUE_SMTP_HOST: ${GOTRUE_SMTP_HOST:-}
-      GOTRUE_SMTP_PORT: ${GOTRUE_SMTP_PORT:-587}
-      GOTRUE_SMTP_USER: ${GOTRUE_SMTP_USER:-}
-      GOTRUE_SMTP_PASS: __SMTP_PASSWORD__
-      GOTRUE_SMTP_ADMIN_EMAIL: ${GOTRUE_SMTP_ADMIN_EMAIL:-}
-      GOTRUE_SMTP_SENDER_NAME: ${GOTRUE_SMTP_SENDER_NAME:-Carbon}
-      GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_AUTH_ENABLED:-false}
-      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID:-}
-      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET:-}
-      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI:-}
-      GOTRUE_EXTERNAL_AZURE_ENABLED: ${AZURE_AUTH_ENABLED:-false}
-      GOTRUE_EXTERNAL_AZURE_CLIENT_ID: ${SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID:-}
-      GOTRUE_EXTERNAL_AZURE_SECRET: ${SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_SECRET:-}
-      GOTRUE_EXTERNAL_AZURE_REDIRECT_URI: ${SUPABASE_AUTH_EXTERNAL_AZURE_REDIRECT_URI:-}
-      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: ${ERP_URL}/templates/magic-link.html
-      GOTRUE_MAILER_TEMPLATES_INVITE: ${ERP_URL}/templates/invite.html
-    volumes:
-      - *shim
-    deploy:
-      <<: *restart
-      replicas: 1
-      resources:
-        limits:
-          memory: 256M
-
   postgrest:
     image: postgrest/postgrest:v13.0.8
     # PostgREST's image is FROM scratch (no shell), so it can't run the
@@ -307,7 +285,7 @@ services:
       - jwt_secret
     environment:
       PGRST_DB_URI: "@/run/secrets/postgrest_db_uri"
-      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_SCHEMAS: public,graphql_public
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: "@/run/secrets/jwt_secret"
       PGRST_DB_USE_LEGACY_GUCS: "false"
@@ -358,109 +336,35 @@ services:
         limits:
           memory: 512M
 
-  storage:
-    image: supabase/storage-api:v1.58.4
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     entrypoint: ["/usr/local/bin/carbon-secrets-entrypoint.sh"]
-    command: ["docker-entrypoint.sh", "node", "dist/start/server.js"]
+    command: ["minio", "server", "/data", "--address", ":9000", "--console-address", ":9001"]
     networks: [internal]
     secrets:
-      - postgres_password
-      - jwt_secret
-      - anon_key
-      - service_role_key
+      - minio_access_key
+      - minio_secret_key
     environment:
-      ANON_KEY: __ANON_KEY__
-      SERVICE_KEY: __SERVICE_ROLE_KEY__
-      POSTGREST_URL: http://postgrest:3000
-      PGRST_JWT_SECRET: __JWT_SECRET__
-      DATABASE_URL: postgres://supabase_storage_admin:__POSTGRES_PASSWORD__@postgres:5432/postgres
-      FILE_SIZE_LIMIT: "52428800"
-      STORAGE_BACKEND: file
-      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      TENANT_ID: stub
-      REGION: stub
-      GLOBAL_S3_BUCKET: stub
-      ENABLE_IMAGE_TRANSFORMATION: "false"
+      MINIO_ROOT_USER: __MINIO_ACCESS_KEY__
+      MINIO_ROOT_PASSWORD: __MINIO_SECRET_KEY__
+      MINIO_REGION_NAME: ${CARBON_STORAGE_REGION:-us-east-1}
+      MINIO_BROWSER: "off"
+      MINIO_SERVER_URL: ${CARBON_STORAGE_ENDPOINT}
     volumes:
       - *shim
-      - storage:/var/lib/storage
+      - minio-data:/data
     healthcheck:
       test:
         - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:5000/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - mc
+        - ready
+        - local
       interval: 5s
       timeout: 5s
       retries: 30
     deploy:
       <<: *restart
       replicas: 1
-      resources:
-        limits:
-          memory: 512M
-
-  meta:
-    image: supabase/postgres-meta:v0.96.5
-    entrypoint: ["/usr/local/bin/carbon-secrets-entrypoint.sh"]
-    command: ["docker-entrypoint.sh", "node", "dist/server/server.js"]
-    networks: [internal]
-    secrets:
-      - postgres_password
-    environment:
-      PG_META_PORT: "8080"
-      PG_META_DB_HOST: postgres
-      PG_META_DB_PORT: "5432"
-      PG_META_DB_NAME: postgres
-      PG_META_DB_USER: supabase_admin
-      PG_META_DB_PASSWORD: __POSTGRES_PASSWORD__
-    volumes:
-      - *shim
-    deploy:
-      <<: *restart
-      replicas: 1
-      resources:
-        limits:
-          memory: 256M
-
-  studio:
-    image: supabase/studio:2026.04.28-sha-89d08a2
-    entrypoint: ["/usr/local/bin/carbon-secrets-entrypoint.sh"]
-    command: ["docker-entrypoint.sh", "node", "apps/studio/server.js"]
-    networks: [internal]
-    secrets:
-      - postgres_password
-      - anon_key
-      - service_role_key
-    environment:
-      # Next.js standalone binds to $HOSTNAME, which Docker sets to the container ID
-      # (→ the overlay IP only). Force 0.0.0.0 so it also listens on 127.0.0.1 for the
-      # healthcheck and on the service VIP for kong/caddy.
-      HOSTNAME: 0.0.0.0
-      STUDIO_PG_META_URL: http://meta:8080
-      POSTGRES_PASSWORD: __POSTGRES_PASSWORD__
-      DEFAULT_ORGANIZATION_NAME: Carbon
-      DEFAULT_PROJECT_NAME: Carbon
-      SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: ${SUPABASE_URL}
-      SUPABASE_ANON_KEY: __ANON_KEY__
-      SUPABASE_SERVICE_KEY: __SERVICE_ROLE_KEY__
-    volumes:
-      - *shim
-    # The image's built-in healthcheck demands HTTP 200 from /api/platform/profile
-    # with no start_period, which SIGKILLs a studio that is in fact serving. Override
-    # with a lenient check (server answers at all) on 127.0.0.1 + a boot grace period.
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/platform/profile').then(()=>process.exit(0)).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
-    # Internal admin UI. Not published. Reach it via the optional studio.* route
-    # in the Caddyfile (behind basic_auth) or an SSH tunnel — never expose openly.
-    deploy:
-      <<: *restart
-      replicas: ${STUDIO_REPLICAS:-1}
       resources:
         limits:
           memory: 512M
@@ -475,12 +379,25 @@ services:
       - jwt_secret
       - anon_key
       - service_role_key
+      - minio_access_key
+      - minio_secret_key
     environment:
       JWT_SECRET: __JWT_SECRET__
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: __ANON_KEY__
       SUPABASE_SERVICE_ROLE_KEY: __SERVICE_ROLE_KEY__
       SUPABASE_DB_URL: postgresql://postgres:__POSTGRES_PASSWORD__@postgres:5432/postgres
+      CARBON_API_URL: ${CARBON_API_URL}
+      CARBON_PUBLIC_KEY: __ANON_KEY__
+      CARBON_SERVICE_ROLE_KEY: __SERVICE_ROLE_KEY__
+      CARBON_AUTH_JWT_SECRET: __JWT_SECRET__
+      CARBON_DATABASE_URL: postgresql://postgres:__POSTGRES_PASSWORD__@postgres:5432/postgres
+      CARBON_STORAGE_ENDPOINT: ${CARBON_STORAGE_ENDPOINT}
+      CARBON_STORAGE_REGION: ${CARBON_STORAGE_REGION:-us-east-1}
+      CARBON_STORAGE_BUCKET: ${CARBON_STORAGE_BUCKET:-carbon}
+      CARBON_STORAGE_FORCE_PATH_STYLE: "true"
+      CARBON_STORAGE_ACCESS_KEY_ID: __MINIO_ACCESS_KEY__
+      CARBON_STORAGE_SECRET_ACCESS_KEY: __MINIO_SECRET_KEY__
       VERIFY_JWT: ${EDGE_VERIFY_JWT:-false}
     volumes:
       - *shim
@@ -583,7 +500,7 @@ networks:
 volumes:
   pgdata:
   pgconfig:
-  storage:
+  minio-data:
   inngest:
   redis-data:
   caddy-data:
@@ -599,6 +516,10 @@ secrets:
   anon_key:
     external: true
   service_role_key:
+    external: true
+  minio_access_key:
+    external: true
+  minio_secret_key:
     external: true
   session_secret:
     external: true

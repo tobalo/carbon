@@ -1,14 +1,13 @@
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import { fetchAllFromTable } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { sanitize } from "@carbon/utils";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
 import { capitalize } from "~/utils/string";
-import { sanitize } from "~/utils/supabase";
 import type { CompanyPermission } from "./types";
 
 export async function deleteEmployeeType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeTypeId: string
 ) {
   return client
@@ -18,15 +17,12 @@ export async function deleteEmployeeType(
     .eq("protected", false);
 }
 
-export async function deleteGroup(
-  client: SupabaseClient<Database>,
-  groupId: string
-) {
+export async function deleteGroup(client: CarbonClient, groupId: string) {
   return client.from("group").delete().eq("id", groupId);
 }
 
 export async function getCompaniesForUser(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string
 ) {
   const { data, error } = await client
@@ -43,7 +39,7 @@ export async function getCompaniesForUser(
 }
 
 export async function getCustomers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -70,7 +66,7 @@ export async function getCustomers(
 }
 
 export async function getEmployee(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -83,7 +79,7 @@ export async function getEmployee(
 }
 
 export async function getUnrevokedInviteEmails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -94,7 +90,7 @@ export async function getUnrevokedInviteEmails(
 }
 
 export async function getEmployees(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -134,7 +130,7 @@ export async function getEmployees(
  * .eq("isConsoleOperator", true) once the column is in the employees view.
  */
 export async function getConsoleOperators(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -157,7 +153,7 @@ export async function getConsoleOperators(
 }
 
 export async function getEmployeeType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeTypeId: string
 ) {
   return client
@@ -168,7 +164,7 @@ export async function getEmployeeType(
 }
 
 export async function getEmployeeTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -190,10 +186,7 @@ export async function getEmployeeTypes(
   return query;
 }
 
-export async function getInvitable(
-  client: SupabaseClient<Database>,
-  companyId: string
-) {
+export async function getInvitable(client: CarbonClient, companyId: string) {
   return client
     .from("employeesAcrossCompanies")
     .select("*")
@@ -202,21 +195,15 @@ export async function getInvitable(
     .order("lastName");
 }
 
-export async function getModules(client: SupabaseClient<Database>) {
+export async function getModules(client: CarbonClient) {
   return client.from("modules").select("name").order("name");
 }
 
-export async function getGroup(
-  client: SupabaseClient<Database>,
-  groupId: string
-) {
+export async function getGroup(client: CarbonClient, groupId: string) {
   return client.from("group").select("id, name").eq("id", groupId).single();
 }
 
-export async function getGroupMembers(
-  client: SupabaseClient<Database>,
-  groupId: string
-) {
+export async function getGroupMembers(client: CarbonClient, groupId: string) {
   return client
     .from("groupMembers")
     .select("name, groupId, memberGroupId, memberUserId")
@@ -224,7 +211,7 @@ export async function getGroupMembers(
 }
 
 export async function getGroups(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & {
     search: string | null;
@@ -244,7 +231,7 @@ export async function getGroups(
 }
 
 export async function getGroupEmails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   groupIds: string[]
 ): Promise<string[]> {
   if (!groupIds || groupIds.length === 0) return [];
@@ -259,7 +246,7 @@ export async function getGroupEmails(
 }
 
 export async function getPermissionsByEmployeeType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeTypeId: string
 ) {
   return client
@@ -269,7 +256,7 @@ export async function getPermissionsByEmployeeType(
 }
 
 export async function getSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -295,7 +282,7 @@ export async function getSuppliers(
   return query;
 }
 
-export async function getUsers(client: SupabaseClient<Database>) {
+export async function getUsers(client: CarbonClient) {
   return fetchAllFromTable<{
     id: string;
     firstName: string;
@@ -312,7 +299,7 @@ export async function getUsers(client: SupabaseClient<Database>) {
 }
 
 export async function getUserEmails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userIds: string[]
 ): Promise<string[]> {
   if (!userIds || userIds.length === 0) return [];
@@ -331,7 +318,7 @@ export async function getUserEmails(
 }
 
 export async function insertEmployeeType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeType: { name: string; companyId: string }
 ) {
   return client
@@ -342,14 +329,14 @@ export async function insertEmployeeType(
 }
 
 export async function insertGroup(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   group: { name: string; companyId: string }
 ) {
   return client.from("group").insert(group).select("*").single();
 }
 
 export async function upsertEmployeeType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeType:
     | { name: string; companyId: string }
     | { id: string; name: string }
@@ -370,7 +357,7 @@ export async function upsertEmployeeType(
 }
 
 export async function upsertEmployeeTypePermissions(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeTypeId: string,
   companyId: string,
   permissions: { name: string; permission: CompanyPermission }[]
@@ -388,7 +375,7 @@ export async function upsertEmployeeTypePermissions(
 }
 
 export async function upsertGroup(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     id,
     name,
@@ -403,7 +390,7 @@ export async function upsertGroup(
 }
 
 export async function upsertGroupMembers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   groupId: string,
   selections: string[]
 ) {

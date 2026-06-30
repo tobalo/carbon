@@ -1,6 +1,9 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -18,7 +21,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const { companyId, userId } = await requirePermissions(request, {
     create: "inventory"
   });
-
   const serviceRole = getCarbonServiceRole();
   const salesOrderLine = await getSalesOrderLine(serviceRole, lineId);
 
@@ -42,7 +44,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const salesOrderShipment = await serviceRole.functions.invoke<{
+  const salesOrderShipment = await invokeCarbonServiceFunction<{
     id: string;
   }>("create", {
     body: {

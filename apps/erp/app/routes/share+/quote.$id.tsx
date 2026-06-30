@@ -37,7 +37,6 @@ import {
 import { formatCityStatePostalCode, formatDate } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useLocale } from "@react-aria/i18n";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { motion } from "framer-motion";
 import MotionNumber from "motion-number";
 import type { Dispatch, SetStateAction } from "react";
@@ -74,8 +73,9 @@ import {
 } from "~/modules/sales";
 import QuoteStatus from "~/modules/sales/ui/Quotes/QuoteStatus";
 import { getCompany, getCompanySettings } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 import type { action } from "~/routes/api+/sales.digital-quote.$id";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 
 export const meta = () => {
@@ -172,7 +172,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
             if (!path) {
               return null;
             }
-            return getBase64ImageFromSupabase(serviceRole, path).then(
+            return getBase64ImageFromStorage(serviceRole, path).then(
               (data) => ({
                 id,
                 data

@@ -1,5 +1,8 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { onShapeDataValidator } from "@carbon/ee/onshape";
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
@@ -41,7 +44,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const parsed = onShapeDataValidator.parse(JSON.parse(rows as string));
     const serviceRole = await getCarbonServiceRole();
 
-    const sync = await serviceRole.functions.invoke("sync", {
+    const sync = await invokeCarbonServiceFunction("sync", {
       body: {
         type: "onshape",
         makeMethodId,

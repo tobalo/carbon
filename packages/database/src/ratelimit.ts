@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LegacyPostgrestClient } from "./legacy-client.ts";
 
 export type RateLimitResult = {
   success: boolean;
@@ -10,13 +10,13 @@ export type RateLimitResult = {
 
 /**
  * Check rate limit for an API key using the Postgres
- * check_api_key_rate_limit() function via Supabase .rpc().
+ * check_api_key_rate_limit() function via the current PostgREST .rpc().
  *
  * Returns the rate limit result. Callers are responsible for
  * throwing/returning an appropriate 429 response when !success.
  */
 export async function checkApiKeyRateLimit(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   apiKeyId: string,
   limit: number,
   window: string

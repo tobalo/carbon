@@ -3,6 +3,7 @@ import type { Transaction } from "kysely";
 import { nanoid } from "https://deno.land/x/nanoid@v3.0.0/nanoid.ts";
 import z from "npm:zod@^3.24.1";
 import { getConnectionPool, getDatabaseClient } from "../lib/database.ts";
+import { carbonApiUrl, carbonServiceRoleKey } from "../lib/env.ts";
 import { corsHeaders } from "../lib/headers.ts";
 import type { DB } from "../lib/types.ts";
 
@@ -431,9 +432,11 @@ serve(async (req) => {
 
     // Trigger reschedule for date/priority recalculation (after transaction)
     try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL");
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      await fetch(`${supabaseUrl}/functions/v1/reschedule`, {
+      const apiUrl = carbonApiUrl();
+      const serviceRoleKey = carbonServiceRoleKey();
+      if (!apiUrl) throw new Error("CARBON_API_URL is not configured");
+
+      await fetch(`${apiUrl}/functions/v1/reschedule`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

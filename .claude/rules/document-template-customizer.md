@@ -16,7 +16,7 @@ defaults at render time. Related printing/queue mechanics live in
 
 ## Storage (`documentTemplate` + `documentSection` tables)
 
-Created by `packages/database/supabase/migrations/20260609143732_document-template.sql`
+Created by `packages/database/migrations/20260609143732_document-template.sql`
 (later migrations only backfill `blocks` JSONB — no structural changes).
 
 - **`documentTemplate`** — composite PK `("id","companyId")`, `UNIQUE (companyId, documentType)`

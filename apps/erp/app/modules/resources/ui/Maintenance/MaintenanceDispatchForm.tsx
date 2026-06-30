@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { DateTimePicker, Select, ValidatedForm } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import {
@@ -24,6 +23,7 @@ import { MediumPriorityIcon } from "~/assets/icons/MediumPriorityIcon";
 import { Hidden, Location, Submit, WorkCenter } from "~/components/Form";
 import { usePermissions, useRouteData, useUser } from "~/hooks";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import {
   isMaintenanceDispatchLocked,
   maintenanceDispatchPriority,
@@ -66,8 +66,6 @@ const MaintenanceDispatchForm = ({
   const {
     company: { id: companyId }
   } = useUser();
-  const { carbon } = useCarbon();
-
   const isEditing = initialValues.id !== undefined;
 
   const routeData = useRouteData<{
@@ -96,7 +94,9 @@ const MaintenanceDispatchForm = ({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/maintenance/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "resources"
+    });
 
     if (result?.error) {
       toast.error("Failed to upload image");

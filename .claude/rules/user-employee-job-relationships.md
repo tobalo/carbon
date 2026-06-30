@@ -1,7 +1,7 @@
 ---
 description: How user, employee, employeeJob, company membership, and permissions/claims relate in Carbon's auth identity graph
 paths:
-  - "packages/database/supabase/migrations/**"
+  - "packages/database/migrations/**"
   - "packages/auth/src/services/**"
   - "apps/erp/app/modules/users/**"
   - "apps/erp/app/modules/resources/**"

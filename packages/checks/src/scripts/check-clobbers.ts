@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { findClobbers, type SourceFile } from "../clobber";
 import { repoRoot } from "../sources/migrations";
 
-const MIGRATIONS = "packages/database/supabase/migrations";
+const MIGRATIONS = "packages/database/migrations";
 
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();

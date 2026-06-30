@@ -1,5 +1,4 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import {
   type DocumentType,
   formatAssignmentUpdate,
@@ -13,8 +12,8 @@ import {
 } from "@carbon/ee/slack/messages";
 import { VERCEL_URL } from "@carbon/env";
 import { WebClient } from "@slack/web-api";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "../../client";
+import type { LegacyPostgrestFunctionsClient } from "../legacy-client";
 
 export const slackDocumentCreatedFunction = inngest.createFunction(
   { id: "slack-document-created", retries: 1 },
@@ -343,7 +342,7 @@ export const slackDocumentAssignmentUpdateFunction = inngest.createFunction(
 );
 
 async function getDocumentData(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: LegacyPostgrestFunctionsClient,
   documentType: DocumentType,
   documentId: string,
   companyId: string

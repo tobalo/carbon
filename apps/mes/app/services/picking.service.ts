@@ -1,9 +1,10 @@
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPickingListLocked } from "~/services/models";
 
 export async function getAssignedPickingLists(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string
 ) {
   return client
@@ -15,7 +16,7 @@ export async function getAssignedPickingLists(
 }
 
 export async function getPickingListForExecution(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ) {
   const { data: pickingList, error: plError } = await client
@@ -77,7 +78,7 @@ export async function getPickingListForExecution(
 }
 
 export async function updatePickingListStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string,
   status: Database["public"]["Enums"]["pickingListStatus"],
   updatedBy: string,
@@ -109,7 +110,7 @@ function getPostPickingErrorMessage(error: unknown): string {
  * status is maintained by the `update_picking_list_status` trigger.
  */
 export async function setPickingListLineQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     pickingListLineId: string;
     quantity: number;
@@ -199,7 +200,7 @@ export async function setPickingListLineQuantity(
             companyId: pickingList.companyId
           };
 
-    const result = await client.functions.invoke("post-picking", { body });
+    const result = await invokeCarbonServiceFunction("post-picking", { body });
 
     if (result.error) {
       return { data: null, error: getPostPickingErrorMessage(result.error) };
@@ -231,7 +232,7 @@ export async function setPickingListLineQuantity(
  * records it on the line, points the job material at lineside. `unpick` reverses.
  */
 export async function setPickingListLineTrackedEntity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     pickingListLineId: string;
     trackedEntityId: string;
@@ -305,7 +306,7 @@ export async function setPickingListLineTrackedEntity(
     if (isBatch) body.quantity = Math.max(1, args.quantity ?? 1);
   }
 
-  const result = await client.functions.invoke("post-picking", { body });
+  const result = await invokeCarbonServiceFunction("post-picking", { body });
   if (result.error) {
     return { data: null, error: getPostPickingErrorMessage(result.error) };
   }

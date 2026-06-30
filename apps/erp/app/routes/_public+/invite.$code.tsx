@@ -1,14 +1,11 @@
-import {
-  CarbonEdition,
-  error,
-  getAppUrl,
-  getPermissionCacheKey
-} from "@carbon/auth";
+import { CarbonEdition, error, getPermissionCacheKey } from "@carbon/auth";
+import { signInWithBypassEmail } from "@carbon/auth/auth.server";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { setCompanyId } from "@carbon/auth/company.server";
 import {
   flash,
   getAuthSession,
+  setAuthSession,
   updateCompanySession
 } from "@carbon/auth/session.server";
 import { redis } from "@carbon/kv";
@@ -92,14 +89,34 @@ export async function action({ request, params }: ActionFunctionArgs) {
       ]
     });
   } else {
-    const magicLink = await serviceRole.auth.admin.generateLink({
-      type: "magiclink",
-      email: accept.data.email,
-      options: {
-        redirectTo: `${getAppUrl()}/callback`
-      }
+    const { data: companyRecord } = await serviceRole
+      .from("company")
+      .select("companyGroupId")
+      .eq("id", accept.data.companyId)
+      .single();
+    const newAuthSession = await signInWithBypassEmail(
+      accept.data.email,
+      accept.data.companyId,
+      companyRecord?.companyGroupId ?? ""
+    );
+
+    if (!newAuthSession) {
+      throw redirect(
+        path.to.root,
+        await flash(request, error(null, "Failed to create auth session"))
+      );
+    }
+
+    const sessionCookie = await setAuthSession(request, {
+      authSession: newAuthSession
     });
-    throw redirect(magicLink.data?.properties?.action_link ?? path.to.root);
+    const companyIdCookie = setCompanyId(accept.data.companyId);
+    throw redirect(path.to.authenticatedRoot, {
+      headers: [
+        ["Set-Cookie", sessionCookie],
+        ["Set-Cookie", companyIdCookie]
+      ]
+    });
   }
 }
 

@@ -1,8 +1,8 @@
+import type { LegacyPostgrestFunctionsClient } from "../../legacy-client";
 // This module is .tsx because the built-in renderers render React PDF
 // components (ProductLabelPDF, StorageUnitLabelPDF, KanbanLabelPDF) via
 // renderToStream.
 
-import type { Database } from "@carbon/database";
 import { resolveLabelLogo } from "@carbon/documents/labels";
 import {
   KanbanLabelPDF,
@@ -14,12 +14,12 @@ import {
   generateProductLabelZPL,
   generateStorageUnitLabelZPL
 } from "@carbon/documents/zpl";
-import { ERP_URL, SUPABASE_URL } from "@carbon/env";
+import { CARBON_API_URL, ERP_URL, getPublicStorageUrl } from "@carbon/env";
+import { downloadObjectWithRetry } from "@carbon/object-storage/server";
 import { renderWithBinderyPress } from "@carbon/printing/printing.server";
 import type { LabelSize, ProductLabelItem } from "@carbon/utils";
 import { labelSizes } from "@carbon/utils";
 import { renderToStream } from "@react-pdf/renderer";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ReactElement } from "react";
 import type { KanbanCardItem, StorageUnitItem } from "./resolvers";
 
@@ -54,7 +54,7 @@ export async function renderItemWithTemplate(
 }
 
 export async function renderItemBuiltIn(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   companyId: string,
   doc: PrintableDocumentItem,
   format: "zpl" | "pdf",
@@ -113,8 +113,6 @@ function requireMediaSize(mediaSizeId: string): LabelSize {
   return mediaSize;
 }
 
-const PUBLIC_STORAGE_URL_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/public/`;
-
 /**
  * Resolve the company's tracking-label template + logo for a built-in render.
  * Mirrors the interactive label routes (which use `getDocumentTemplateConfig`
@@ -122,7 +120,7 @@ const PUBLIC_STORAGE_URL_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/publ
  * jobs package can't import app modules, so it reads the row directly here.
  */
 async function loadProductLabelContext(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   companyId: string,
   labelSize: LabelSize
 ) {
@@ -143,7 +141,7 @@ async function loadProductLabelContext(
   const template = toDocumentTemplate(templateRow.data, "trackingLabel");
 
   const expand = (path: string | null | undefined) =>
-    path ? `${PUBLIC_STORAGE_URL_PREFIX}${path}` : null;
+    path ? (getPublicStorageUrl("public", path) ?? path) : null;
   const company = companyRow.data
     ? {
         logoLight: expand(companyRow.data.logoLight),
@@ -152,7 +150,7 @@ async function loadProductLabelContext(
     : null;
 
   const logo = await resolveLabelLogo(company, template, labelSize, {
-    supabaseUrl: SUPABASE_URL ?? ""
+    apiUrl: CARBON_API_URL ?? ""
   });
 
   return { template, logo };
@@ -186,7 +184,7 @@ function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 async function renderKanbanCardPDF(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   item: KanbanCardItem,
   format: "zpl" | "pdf"
 ): Promise<GeneratedContent> {
@@ -198,11 +196,15 @@ async function renderKanbanCardPDF(
 
   let thumbnail: string | null = null;
   if (item.thumbnailPath) {
-    const { data } = await client.storage
-      .from("private")
-      .download(item.thumbnailPath);
+    const data = await downloadObjectWithRetry(
+      {
+        bucket: "private",
+        key: item.thumbnailPath
+      },
+      { attempts: 1 }
+    );
     if (data) {
-      const buffer = Buffer.from(await data.arrayBuffer());
+      const buffer = Buffer.from(data.body);
       const ext = item.thumbnailPath.split(".").pop()?.toLowerCase();
       const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
       thumbnail = `data:${mime};base64,${buffer.toString("base64")}`;

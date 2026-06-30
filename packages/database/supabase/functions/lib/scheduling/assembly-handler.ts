@@ -1,8 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Kysely } from "kysely";
 import type { DB } from "../database.ts";
+import type { LegacyPostgrestClient } from "../legacy-client.ts";
 import { getJobMethodTree, type JobMethodTreeItem } from "../methods.ts";
-import type { Database } from "../types.ts";
 import type { AssemblyNode, BaseOperation } from "./types.ts";
 
 /**
@@ -10,12 +9,12 @@ import type { AssemblyNode, BaseOperation } from "./types.ts";
  * Manages assembly hierarchy and transforms job method trees into scheduling structures
  */
 export class AssemblyHandler {
-  private client: SupabaseClient<Database>;
+  private client: LegacyPostgrestClient;
   private db: Kysely<DB>;
   private companyId: string;
 
   constructor(
-    client: SupabaseClient<Database>,
+    client: LegacyPostgrestClient,
     db: Kysely<DB>,
     companyId: string
   ) {

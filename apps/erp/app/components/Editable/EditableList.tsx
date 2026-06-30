@@ -1,6 +1,6 @@
 import { Combobox } from "@carbon/react";
-import type { PostgrestSingleResponse } from "@supabase/supabase-js";
 import type { EditableTableCellComponentProps } from "~/components/Editable";
+import type { PostgrestSingleResponse } from "~/types";
 
 const EditableList =
   <T extends object>(

@@ -107,7 +107,7 @@ For each task, provide:
 
 ```markdown
 **Files:**
-- Create: `packages/database/supabase/migrations/NNNN_add_lots.sql`
+- Create: `packages/database/migrations/NNNN_add_lots.sql`
 - Modify: `packages/database/src/types.ts`
 - Test: `apps/erp/app/modules/inventory/__tests__/lots.test.ts`
 ```
@@ -117,7 +117,7 @@ For each task, provide:
 ```markdown
 **Steps:**
 
-1. Create migration file at `packages/database/supabase/migrations/20240115120000_add_lot_table.sql`:
+1. Create migration file at `packages/database/migrations/20240115120000_add_lot_table.sql`:
    ```sql
    CREATE TABLE lot (
      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -220,7 +220,7 @@ Tasks 3-5 are independent (can parallelize)
 ## Task 1: Create database migration
 
 **Files:**
-- Create: `packages/database/supabase/migrations/20240115120000_add_X.sql`
+- Create: `packages/database/migrations/20240115120000_add_X.sql`
 
 **Steps:**
 

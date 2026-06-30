@@ -1,8 +1,7 @@
-import type { Database } from "@carbon/database";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PrinterContext } from "./assignments";
 import { resolveContextAssignment } from "./assignments";
+import type { LegacyPostgrestClient } from "./database-client";
 import type { PrintingSettings } from "./types";
 
 const CACHE_TTL_SECONDS = 3600;
@@ -29,7 +28,7 @@ function buildCacheKey(
 }
 
 export async function getCachedPrinterConfig(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   locationId: string,
   context: PrinterContext,
@@ -66,7 +65,7 @@ export async function getCachedPrinterConfig(
 }
 
 async function resolvePrinterConfig(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   locationId: string,
   context: PrinterContext,

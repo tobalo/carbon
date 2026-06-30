@@ -1,11 +1,14 @@
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import { SalesOrderEmail } from "@carbon/documents/email";
 import { trigger } from "@carbon/jobs";
 import { redis } from "@carbon/kv";
+import {
+  createSignedDownloadUrl,
+  uploadObject
+} from "@carbon/object-storage/server";
 import type { CalendarDate } from "@internationalized/date";
 import { startOfWeek } from "@internationalized/date";
 import { renderAsync } from "@react-email/components";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 import { getPaymentTermsList } from "~/modules/accounting";
 import {
@@ -22,7 +25,7 @@ import { upsertDocument } from "../documents/documents.service";
 import type { CustomFieldsTableType } from "../settings";
 
 export async function assign(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     table: string;
@@ -51,7 +54,7 @@ export async function getCustomFieldsCacheKey(args?: {
 }
 
 export async function getCustomFieldsSchemas(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args?: {
     companyId: string;
     module?: string;
@@ -98,7 +101,7 @@ export async function getCustomFieldsSchemas(
 }
 
 /**
- * Generates a sales order PDF via the pdfLoader, uploads it to Supabase
+ * Generates a sales order PDF via the pdfLoader, uploads it to private object
  * storage under the opportunity path, and creates a document DB record.
  *
  * Returns the PDF ArrayBuffer (useful for email attachments) and the
@@ -115,8 +118,8 @@ export async function generateAndAttachSalesOrderPdf(args: {
   opportunityId: string;
   companyId: string;
   userId: string;
-  /** A service-role Supabase client for storage + DB writes */
-  serviceRole: SupabaseClient<Database>;
+  /** A service-role Carbon data client for DB writes */
+  serviceRole: CarbonClient;
   /** The pdf loader imported from the sales-order pdf route */
   pdfLoader: (args: LoaderFunctionArgs) => Promise<Response>;
 }): Promise<{ file: ArrayBuffer; fileName: string; documentFilePath: string }> {
@@ -147,18 +150,18 @@ export async function generateAndAttachSalesOrderPdf(args: {
     `${salesOrderIdentifier} - ${new Date().toISOString().slice(0, -5)}.pdf`
   );
 
-  // 2. Upload to Supabase storage
+  // 2. Upload to private object storage
   const documentFilePath = `${companyId}/opportunity/${opportunityId}/${fileName}`;
 
-  const uploadResult = await serviceRole.storage
-    .from("private")
-    .upload(documentFilePath, file, {
+  try {
+    await uploadObject({
+      bucket: "private",
+      key: documentFilePath,
+      body: file,
       cacheControl: `${12 * 60 * 60}`,
-      contentType: "application/pdf",
-      upsert: true
+      contentType: "application/pdf"
     });
-
-  if (uploadResult.error) {
+  } catch {
     throw new Error("Failed to upload PDF to storage");
   }
 
@@ -196,7 +199,7 @@ export async function sendSalesOrderEmail(args: {
   cc?: string[];
   documentFilePath: string;
   fileName: string;
-  serviceRole: SupabaseClient<Database>;
+  serviceRole: CarbonClient;
   locales: string[];
 }): Promise<{ success: boolean; message?: string }> {
   const {
@@ -269,9 +272,11 @@ export async function sendSalesOrderEmail(args: {
 
   const html = await renderAsync(emailTemplate);
   const text = await renderAsync(emailTemplate, { plainText: true });
-  const { data: signedUrlData } = await serviceRole.storage
-    .from("private")
-    .createSignedUrl(documentFilePath, 3600);
+  const signedUrl = await createSignedDownloadUrl({
+    bucket: "private",
+    key: documentFilePath,
+    expiresIn: 3600
+  }).catch(() => null);
 
   await trigger("send-email", {
     to: [seller.data.email, customer.data.contact.email!],
@@ -280,10 +285,10 @@ export async function sendSalesOrderEmail(args: {
     subject: `Order ${salesOrder.data.salesOrderId} from ${company.data.name}`,
     html,
     text,
-    attachments: signedUrlData?.signedUrl
+    attachments: signedUrl
       ? [
           {
-            path: signedUrlData.signedUrl,
+            path: signedUrl,
             filename: fileName
           }
         ]

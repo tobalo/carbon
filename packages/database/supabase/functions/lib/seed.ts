@@ -19,9 +19,9 @@ export {
   scrapReasons,
   sequences,
   unitOfMeasures,
-} from "./seed.data.ts";
+} from "../../../src/seed/seed.data.ts";
 
-import { groups as _groups } from "./seed.data.ts";
+import { groups as _groups } from "../../../src/seed/seed.data.ts";
 
 export const groupCompanyTemplate = "XXXX-XXXX-XXXXXXXXXXXX";
 

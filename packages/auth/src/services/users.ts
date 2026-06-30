@@ -1,10 +1,9 @@
-import type { Database, Json } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { SUPABASE_URL } from "../config/env";
-import type { Permission } from "../types";
+import type { Json } from "@carbon/database";
+import { getPublicStorageUrl } from "../config/env";
+import type { CarbonClient, Permission } from "../types";
 
 export async function getClaims(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   uid: string,
   company?: string
 ) {
@@ -15,10 +14,7 @@ export function getPermissionCacheKey(userId: string) {
   return `permissions:${userId}`;
 }
 
-export async function getCompanies(
-  client: SupabaseClient<Database>,
-  userId: string
-) {
+export async function getCompanies(client: CarbonClient, userId: string) {
   const companies = await client
     .from("companies")
     .select("*, companyGroup(name)")
@@ -34,16 +30,19 @@ export async function getCompanies(
       ...company,
       companyGroupName: (companyGroup as { name: string } | null)?.name ?? null,
       logoLightIcon: company.logoLightIcon
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoLightIcon}`
+        ? (getPublicStorageUrl("public", company.logoLightIcon) ??
+          company.logoLightIcon)
         : null,
       logoDarkIcon: company.logoDarkIcon
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoDarkIcon}`
+        ? (getPublicStorageUrl("public", company.logoDarkIcon) ??
+          company.logoDarkIcon)
         : null,
       logoLight: company.logoLight
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoLight}`
+        ? (getPublicStorageUrl("public", company.logoLight) ??
+          company.logoLight)
         : null,
       logoDark: company.logoDark
-        ? `${SUPABASE_URL}/storage/v1/object/public/public/${company.logoDark}`
+        ? (getPublicStorageUrl("public", company.logoDark) ?? company.logoDark)
         : null
     })),
     error: null
@@ -51,7 +50,7 @@ export async function getCompanies(
 }
 
 export async function getCompaniesForUser(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string
 ) {
   const { data, error } = await client
@@ -67,7 +66,7 @@ export async function getCompaniesForUser(
   return data?.map((row) => row.companyId) ?? [];
 }
 
-export async function getUser(client: SupabaseClient<Database>, id: string) {
+export async function getUser(client: CarbonClient, id: string) {
   return client
     .from("user")
     .select("*")

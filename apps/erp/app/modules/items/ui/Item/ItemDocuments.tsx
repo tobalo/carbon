@@ -22,7 +22,6 @@ import {
 } from "@carbon/react";
 import { convertKbToString } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 import { LuAxis3D, LuEllipsisVertical, LuUpload } from "react-icons/lu";
@@ -32,8 +31,9 @@ import DocumentIcon from "~/components/DocumentIcon";
 import { useDateFormatter, usePermissions, useUser } from "~/hooks";
 import type { MethodItemType, OptimisticFileObject } from "~/modules/shared";
 import { getDocumentType } from "~/modules/shared";
-import type { ModelUpload } from "~/types";
+import type { FileObject, ModelUpload } from "~/types";
 import { path } from "~/utils/path";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 import type { ItemFile } from "../../types";
 
@@ -313,19 +313,19 @@ export const useItemDocuments = ({ itemId, type }: Props) => {
 
   const deleteFile = useCallback(
     async (file: FileObject) => {
-      const fileDelete = await carbon?.storage
-        .from("private")
-        .remove([getPath(file)]);
+      const fileDelete = await removePrivateFiles([getPath(file)], {
+        permission: "parts"
+      });
 
-      if (!fileDelete || fileDelete.error) {
-        toast.error(fileDelete?.error?.message || t`Error deleting file`);
+      if (fileDelete.error) {
+        toast.error(fileDelete.error.message || t`Error deleting file`);
         return;
       }
 
       toast.success(t`File deleted successfully`);
       revalidator.revalidate();
     },
-    [getPath, carbon?.storage, revalidator, t]
+    [getPath, revalidator, t]
   );
 
   const deleteModel = useCallback(async () => {
@@ -408,21 +408,14 @@ export const useItemDocuments = ({ itemId, type }: Props) => {
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         toast.info(t`Uploading ${file.name}`);
         const fileName = getPath(file);
 
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadPrivateFile(fileName, file, {
+          permission: "parts",
+          cacheControl: `${12 * 60 * 60}`
+        });
 
         if (fileUpload.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -445,7 +438,7 @@ export const useItemDocuments = ({ itemId, type }: Props) => {
       }
       revalidator.revalidate();
     },
-    [getPath, carbon, revalidator, submit, type, itemId, t]
+    [getPath, revalidator, submit, type, itemId, t]
   );
 
   return {

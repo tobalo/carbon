@@ -1,7 +1,6 @@
 import type { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { uploadObject } from "@carbon/object-storage/server";
 import { extract as tarExtract } from "tar-stream";
 
 /**
@@ -14,7 +13,6 @@ import { extract as tarExtract } from "tar-stream";
  * onboarding "restore from a backup" flow.
  */
 export async function unpackBackupArchive(
-  client: SupabaseClient<Database>,
   companyId: string,
   source: Readable
 ): Promise<{ name: string; assetErrors: number }> {
@@ -46,13 +44,19 @@ export async function unpackBackupArchive(
             next();
             return;
           }
-          const up = await client.storage
-            .from(companyId)
-            .upload(`${dir}/${rel}`, Buffer.concat(chunks), { upsert: true });
-          if (up.error) {
+          let uploaded = false;
+          try {
+            await uploadObject({
+              bucket: companyId,
+              key: `${dir}/${rel}`,
+              body: Buffer.concat(chunks)
+            });
+            uploaded = true;
+          } catch {
             if (rel.startsWith("assets/")) assetErrors++;
             else criticalErrors++;
-          } else if (rel === "manifest.json") {
+          }
+          if (uploaded && rel === "manifest.json") {
             // Only mark the manifest seen once it's actually landed — an
             // interrupted/failed upload must not pass the completeness check
             // below and yield a phantom folder a restore would fire against.

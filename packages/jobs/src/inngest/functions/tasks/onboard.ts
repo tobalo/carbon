@@ -1,16 +1,15 @@
 import { openai } from "@ai-sdk/openai";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import { GetStartedEmail, WelcomeEmail } from "@carbon/documents/email";
 import { RESEND_DOMAIN } from "@carbon/env";
 import { resend, sendEmail } from "@carbon/lib/resend.server";
 import { getSlackClient } from "@carbon/lib/slack.server";
 import { getTwentyClient } from "@carbon/lib/twenty.server";
 import { render } from "@react-email/components";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateObject } from "ai";
 import { z } from "zod/v3";
 import { inngest } from "../../client";
+import type { LegacyPostgrestFunctionsClient } from "../legacy-client";
 
 export const onboardFunction = inngest.createFunction(
   { id: "onboard", retries: 3 },
@@ -333,7 +332,7 @@ export const onboardFunction = inngest.createFunction(
 );
 
 async function shouldSendOnboardingEmailsToUser(
-  carbon: SupabaseClient<Database>,
+  carbon: LegacyPostgrestFunctionsClient,
   userId: string
 ) {
   const userToCompany = await carbon

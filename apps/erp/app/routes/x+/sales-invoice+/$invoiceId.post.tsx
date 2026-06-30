@@ -1,9 +1,16 @@
 import { assertIsPost } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { SalesInvoiceEmail } from "@carbon/documents/email";
 import { validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
+import {
+  createSignedDownloadUrl,
+  uploadObject
+} from "@carbon/object-storage/server";
 import { renderAsync } from "@react-email/components";
 import { parseAcceptLanguage } from "intl-parse-accept-language";
 import type { ActionFunctionArgs } from "react-router";
@@ -59,7 +66,7 @@ export async function action(args: ActionFunctionArgs) {
   const serviceRole = getCarbonServiceRole();
 
   try {
-    const postSalesInvoice = await serviceRole.functions.invoke(
+    const postSalesInvoice = await invokeCarbonServiceFunction(
       "post-sales-invoice",
       {
         body: {
@@ -140,15 +147,15 @@ export async function action(args: ActionFunctionArgs) {
 
     documentFilePath = `${companyId}/opportunity/${salesInvoice.data.opportunityId}/${fileName}`;
 
-    const documentFileUpload = await serviceRole.storage
-      .from("private")
-      .upload(documentFilePath, file, {
+    try {
+      await uploadObject({
+        bucket: "private",
+        key: documentFilePath,
+        body: file,
         cacheControl: `${12 * 60 * 60}`,
-        contentType: "application/pdf",
-        upsert: true
+        contentType: "application/pdf"
       });
-
-    if (documentFileUpload.error) {
+    } catch {
       return {
         success: false,
         message: "Failed to upload file"
@@ -291,9 +298,11 @@ export async function action(args: ActionFunctionArgs) {
 
         const html = await renderAsync(emailTemplate);
         const text = await renderAsync(emailTemplate, { plainText: true });
-        const { data: signedUrlData } = await serviceRole.storage
-          .from("private")
-          .createSignedUrl(documentFilePath, 3600);
+        const signedUrl = await createSignedDownloadUrl({
+          bucket: "private",
+          key: documentFilePath,
+          expiresIn: 3600
+        }).catch(() => null);
 
         await trigger("send-email", {
           to: [seller.data.email, customer.data.contact.email!],
@@ -302,10 +311,10 @@ export async function action(args: ActionFunctionArgs) {
           subject: `Invoice ${salesInvoice.data.invoiceId} from ${company.data.name}`,
           html,
           text,
-          attachments: signedUrlData?.signedUrl
+          attachments: signedUrl
             ? [
                 {
-                  path: signedUrlData.signedUrl,
+                  path: signedUrl,
                   filename: fileName
                 }
               ]

@@ -1,9 +1,4 @@
-import {
-  CONTROLLED_ENVIRONMENT,
-  error,
-  getBrowserEnv,
-  getCarbon
-} from "@carbon/auth";
+import { CONTROLLED_ENVIRONMENT, error, getBrowserEnv } from "@carbon/auth";
 import { flashClientMiddleware } from "@carbon/auth/middleware/flash.client";
 import {
   flashHeadersContext,
@@ -50,6 +45,7 @@ import {
   useLoaderData
 } from "react-router";
 import { modules } from "~/config";
+import { getAcademyUser, getUserProgress } from "~/services/database.server";
 import { getMode, setMode } from "~/services/mode.server";
 import NProgress from "~/styles/nprogress.css?url";
 import Tailwind from "~/styles/tailwind.css?url";
@@ -107,10 +103,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const {
     CARBON_EDITION,
     CARBON_API_URL,
+    CARBON_PUBLIC_KEY,
+    CARBON_STORAGE_PUBLIC_URL,
     POSTHOG_API_HOST,
-    POSTHOG_PROJECT_PUBLIC_KEY,
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
+    POSTHOG_PROJECT_PUBLIC_KEY
   } = getBrowserEnv();
 
   let session = await getOrRefreshAuthSession(request);
@@ -127,26 +123,14 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   }[] = [];
 
   if (session) {
-    const client = getCarbon(session.accessToken);
-
-    const [authUser, completions, attempts] = await Promise.all([
-      client.from("user").select("*").eq("id", session.userId).single(),
-      client
-        .from("lessonCompletion")
-        .select("lessonId, courseId")
-        .eq("userId", session.userId),
-      client
-        .from("challengeAttempt")
-        .select("topicId, courseId, passed")
-        .eq("userId", session.userId)
+    const [authUser, progress] = await Promise.all([
+      getAcademyUser(session.userId),
+      getUserProgress(session.userId)
     ]);
 
-    if (authUser.data) {
-      user = authUser.data;
-    }
-
-    lessonCompletions = completions.data ?? [];
-    challengeAttempts = attempts.data ?? [];
+    user = authUser;
+    lessonCompletions = progress.lessonCompletions;
+    challengeAttempts = progress.challengeAttempts;
   }
 
   return data(
@@ -155,10 +139,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       env: {
         CARBON_EDITION,
         CARBON_API_URL,
+        CARBON_PUBLIC_KEY,
+        CARBON_STORAGE_PUBLIC_URL,
         POSTHOG_API_HOST,
-        POSTHOG_PROJECT_PUBLIC_KEY,
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY
+        POSTHOG_PROJECT_PUBLIC_KEY
       },
       lessonCompletions,
       mode: getMode(request),

@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LegacyPostgrestClient } from "./database-client";
 import type {
   PrinterRoute,
   PrintingSettings,
@@ -11,7 +10,7 @@ import type {
 // -- Print Jobs --
 
 export async function getPrintJobs(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   args?: {
     status?: string;
@@ -62,7 +61,7 @@ export async function getPrintJobs(
 }
 
 export async function getPrintJob(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   printJobId: string,
   companyId: string
 ) {
@@ -77,7 +76,7 @@ export async function getPrintJob(
 }
 
 export async function getPrintJobContent(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   printJobId: string,
   companyId: string
 ) {
@@ -90,7 +89,7 @@ export async function getPrintJobContent(
 }
 
 export async function createPrintJob(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   job: {
     companyId: string;
     contentType?: PrintJobContentType;
@@ -125,7 +124,7 @@ export async function createPrintJob(
 }
 
 export async function updatePrintJobContent(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   printJobId: string,
   companyId: string,
   content: string,
@@ -144,7 +143,7 @@ export async function updatePrintJobContent(
 }
 
 export async function updatePrintJobStatus(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   printJobId: string,
   companyId: string,
   status: PrintJobStatus,
@@ -175,7 +174,7 @@ export async function updatePrintJobStatus(
 // -- Printer Routes --
 
 export async function getPrinterRoutes(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string
 ) {
   const result = await client
@@ -192,7 +191,7 @@ export async function getPrinterRoutes(
 }
 
 export async function getPrinterRoute(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   routeId: string,
   companyId: string
 ) {
@@ -207,7 +206,7 @@ export async function getPrinterRoute(
 }
 
 export async function upsertPrinterRoute(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   route: {
     id?: string;
     companyId: string;
@@ -250,7 +249,7 @@ export async function upsertPrinterRoute(
 }
 
 export async function deletePrinterRoute(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   routeId: string,
   companyId: string
 ) {
@@ -264,7 +263,7 @@ export async function deletePrinterRoute(
 // -- Printing Settings --
 
 export async function getPrintingSettings(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string
 ) {
   return client
@@ -275,15 +274,14 @@ export async function getPrintingSettings(
 }
 
 export async function updatePrintingSettings(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   settings: PrintingSettings
 ) {
   return client
     .from("companySettings")
     .update({
-      printing:
-        settings as unknown as Database["public"]["Tables"]["companySettings"]["Update"]["printing"]
+      printing: settings
     })
     .eq("id", companyId);
 }

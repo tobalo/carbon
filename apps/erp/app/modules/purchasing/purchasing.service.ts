@@ -1,17 +1,19 @@
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { Database, Json } from "@carbon/database";
 import { fetchAllFromTable } from "@carbon/database";
 import type { Kysely, KyselyDatabase } from "@carbon/database/client";
-import { getPurchaseOrderStatus } from "@carbon/utils";
+import {
+  isListedFileObject,
+  listObjectsResult
+} from "@carbon/object-storage/server";
+import { getPurchaseOrderStatus, sanitize } from "@carbon/utils";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type {
-  PostgrestSingleResponse,
-  SupabaseClient
-} from "@supabase/supabase-js";
 import type { z } from "zod";
 import { getEmployeeJob } from "~/modules/people";
+import type { PostgrestError, PostgrestSingleResponse } from "~/types";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import { getCurrencyByCode } from "../accounting/accounting.service";
 import type { PurchaseInvoice } from "../invoicing/types";
 import {
@@ -43,7 +45,7 @@ import type {
 import type { PurchaseOrder, PurchasingRFQ, SupplierQuote } from "./types";
 
 export async function closePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string,
   userId: string
 ) {
@@ -60,7 +62,7 @@ export async function closePurchaseOrder(
 }
 
 export async function convertSupplierQuoteToOrder(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   payload: {
     id: string;
     selectedLines: z.infer<typeof selectedLinesValidator>;
@@ -68,7 +70,7 @@ export async function convertSupplierQuoteToOrder(
     userId: string;
   }
 ) {
-  return client.functions.invoke<{ convertedId: string }>("convert", {
+  return invokeCarbonServiceFunction<{ convertedId: string }>("convert", {
     body: {
       type: "supplierQuoteToPurchaseOrder",
       ...payload
@@ -77,14 +79,14 @@ export async function convertSupplierQuoteToOrder(
 }
 
 export async function deletePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client.from("purchaseOrder").delete().eq("id", purchaseOrderId);
 }
 
 export async function deletePurchaseOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderLineId: string
 ) {
   return client
@@ -97,7 +99,7 @@ export async function deletePurchaseOrderLine(
 // and copies the source PO's lines into it. Receipt/invoice progress is
 // reset; only the order/line definition is duplicated.
 export async function duplicatePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     sourcePurchaseOrderId,
     companyId,
@@ -111,7 +113,7 @@ export async function duplicatePurchaseOrder(
   }
 ): Promise<{
   data: { id: string; purchaseOrderId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const [source, sourceDelivery, sourceLines] = await Promise.all([
     client
@@ -185,15 +187,12 @@ export async function duplicatePurchaseOrder(
   return insertResult;
 }
 
-export async function deleteSupplier(
-  client: SupabaseClient<Database>,
-  supplierId: string
-) {
+export async function deleteSupplier(client: CarbonClient, supplierId: string) {
   return client.from("supplier").delete().eq("id", supplierId);
 }
 
 export async function deleteSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string,
   supplierContactId: string
 ) {
@@ -217,7 +216,7 @@ export async function deleteSupplierContact(
 }
 
 export async function deleteSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string,
   supplierLocationId: string
 ) {
@@ -241,7 +240,7 @@ export async function deleteSupplierLocation(
 }
 
 export async function deleteSupplierProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierProcessId: string
 ) {
   return client
@@ -252,28 +251,28 @@ export async function deleteSupplierProcess(
 }
 
 export async function deleteSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string
 ) {
   return client.from("supplierQuote").delete().eq("id", supplierQuoteId);
 }
 
 export async function deleteSupplierQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string
 ) {
   return client.from("supplierQuoteLine").delete().eq("id", id);
 }
 
 export async function deleteSupplierType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierTypeId: string
 ) {
   return client.from("supplierType").delete().eq("id", supplierTypeId);
 }
 
 export async function getPurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client
@@ -284,7 +283,7 @@ export async function getPurchaseOrder(
 }
 
 export async function finalizeSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string,
   userId: string
 ) {
@@ -305,7 +304,7 @@ export async function finalizeSupplierQuote(
 }
 
 export async function getPurchaseOrders(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -336,7 +335,7 @@ export async function getPurchaseOrders(
 }
 
 export async function getPurchaseOrderDelivery(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client
@@ -347,7 +346,7 @@ export async function getPurchaseOrderDelivery(
 }
 
 export async function getPurchaseOrderLocations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client
@@ -358,7 +357,7 @@ export async function getPurchaseOrderLocations(
 }
 
 export async function getPurchaseOrderPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client
@@ -369,7 +368,7 @@ export async function getPurchaseOrderPayment(
 }
 
 export async function getPurchaseOrderLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client
@@ -381,7 +380,7 @@ export async function getPurchaseOrderLines(
 }
 
 export async function getPurchaseOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderLineId: string
 ) {
   return client
@@ -392,7 +391,7 @@ export async function getPurchaseOrderLine(
 }
 
 export async function getPurchaseOrderSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -403,7 +402,7 @@ export async function getPurchaseOrderSuppliers(
 }
 
 export async function getPurchasingDocumentsAssignedToMe(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   userId: string,
   companyId: string
 ) {
@@ -444,7 +443,7 @@ export async function getPurchasingDocumentsAssignedToMe(
 }
 
 export async function getPurchasingPlanning(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string,
   companyId: string,
   periods: string[],
@@ -478,7 +477,7 @@ export async function getPurchasingPlanning(
 }
 
 export async function getPurchasingTerms(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -488,10 +487,7 @@ export async function getPurchasingTerms(
     .single();
 }
 
-export async function getSupplier(
-  client: SupabaseClient<Database>,
-  supplierId: string
-) {
+export async function getSupplier(client: CarbonClient, supplierId: string) {
   return client.from("suppliers").select("*").eq("id", supplierId).single();
 }
 
@@ -506,7 +502,7 @@ type ApprovalContext = {
 };
 
 export async function getSupplierApprovalContext(
-  serviceRole: SupabaseClient<Database>,
+  serviceRole: CarbonClient,
   supplierId: string,
   status: string | null,
   companyId: string,
@@ -571,7 +567,7 @@ export async function getSupplierApprovalContext(
 }
 
 export async function getSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierContactId: string
 ) {
   return client
@@ -584,7 +580,7 @@ export async function getSupplierContact(
 }
 
 export async function getSupplierContacts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string
 ) {
   return client
@@ -596,7 +592,7 @@ export async function getSupplierContacts(
 }
 
 export async function getSupplierInteraction(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   opportunityId: string | null
 ): Promise<
   PostgrestSingleResponse<{
@@ -637,13 +633,14 @@ export async function getSupplierInteraction(
 }
 
 export async function getSupplierInteractionDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   interactionId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/supplier-interaction/${interactionId}`);
+  const result = await listObjectsResult(
+    "private",
+    `${companyId}/supplier-interaction/${interactionId}`
+  );
 
   if (result.error) {
     console.error(
@@ -654,18 +651,21 @@ export async function getSupplierInteractionDocuments(
   }
 
   return (
-    result.data?.map((f) => ({ ...f, bucket: "supplier-interaction" })) ?? []
+    result.data
+      ?.filter(isListedFileObject)
+      .map((f) => ({ ...f, bucket: "supplier-interaction" })) ?? []
   );
 }
 
 export async function getSupplierInteractionLineDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   lineId: string
 ) {
-  const result = await client.storage
-    .from("private")
-    .list(`${companyId}/supplier-interaction-line/${lineId}`);
+  const result = await listObjectsResult(
+    "private",
+    `${companyId}/supplier-interaction-line/${lineId}`
+  );
 
   if (result.error) {
     console.error(
@@ -676,7 +676,7 @@ export async function getSupplierInteractionLineDocuments(
   }
 
   return (
-    result.data?.map((f) => ({
+    result.data?.filter(isListedFileObject).map((f) => ({
       ...f,
       bucket: "supplier-interaction-line"
     })) ?? []
@@ -684,7 +684,7 @@ export async function getSupplierInteractionLineDocuments(
 }
 
 export async function getSupplierLocations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string
 ) {
   return client
@@ -696,7 +696,7 @@ export async function getSupplierLocations(
 }
 
 export async function getSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierContactId: string
 ) {
   return client
@@ -709,7 +709,7 @@ export async function getSupplierLocation(
 }
 
 export async function getSupplierPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string
 ) {
   return client
@@ -720,7 +720,7 @@ export async function getSupplierPayment(
 }
 
 export async function getSupplierProcessById(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierProcessId: string
 ) {
   return client
@@ -731,7 +731,7 @@ export async function getSupplierProcessById(
 }
 
 export async function getSupplierProcessesByProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   processId: string
 ) {
   return client
@@ -741,7 +741,7 @@ export async function getSupplierProcessesByProcess(
 }
 
 export async function getSupplierProcessesBySupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string
 ) {
   return client
@@ -751,7 +751,7 @@ export async function getSupplierProcessesBySupplier(
 }
 
 export async function getSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string
 ) {
   return client
@@ -762,7 +762,7 @@ export async function getSupplierQuote(
 }
 
 export async function getSupplierQuoteByInteractionId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   interactionId: string
 ) {
   return client
@@ -773,7 +773,7 @@ export async function getSupplierQuoteByInteractionId(
 }
 
 export async function getSupplierQuoteByExternalLinkId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   externalLinkId: string
 ) {
   return client
@@ -784,7 +784,7 @@ export async function getSupplierQuoteByExternalLinkId(
 }
 
 export async function getSupplierQuotes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -808,7 +808,7 @@ export async function getSupplierQuotes(
 }
 
 export async function getSupplierQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteLineId: string
 ) {
   return client
@@ -819,7 +819,7 @@ export async function getSupplierQuoteLine(
 }
 
 export async function getSupplierQuoteLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string
 ) {
   return client
@@ -830,7 +830,7 @@ export async function getSupplierQuoteLines(
 }
 
 export async function getSupplierQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteLineId: string
 ) {
   return client
@@ -840,7 +840,7 @@ export async function getSupplierQuoteLinePrices(
 }
 
 export async function getSupplierQuoteLinePricesByQuoteId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string
 ) {
   return client
@@ -851,7 +851,7 @@ export async function getSupplierQuoteLinePricesByQuoteId(
 }
 
 export async function getSupplierQuotesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -863,7 +863,7 @@ export async function getSupplierQuotesList(
 }
 
 export async function getSupplierShipping(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierId: string
 ) {
   return client
@@ -874,7 +874,7 @@ export async function getSupplierShipping(
 }
 
 export async function getSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -911,7 +911,7 @@ export async function getSuppliers(
 }
 
 export async function getSuppliersList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -923,7 +923,7 @@ export async function getSuppliersList(
 }
 
 export async function getSupplierType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierTypeId: string
 ) {
   return client
@@ -934,7 +934,7 @@ export async function getSupplierType(
 }
 
 export async function getSupplierTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -957,7 +957,7 @@ export async function getSupplierTypes(
 }
 
 export async function getSupplierTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -968,7 +968,7 @@ export async function getSupplierTypesList(
 }
 
 export async function insertSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplier: Omit<z.infer<typeof supplierValidator>, "id"> & {
     companyId: string;
     createdBy: string;
@@ -979,7 +979,7 @@ export async function insertSupplier(
 }
 
 export async function insertSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierContact: {
     supplierId: string;
     companyId: string;
@@ -1024,7 +1024,7 @@ export async function insertSupplierContact(
 }
 
 export async function insertSupplierInteraction(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   supplierId: string
 ) {
@@ -1036,7 +1036,7 @@ export async function insertSupplierInteraction(
 }
 
 export async function insertSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierLocation: {
     supplierId: string;
     companyId: string;
@@ -1083,7 +1083,7 @@ export async function insertSupplierLocation(
 }
 
 export async function finalizePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string,
   userId: string
 ) {
@@ -1111,7 +1111,7 @@ export async function finalizePurchaseOrder(
 }
 
 export async function sendSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string,
   userId: string
 ) {
@@ -1133,7 +1133,7 @@ export async function sendSupplierQuote(
 
 /** @deprecated Use updatePurchaseOrderStatus or the new updatePurchaseOrder instead */
 export async function updatePurchaseOrderStatusLegacy(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrder: {
     id: string;
     status: (typeof purchaseOrderStatusType)[number];
@@ -1147,7 +1147,7 @@ export async function updatePurchaseOrderStatusLegacy(
 }
 
 export async function updatePurchaseOrderExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     exchangeRate: number;
@@ -1163,7 +1163,7 @@ export async function updatePurchaseOrderExchangeRate(
 }
 
 export async function updatePurchaseOrderFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     favorite: boolean;
@@ -1185,7 +1185,7 @@ export async function updatePurchaseOrderFavorite(
 }
 
 export async function updatePurchaseOrderStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof purchaseOrderStatusType)[number];
@@ -1197,7 +1197,7 @@ export async function updatePurchaseOrderStatus(
 }
 
 export async function updateSupplierAccounting(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierAccounting: z.infer<typeof supplierAccountingValidator> & {
     updatedBy: string;
   }
@@ -1209,7 +1209,7 @@ export async function updateSupplierAccounting(
 }
 
 export async function updateSupplierContact(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierContact: {
     contactId: string;
     contact: z.infer<typeof supplierContactValidator>;
@@ -1239,7 +1239,7 @@ export async function updateSupplierContact(
 }
 
 export async function updateSupplierLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierLocation: {
     addressId: string;
     name: string;
@@ -1276,7 +1276,7 @@ export async function updateSupplierLocation(
 }
 
 export async function updateSupplierPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierPayment: z.infer<typeof supplierPaymentValidator> & {
     updatedBy: string;
     customFields?: Json;
@@ -1289,7 +1289,7 @@ export async function updateSupplierPayment(
 }
 
 export async function updateSupplierQuoteExchangeRate(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: {
     id: string;
     exchangeRate: number;
@@ -1305,7 +1305,7 @@ export async function updateSupplierQuoteExchangeRate(
 }
 
 export async function updateSupplierQuoteFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     favorite: boolean;
@@ -1327,7 +1327,7 @@ export async function updateSupplierQuoteFavorite(
 }
 
 export async function updateSupplierQuoteStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     status: (typeof supplierQuoteStatusType)[number];
@@ -1339,7 +1339,7 @@ export async function updateSupplierQuoteStatus(
 }
 
 export async function updateSupplierShipping(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierShipping: z.infer<typeof supplierShippingValidator> & {
     updatedBy: string;
     customFields?: Json;
@@ -1351,10 +1351,7 @@ export async function updateSupplierShipping(
     .eq("supplierId", supplierShipping.supplierId);
 }
 
-export async function getSupplierTax(
-  client: SupabaseClient<Database>,
-  supplierId: string
-) {
+export async function getSupplierTax(client: CarbonClient, supplierId: string) {
   return client
     .from("supplierTax")
     .select("*")
@@ -1363,7 +1360,7 @@ export async function getSupplierTax(
 }
 
 export async function updateSupplierTax(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierTax: z.infer<typeof supplierTaxValidator> & {
     companyId: string;
     updatedBy: string;
@@ -1377,7 +1374,7 @@ export async function updateSupplierTax(
 }
 
 export async function insertPurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     supplierId: string;
     companyId: string;
@@ -1400,7 +1397,7 @@ export async function insertPurchaseOrder(
   }
 ): Promise<{
   data: { id: string; purchaseOrderId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let purchaseOrderId: string;
   if (input.purchaseOrderId) {
@@ -1417,7 +1414,7 @@ export async function insertPurchaseOrder(
           seq.error ??
           ({
             message: "Failed to generate PO sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     purchaseOrderId = seq.data;
@@ -1523,7 +1520,7 @@ export async function insertPurchaseOrder(
 }
 
 export async function updatePurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -1541,7 +1538,7 @@ export async function updatePurchaseOrder(
   companyGroupId?: string
 ): Promise<{
   data: { id: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const { id, updatedBy, notes, ...updates } = input;
 
@@ -1576,7 +1573,7 @@ export async function updatePurchaseOrder(
 
 /** @deprecated Use insertPurchaseOrder for new orders, updatePurchaseOrder for existing orders */
 export async function upsertPurchaseOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrder:
     | (Omit<
         z.infer<typeof purchaseOrderValidator>,
@@ -1712,7 +1709,7 @@ export async function upsertPurchaseOrder(
 }
 
 export async function upsertPurchaseOrderDelivery(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderDelivery:
     | (z.infer<typeof purchaseOrderDeliveryValidator> & {
         companyId: string;
@@ -1741,7 +1738,7 @@ export async function upsertPurchaseOrderDelivery(
 }
 
 export async function upsertPurchaseOrderLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderLine:
     | (Omit<z.infer<typeof purchaseOrderLineValidator>, "id"> & {
         companyId: string;
@@ -1796,7 +1793,7 @@ export async function updatePurchaseOrderLineOrder(
 }
 
 export async function upsertPurchaseOrderPayment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderPayment:
     | (z.infer<typeof purchaseOrderPaymentValidator> & {
         createdBy: string;
@@ -1824,7 +1821,7 @@ export async function upsertPurchaseOrderPayment(
 }
 
 export async function upsertSupplier(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplier:
     | (Omit<z.infer<typeof supplierValidator>, "id"> & {
         companyId: string;
@@ -1856,7 +1853,7 @@ export async function upsertSupplier(
 }
 
 export async function upsertSupplierProcess(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierProcess:
     | (Omit<z.infer<typeof supplierProcessValidator>, "id"> & {
         companyId: string;
@@ -1885,7 +1882,7 @@ export async function upsertSupplierProcess(
 }
 
 export async function insertSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     supplierId: string;
     companyId: string;
@@ -1906,7 +1903,7 @@ export async function insertSupplierQuote(
   }
 ): Promise<{
   data: { id: string; supplierQuoteId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let supplierQuoteId: string;
   if (input.supplierQuoteId) {
@@ -1923,7 +1920,7 @@ export async function insertSupplierQuote(
           seq.error ??
           ({
             message: "Failed to generate supplier quote sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     supplierQuoteId = seq.data;
@@ -2002,7 +1999,7 @@ export async function insertSupplierQuote(
 }
 
 export async function updateSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -2017,7 +2014,7 @@ export async function updateSupplierQuote(
   companyGroupId?: string
 ): Promise<{
   data: { id: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const { id, updatedBy, notes, ...updates } = input;
 
@@ -2065,7 +2062,7 @@ export async function updateSupplierQuote(
 
 /** @deprecated Use insertSupplierQuote for new quotes, updateSupplierQuote for existing quotes */
 export async function upsertSupplierQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuote:
     | (Omit<
         z.infer<typeof supplierQuoteValidator>,
@@ -2200,7 +2197,7 @@ export async function upsertSupplierQuote(
 }
 
 export async function upsertSupplierQuoteLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteLine:
     | (Omit<z.infer<typeof supplierQuoteLineValidator>, "id"> & {
         companyId: string;
@@ -2261,7 +2258,7 @@ export async function updateSupplierQuoteLineOrder(
 }
 
 export async function upsertSupplierType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierType:
     | (Omit<z.infer<typeof supplierTypeValidator>, "id"> & {
         companyId: string;
@@ -2293,14 +2290,14 @@ export async function upsertSupplierType(
 // ============================================================
 
 export async function deletePurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string
 ) {
   return client.from("purchasingRfq").delete().eq("id", purchasingRfqId);
 }
 
 export async function deletePurchasingRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqLineId: string
 ) {
   return client
@@ -2309,15 +2306,12 @@ export async function deletePurchasingRFQLine(
     .eq("id", purchasingRfqLineId);
 }
 
-export async function getPurchasingRFQ(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getPurchasingRFQ(client: CarbonClient, id: string) {
   return client.from("purchasingRfqs").select("*").eq("id", id).single();
 }
 
 export async function getPurchasingRFQs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -2339,7 +2333,7 @@ export async function getPurchasingRFQs(
 }
 
 export async function getPurchasingRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   lineId: string
 ) {
   return client
@@ -2350,7 +2344,7 @@ export async function getPurchasingRFQLine(
 }
 
 export async function getPurchasingRFQLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string
 ) {
   return client
@@ -2361,7 +2355,7 @@ export async function getPurchasingRFQLines(
 }
 
 export async function getPurchasingRFQSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string
 ) {
   return client
@@ -2371,7 +2365,7 @@ export async function getPurchasingRFQSuppliers(
 }
 
 export async function insertPurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     companyId: string;
     createdBy: string;
@@ -2386,7 +2380,7 @@ export async function insertPurchasingRFQ(
   }
 ): Promise<{
   data: { id: string; rfqId: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   let rfqId: string;
   if (input.rfqId) {
@@ -2403,7 +2397,7 @@ export async function insertPurchasingRFQ(
           seq.error ??
           ({
             message: "Failed to generate purchasingRfq sequence"
-          } as import("@supabase/supabase-js").PostgrestError)
+          } as PostgrestError)
       };
     }
     rfqId = seq.data;
@@ -2433,7 +2427,7 @@ export async function insertPurchasingRFQ(
 }
 
 export async function updatePurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     updatedBy: string;
@@ -2447,7 +2441,7 @@ export async function updatePurchasingRFQ(
   }
 ): Promise<{
   data: { id: string } | null;
-  error: import("@supabase/supabase-js").PostgrestError | null;
+  error: PostgrestError | null;
 }> {
   const { id, updatedBy, ...updates } = input;
 
@@ -2465,7 +2459,7 @@ export async function updatePurchasingRFQ(
 
 /** @deprecated Use insertPurchasingRFQ for new RFQs, updatePurchasingRFQ for existing RFQs */
 export async function upsertPurchasingRFQ(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfq: {
     id?: string;
     rfqId: string;
@@ -2496,7 +2490,7 @@ export async function upsertPurchasingRFQ(
 }
 
 export async function upsertPurchasingRFQLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqLine:
     | {
         purchasingRfqId: string;
@@ -2557,7 +2551,7 @@ export async function updatePurchasingRFQLineOrder(
 }
 
 export async function upsertPurchasingRFQSuppliers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string,
   supplierIds: string[],
   companyId: string,
@@ -2588,7 +2582,7 @@ export async function upsertPurchasingRFQSuppliers(
 }
 
 export async function updatePurchasingRFQStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     status: (typeof purchasingRfqStatusType)[number];
@@ -2610,7 +2604,7 @@ export async function updatePurchasingRFQStatus(
 }
 
 export async function getLinkedSupplierQuotes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string
 ) {
   return client
@@ -2625,7 +2619,7 @@ export async function getLinkedSupplierQuotes(
 }
 
 export async function getLinkedPurchasingRfqs(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string
 ) {
   return client
@@ -2640,7 +2634,7 @@ export async function getLinkedPurchasingRfqs(
 }
 
 export async function getLinkedPurchasingRfqsForInteraction(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierInteractionId: string
 ) {
   // First get all supplier quote IDs in this interaction
@@ -2669,7 +2663,7 @@ export async function getLinkedPurchasingRfqsForInteraction(
 
 // Get sibling quotes (quotes sharing any RFQ with current quote)
 export async function getSiblingQuotesForQuote(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   supplierQuoteId: string
 ) {
   // First get all RFQ IDs linked to this quote
@@ -2699,7 +2693,7 @@ export async function getSiblingQuotesForQuote(
 
 // Direct Order→RFQ lookup (more efficient than going through interaction)
 export async function getLinkedPurchasingRfqsForOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchaseOrderId: string
 ) {
   return client
@@ -2714,7 +2708,7 @@ export async function getLinkedPurchasingRfqsForOrder(
 }
 
 export async function getSupplierQuotesForComparison(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string
 ) {
   // 1. Get all supplier quote IDs linked to this RFQ with supplier info
@@ -2777,7 +2771,7 @@ export async function getSupplierQuotesForComparison(
 
 // Get RFQ suppliers with their supplier info
 export async function getPurchasingRFQSuppliersWithLinks(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   purchasingRfqId: string
 ) {
   return client
@@ -2794,7 +2788,7 @@ export type PoDefaultAttachment = {
 };
 
 export async function getDefaultAttachmentsForPO(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     companyId: string;
     supplierId: string | null;
@@ -2820,7 +2814,7 @@ export async function getDefaultAttachmentsForPO(
   }
 
   const results = await Promise.all(
-    prefixes.map(({ path }) => client.storage.from("private").list(path))
+    prefixes.map(({ path }) => listObjectsResult("private", path))
   );
 
   return results.flatMap((result, idx) => {

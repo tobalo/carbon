@@ -158,20 +158,25 @@ export const useDocument = () => {
     [insertTransaction, carbon, user.id]
   );
 
-  const makePreview = useCallback(
-    async (doc: DocumentType) => {
-      if (!doc.path) throw new Error("Document path is undefined");
-      const result = await carbon?.storage.from("private").download(doc.path);
+  const makePreview = useCallback(async (doc: DocumentType) => {
+    if (!doc.path) throw new Error("Document path is undefined");
 
-      if (!result || result.error) {
-        toast.error(result?.error?.message || "Error previewing file");
+    try {
+      const response = await fetch(
+        path.to.file.previewFile(`private/${doc.path}`)
+      );
+      if (!response.ok) {
+        toast.error("Error previewing file");
         return null;
       }
 
-      return window.URL.createObjectURL(result.data);
-    },
-    [carbon]
-  );
+      return window.URL.createObjectURL(await response.blob());
+    } catch (error) {
+      toast.error("Error previewing file");
+      console.error(error);
+      return null;
+    }
+  }, []);
 
   const removeLabel = useCallback(
     (document: DocumentType, label: string) => {

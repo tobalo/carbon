@@ -1,5 +1,4 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import { mapBalloonIdsToFeatureIdsForDocument } from "./inspectionDocumentDb";
 import type {
   inspectionSaveAnchorsPayloadValidator,
@@ -170,7 +169,7 @@ export function mergeInspectionBalloonsPayload(
 }
 
 export async function resolveInspectionFeaturePayloadIds(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   inspectionDocumentId: string,
   features: InspectionSaveFeaturesPayload
 ): Promise<InspectionSaveFeaturesPayload> {

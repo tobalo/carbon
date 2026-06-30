@@ -6,7 +6,7 @@ paths:
 # Database Conventions (Tables & Migrations)
 
 The canonical TABLE + MIGRATION template for Carbon. Grounded in the newest
-migrations (`packages/database/supabase/migrations/`) and the root `package.json`
+migrations (`packages/database/migrations/`) and the root `package.json`
 scripts. **Tables get renamed and functions get revised — read the NEWEST
 migration touching a table for current truth, never the first match or this doc.**
 
@@ -23,8 +23,8 @@ Related (do not duplicate here):
 
 | Command | Resolves to | Purpose |
 | --- | --- | --- |
-| `pnpm db:migrate:new <name>` | `supabase migration new` | **Create** a new timestamped migration file. |
-| `pnpm db:migrate` | `crbn migrate` | **Apply** pending migrations to the local DB; also regenerates types + swagger. |
+| `pnpm db:migrate:new <name>` | `tsx packages/database/src/migrations/new.ts` | **Create** a new timestamped migration file. |
+| `pnpm db:migrate` | `crbn migrate` → Carbon Postgres migration runner | **Apply** pending migrations to the local DB; also regenerates types + swagger. |
 | `pnpm db:types` | `tsx scripts/generate-db-types.ts` | Regenerate generated DB types (after migrations). |
 
 - **There is NO `db:build` script** — older docs/cache told people to run

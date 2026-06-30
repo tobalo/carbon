@@ -23,6 +23,7 @@ import {
   getWorkCenter
 } from "~/services/operations.service";
 import type { OperationWithDetails } from "~/services/types";
+import type { PostgrestSingleResponse } from "~/types";
 
 type ExpiredEntityPolicy = "Warn" | "Block" | "BlockWithOverride";
 
@@ -153,7 +154,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       serviceRole,
       operation.data?.[0].workCenterId
     ) as Promise<
-      import("@supabase/supabase-js").PostgrestSingleResponse<{
+      PostgrestSingleResponse<{
         name: string;
         id: string;
         isBlocked: boolean | null;

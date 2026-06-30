@@ -1,5 +1,5 @@
 ---
-paths: ["packages/database/supabase/migrations/**"]
+paths: ["packages/database/migrations/**"]
 ---
 
 # Database Migration Patterns
@@ -9,8 +9,8 @@ How migrations are written and structured in Carbon. The full workflow (checklis
 template lives in `conventions-database.md`. This file captures the **real conventions in
 the SQL itself**, grounded in the newest migrations. Don't repeat those two files.
 
-Migrations live in `packages/database/supabase/migrations/`, timestamp-prefixed
-(`YYYYMMDDHHMMSS_descriptive-name.sql`), applied in order by the Supabase CLI. **Read the
+Migrations live in `packages/database/migrations/`, timestamp-prefixed
+(`YYYYMMDDHHMMSS_descriptive-name.sql`), applied in order by Carbon's Postgres migration runner. **Read the
 NEWEST relevant migration for current truth — tables get renamed and functions get revised;
 never trust the first match or this doc over the live SQL.**
 
@@ -18,7 +18,7 @@ never trust the first match or this doc over the live SQL.**
 
 | Command | What it does |
 | --- | --- |
-| `pnpm db:migrate:new <name>` | Create a new migration file (`supabase migration new`). |
+| `pnpm db:migrate:new <name>` | Create a new migration file with Carbon's local generator. |
 | `pnpm db:migrate` | Apply pending migrations to the local worktree DB (`crbn migrate`); also regenerates types + swagger unless `--no-regen`. |
 | `pnpm db:types` | Regenerate generated DB types after migrations. |
 

@@ -1,7 +1,7 @@
 import type { Database } from "@carbon/database";
 import { ERP_URL } from "@carbon/env";
 import type { ProductLabelItem } from "@carbon/utils";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LegacyPostgrestFunctionsClient } from "../../legacy-client";
 
 export type KanbanCardItem = {
   id: string;
@@ -28,9 +28,15 @@ export type ResolvedData<T> = {
 };
 
 type TrackedEntity = Database["public"]["Tables"]["trackedEntity"]["Row"];
+type ProductLabelSourceItem = {
+  id: string;
+  readableId: string | null;
+  revision: string | null;
+  itemTrackingType: string | null;
+};
 
 export async function resolveTrackedEntityData(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   sourceDocument: string,
   sourceDocumentId: string,
   companyId: string
@@ -51,7 +57,7 @@ export async function resolveTrackedEntityData(
 }
 
 export async function resolveKanbanData(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   sourceDocumentId: string
 ): Promise<ResolvedData<KanbanCardItem> | null> {
   const { data: kanban } = await client
@@ -85,7 +91,7 @@ export async function resolveKanbanData(
 }
 
 export async function resolveStorageUnitData(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   sourceDocumentId: string
 ): Promise<ResolvedData<StorageUnitItem> | null> {
   const { data: unit } = await client
@@ -103,7 +109,7 @@ export async function resolveStorageUnitData(
 }
 
 async function queryTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   sourceDocument: string,
   sourceDocumentId: string,
   companyId: string
@@ -249,7 +255,7 @@ async function queryTrackedEntities(
 }
 
 async function enrichTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   trackedEntities: TrackedEntity[]
 ): Promise<ProductLabelItem[]> {
   const sourceDocIds = [
@@ -260,10 +266,10 @@ async function enrichTrackedEntities(
     )
   ];
 
-  const { data: items } = await client
+  const { data: items } = (await client
     .from("item")
     .select("id, readableId, revision, itemTrackingType")
-    .in("id", sourceDocIds);
+    .in("id", sourceDocIds)) as { data: ProductLabelSourceItem[] | null };
 
   const itemMap = new Map(items?.map((i) => [i.id, i]) ?? []);
 
@@ -272,12 +278,12 @@ async function enrichTrackedEntities(
     if (!item) return [];
 
     return {
-      itemId: item.readableId,
+      itemId: item.readableId ?? item.id,
       revision: item.revision ?? "0",
       number: te.readableId || te.id,
       trackedEntityId: te.id,
       quantity: te.quantity ?? 1,
-      trackingType: item.itemTrackingType
+      trackingType: item.itemTrackingType ?? ""
     };
   });
 }

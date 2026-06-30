@@ -3,7 +3,7 @@ paths:
   - "apps/erp/app/routes/api+/kanban.*.tsx"
   - "apps/erp/app/modules/inventory/ui/Kanbans/*.tsx"
   - "packages/documents/src/pdf/KanbanLabelPDF.tsx"
-  - "packages/database/supabase/migrations/*kanban*.sql"
+  - "packages/database/migrations/*kanban*.sql"
 ---
 
 # Kanban System

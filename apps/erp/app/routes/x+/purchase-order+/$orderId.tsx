@@ -1,11 +1,18 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { PurchaseOrderEmail } from "@carbon/documents/email";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
+import {
+  createSignedDownloadUrl,
+  uploadObject
+} from "@carbon/object-storage/server";
 import { VStack } from "@carbon/react";
 import { msg } from "@lingui/core/macro";
 import { renderAsync } from "@react-email/components";
@@ -210,15 +217,21 @@ export async function action(args: ActionFunctionArgs) {
 
           documentFilePath = `${companyId}/supplier-interaction/${purchaseOrder.data.supplierInteractionId}/${fileName}`;
 
-          const documentFileUpload = await serviceRole.storage
-            .from("private")
-            .upload(documentFilePath, file, {
+          let documentFileUploaded = false;
+          try {
+            await uploadObject({
+              bucket: "private",
+              key: documentFilePath,
+              body: file,
               cacheControl: `${12 * 60 * 60}`,
-              contentType: "application/pdf",
-              upsert: true
+              contentType: "application/pdf"
             });
+            documentFileUploaded = true;
+          } catch (err) {
+            console.error("Failed to upload purchase order PDF", err);
+          }
 
-          if (!documentFileUpload.error) {
+          if (documentFileUploaded) {
             await upsertDocument(serviceRole, {
               path: documentFilePath,
               name: fileName,
@@ -297,9 +310,11 @@ export async function action(args: ActionFunctionArgs) {
             const html = await renderAsync(emailTemplate);
             const text = await renderAsync(emailTemplate, { plainText: true });
 
-            const { data: signedUrlData } = await serviceRole.storage
-              .from("private")
-              .createSignedUrl(documentFilePath!, 3600);
+            const signedUrl = await createSignedDownloadUrl({
+              bucket: "private",
+              key: documentFilePath!,
+              expiresIn: 3600
+            }).catch(() => null);
 
             await trigger("send-email", {
               to: [buyer.data.email, supplierEmail],
@@ -308,10 +323,10 @@ export async function action(args: ActionFunctionArgs) {
               subject: `Purchase Order ${purchaseOrder.data.purchaseOrderId} from ${company.data.name}`,
               html,
               text,
-              attachments: signedUrlData?.signedUrl
+              attachments: signedUrl
                 ? [
                     {
-                      path: signedUrlData.signedUrl,
+                      path: signedUrl,
                       filename: fileName!
                     }
                   ]
@@ -330,7 +345,7 @@ export async function action(args: ActionFunctionArgs) {
         companySettings.data?.purchasePriceUpdateTiming ===
         "Purchase Order Finalize"
       ) {
-        const priceUpdate = await serviceRole.functions.invoke(
+        const priceUpdate = await invokeCarbonServiceFunction(
           "update-purchased-prices",
           {
             body: {

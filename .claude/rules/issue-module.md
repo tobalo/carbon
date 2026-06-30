@@ -2,7 +2,7 @@
 paths:
   - "apps/erp/app/modules/quality/**"
   - "apps/erp/app/routes/x+/issue+/**"
-  - "packages/database/supabase/migrations/*ncr*.sql"
+  - "packages/database/migrations/*ncr*.sql"
 ---
 
 # Issue / Non-Conformance Module

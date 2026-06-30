@@ -1,18 +1,18 @@
 import {
-  Driver,
+  type Driver,
   Kysely,
   PostgresAdapter,
-  PostgresDialectConfig,
+  type PostgresDialectConfig,
   PostgresIntrospector,
   PostgresQueryCompiler,
-  Transaction,
+  type Transaction
 } from "kysely";
-import type { KyselifyDatabase } from "kysely-supabase";
 // Aliased it as pg so can be imported as-is in Node environment
 import { Pool } from "pg";
-import type { Database as SupabaseDatabase } from "../../../../src/types.ts";
+import type { Database } from "../types.ts";
+import type { KyselyDatabaseFromGenerated } from "./kysely-schema.ts";
 
-export type KyselyDatabase = KyselifyDatabase<SupabaseDatabase>;
+export type KyselyDatabase = KyselyDatabaseFromGenerated<Database>;
 export type KyselyTx = Transaction<KyselyDatabase>;
 export type KyselyDbTx = KyselyDatabase | KyselyTx;
 
@@ -35,22 +35,32 @@ export function getPostgresConnectionPool(connections: number): Pool {
 
   switch (runtime) {
     case "deno": {
-      // @ts-expect-error -- Deno global is only available in Deno runtime
-      const url = Deno.env.get("SUPABASE_DB_URL")!;
-      const connectionPoolerUrl = url.includes("supabase.co")
-        ? url.replace("5432", "6543")
-        : url;
+      const deno = (
+        globalThis as unknown as {
+          Deno: { env: { get(name: string): string | undefined } };
+        }
+      ).Deno;
+      const url =
+        deno.env.get("CARBON_DATABASE_URL") ??
+        deno.env.get("DATABASE_URL") ??
+        deno.env.get("POSTGRES_URL");
+      if (!url) {
+        throw new Error("CARBON_DATABASE_URL is required");
+      }
       // @ts-ignore Compat
-      return new Pool(connectionPoolerUrl, connections);
+      return new Pool(url, connections);
     }
     case "node": {
-      const url = process.env.SUPABASE_DB_URL!;
-      const connectionPoolerUrl = url.includes("supabase.co")
-        ? url.replace("5432", "6543")
-        : url;
+      const url =
+        process.env.CARBON_DATABASE_URL ??
+        process.env.DATABASE_URL ??
+        process.env.POSTGRES_URL;
+      if (!url) {
+        throw new Error("CARBON_DATABASE_URL is required");
+      }
       return new Pool({
-        connectionString: connectionPoolerUrl,
-        max: connections,
+        connectionString: url,
+        max: connections
       });
     }
 
@@ -87,8 +97,8 @@ export function getPostgresClient<D = KyselyDatabase>(
           },
           createQueryCompiler() {
             return new PostgresQueryCompiler();
-          },
-        },
+          }
+        }
       });
     }
 

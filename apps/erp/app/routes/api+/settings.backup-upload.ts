@@ -14,7 +14,7 @@ import { unpackBackupArchive } from "~/modules/settings/backups-archive.server";
  * body size. It's for local / self-hosted import targets (the prod -> local case).
  */
 export async function action({ request }: ActionFunctionArgs) {
-  const { client, companyId, email } = await requirePermissions(request, {
+  const { companyId, email } = await requirePermissions(request, {
     update: "settings"
   });
   if (!isInternalEmail(email)) throw new Response("Not found", { status: 404 });
@@ -26,7 +26,7 @@ export async function action({ request }: ActionFunctionArgs) {
     request.body as Parameters<typeof Readable.fromWeb>[0]
   );
   try {
-    return await unpackBackupArchive(client, companyId, source);
+    return await unpackBackupArchive(companyId, source);
   } catch (err) {
     throw new Response((err as Error).message, { status: 400 });
   }

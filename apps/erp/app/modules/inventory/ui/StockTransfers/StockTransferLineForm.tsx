@@ -12,7 +12,6 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { useFetcher, useParams } from "react-router";
 import type { z } from "zod";
@@ -25,6 +24,7 @@ import {
 } from "~/modules/inventory";
 import type { MethodItemType } from "~/modules/shared/types";
 import { useItems } from "~/stores/items";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 
 type StockTransferLineFormProps = {

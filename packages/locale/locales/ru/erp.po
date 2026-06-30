@@ -4658,12 +4658,6 @@ msgstr "Не удалось создать webhook: {0}"
 msgid "Failed to create work center: {0}"
 msgstr "Ошибка при создании рабочего центра: {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "Не удалось удалить файл из старого местоположения"
-
-msgid "Failed to download file for moving"
-msgstr "Не удалось загрузить файл для перемещения"
-
 msgid "Failed to fetch item costs"
 msgstr "Не удалось получить стоимость товаров"
 
@@ -4739,6 +4733,9 @@ msgstr "Не удалось загрузить детали поставщика
 msgid "Failed to load tracked entities"
 msgstr "Не удалось загрузить отслеживаемые сущности"
 
+msgid "Failed to move file"
+msgstr ""
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "Не удалось удалить изображение: {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "Не удалось загрузить CSV файл."
 
 msgid "Failed to upload file"
 msgstr "Ошибка при загрузке файла"
-
-msgid "Failed to upload file to new location"
-msgstr "Не удалось загрузить файл в новое место"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "Отсутствие запасов"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "Прекратить создание заказов на покупку после этой даты"
-
-msgid "Storage client not available"
-msgstr "Клиент хранилища недоступен"
 
 msgid "Storage Rules"
 msgstr "Правила хранения"

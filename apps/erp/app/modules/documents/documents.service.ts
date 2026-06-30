@@ -1,9 +1,8 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
+import { sanitize } from "@carbon/utils";
 import type { z } from "zod";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import { getDocumentType } from "../shared/shared.service";
 import type {
   documentLabelsValidator,
@@ -11,15 +10,12 @@ import type {
   documentValidator
 } from "./documents.models";
 
-export async function deleteDocument(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteDocument(client: CarbonClient, id: string) {
   return client.from("document").delete().eq("id", id);
 }
 
 export async function deleteDocumentFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string
 ) {
@@ -31,7 +27,7 @@ export async function deleteDocumentFavorite(
 }
 
 export async function deleteDocumentLabel(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   label: string
 ) {
@@ -42,15 +38,12 @@ export async function deleteDocumentLabel(
     .eq("label", label);
 }
 
-export async function getDocument(
-  client: SupabaseClient<Database>,
-  documentId: string
-) {
+export async function getDocument(client: CarbonClient, documentId: string) {
   return client.from("documents").select("*").eq("id", documentId).single();
 }
 
 export async function getDocuments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -89,19 +82,16 @@ export async function getDocuments(
   return query;
 }
 
-export async function getDocumentExtensions(client: SupabaseClient<Database>) {
+export async function getDocumentExtensions(client: CarbonClient) {
   return client.from("documentExtensions").select("extension");
 }
 
-export async function getDocumentLabels(
-  client: SupabaseClient<Database>,
-  userId: string
-) {
+export async function getDocumentLabels(client: CarbonClient, userId: string) {
   return client.from("documentLabels").select("*").eq("userId", userId);
 }
 
 export async function insertDocumentFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string
 ) {
@@ -109,7 +99,7 @@ export async function insertDocumentFavorite(
 }
 
 export async function insertDocumentLabel(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   label: string,
   userId: string
@@ -118,7 +108,7 @@ export async function insertDocumentLabel(
 }
 
 export async function moveDocumentToTrash(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string
 ) {
@@ -133,7 +123,7 @@ export async function moveDocumentToTrash(
 }
 
 export async function restoreDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   userId: string
 ) {
@@ -153,7 +143,7 @@ type SourceDocumentData = {
 };
 
 export async function upsertDocument(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   document:
     | (Omit<z.infer<typeof documentValidator>, "id"> & {
         path: string;
@@ -193,7 +183,7 @@ export async function upsertDocument(
 }
 
 export async function updateDocumentFavorite(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     favorite: boolean;
@@ -215,7 +205,7 @@ export async function updateDocumentFavorite(
 }
 
 export async function updateDocumentLabels(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   document: z.infer<typeof documentLabelsValidator> & {
     userId: string;
   }

@@ -43,7 +43,6 @@ import {
 } from "@carbon/react";
 import { Editor } from "@carbon/react/Editor";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
@@ -61,7 +60,9 @@ import {
 } from "~/components/Form";
 import { useGauges } from "~/components/Form/Gauge";
 import { usePermissions, useRouteData, useUser } from "~/hooks";
+import type { FileObject } from "~/types";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import { gaugeCalibrationRecordValidator } from "../../quality.models";
 import type { Gauge } from "../../types";
 import { GaugeRole } from "../Gauge/GaugeStatus";
@@ -152,16 +153,18 @@ const GaugeCalibrationRecordForm = ({
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/quality/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "quality"
+    });
 
-    if (result?.error) {
+    if (result.error) {
       toast.error(t`Failed to upload image`);
       throw new Error(result.error.message);
     }
 
-    if (!result?.data) {
+    if (!result.data) {
       throw new Error("Failed to upload image");
     }
 

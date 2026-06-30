@@ -10,7 +10,6 @@
     "./ui": "./src/ui/index.ts"
   },
   "dependencies": {
-    "@carbon/database": "workspace:*",
     "@carbon/form": "workspace:*",
     "@carbon/react": "workspace:*",
     "@carbon/utils": "workspace:*",
@@ -18,7 +17,6 @@
     "@lingui/core": "catalog:",
     "@lingui/macro": "catalog:",
     "@lingui/react": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "react": "catalog:",
     "react-icons": "catalog:",
     "zod": "catalog:",

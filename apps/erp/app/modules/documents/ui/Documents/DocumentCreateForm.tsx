@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { File, toast } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { nanoid } from "nanoid";
@@ -7,28 +6,27 @@ import { LuUpload } from "react-icons/lu";
 import { useSubmit } from "react-router";
 import { useUser } from "~/hooks";
 import { path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 
 const DocumentCreateForm = () => {
   const { t } = useLingui();
   const submit = useSubmit();
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
 
   const uploadFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon) {
+    if (e.target.files) {
       const file = e.target.files[0];
       toast.info(t`Uploading ${file.name}`);
       const fileExtension = file.name.substring(file.name.lastIndexOf(".") + 1);
-      const fileName = `${companyId}/${nanoid()}.${fileExtension}`;
+      const fileName = `${companyId}/documents/${nanoid()}.${fileExtension}`;
 
-      const fileUpload = await carbon.storage
-        .from("private")
-        .upload(fileName, file, {
-          cacheControl: `${12 * 60 * 60}`,
-          upsert: true
-        });
+      const fileUpload = await uploadPrivateFile(fileName, file, {
+        access: "create",
+        cacheControl: `${12 * 60 * 60}`,
+        permission: "documents"
+      });
 
       if (fileUpload.error) {
         console.error(fileUpload.error);

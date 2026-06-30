@@ -1,6 +1,5 @@
-import type { Database } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
 import type { JSONContent } from "@carbon/react";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrencyByCode, getPaymentTermsList } from "~/modules/accounting";
 import {
   getShippingMethodsList,
@@ -38,7 +37,7 @@ import {
   getCompanySettings
 } from "~/modules/settings";
 
-type Client = SupabaseClient<Database>;
+type Client = CarbonClient;
 
 export interface PreviewEntity {
   id: string;

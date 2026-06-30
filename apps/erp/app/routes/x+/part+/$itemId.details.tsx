@@ -5,7 +5,6 @@ import { validationError, validator } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import { Menubar, VStack } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { Suspense } from "react";
 import type {
   ActionFunctionArgs,
@@ -41,6 +40,7 @@ import ItemManufacturingForm from "~/modules/items/ui/Item/ItemManufacturingForm
 import { ConfigurationParametersForm } from "~/modules/items/ui/Parts";
 import type { MethodItemType, MethodType } from "~/modules/shared";
 import { getTagsList } from "~/modules/shared";
+import type { PostgrestResponse } from "~/types";
 import { getCustomFields, setCustomFields } from "~/utils/form";
 import { path } from "~/utils/path";
 import { configurableItemsQuery, getCompanyId } from "~/utils/react-query";
@@ -59,11 +59,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const [makeMethods] = await Promise.all([
     getMakeMethods(client, itemId, companyId)
-    // client.storage
-    //   .from("private")
-    //   .list(`${companyId}/default-attachments/item/${itemId}`)
   ]);
-  // const defaultAttachments = defaultAttachmentsResult.data ?? [];
 
   const makeMethod = requestedMethodId
     ? (makeMethods.data?.find((m) => m.id === requestedMethodId) ??

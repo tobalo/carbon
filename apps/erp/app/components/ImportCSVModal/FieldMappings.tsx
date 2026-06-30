@@ -1,7 +1,7 @@
 "use client";
 
+import type { CarbonClient } from "@carbon/auth";
 import { useCarbon } from "@carbon/auth";
-import type { Database } from "@carbon/database";
 import { Combobox, CreatableCombobox, useFormContext } from "@carbon/form";
 import {
   Button,
@@ -17,7 +17,6 @@ import {
   useDisclosure
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse, SupabaseClient } from "@supabase/supabase-js";
 import {
   Fragment,
   type ReactNode,
@@ -45,7 +44,7 @@ import type {
 } from "~/modules/shared";
 import { creatableFormPermissions, fieldMappings } from "~/modules/shared";
 import type { action } from "~/routes/api+/ai+/csv+/$table.columns";
-import type { ListItem } from "~/types";
+import type { ListItem, PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import { capitalize } from "~/utils/string";
 import {
@@ -71,7 +70,7 @@ type EnumData =
       creatableLookup?: CreatableLookup;
       creatableForm?: CreatableForm;
       fetcher: (
-        client: SupabaseClient<Database>,
+        client: CarbonClient,
         companyId: string
       ) => Promise<PostgrestResponse<ListItem>>;
     };

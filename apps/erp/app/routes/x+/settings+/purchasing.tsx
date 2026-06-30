@@ -10,6 +10,10 @@ import {
   validator
 } from "@carbon/form";
 import {
+  isListedFileObject,
+  listObjectsResult
+} from "@carbon/object-storage/server";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -65,9 +69,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     await Promise.all([
       getCompanySettings(client, companyId),
       getAccountsPayableBillingAddress(client, companyId),
-      client.storage
-        .from("private")
-        .list(`${companyId}/default-attachments/company`)
+      listObjectsResult("private", `${companyId}/default-attachments/company`)
     ]);
 
   if (companySettings.error) {
@@ -83,7 +85,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return {
     companySettings: companySettings.data,
     apBillingAddress: apBillingAddress.data,
-    defaultAttachments: defaultAttachmentsResult.data ?? []
+    defaultAttachments: (defaultAttachmentsResult.data ?? []).filter(
+      isListedFileObject
+    )
   };
 }
 

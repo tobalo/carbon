@@ -4,7 +4,7 @@
 // hydrates this store from fresh loader data (`setData`). Components read slices
 // via selector hooks (so a change to one slice doesn't re-render every consumer)
 // and write ONLY through `dispatch`, which round-trips to the `/state` server
-// action (`serverDispatch`); Supabase Realtime then revalidates the loader and
+// action (`serverDispatch`); Carbon Realtime then revalidates the loader and
 // the cycle repeats. `setData` is the authoritative writer of business fields —
 // only the provider calls it, and it always rebuilds from the server snapshot.
 //

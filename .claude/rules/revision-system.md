@@ -2,8 +2,8 @@
 paths:
   - "apps/erp/app/modules/items/**"
   - "apps/erp/app/routes/x+/items+/revisions.new.tsx"
-  - "packages/database/supabase/migrations/*revisions*.sql"
-  - "packages/database/supabase/migrations/*make-method-version*.sql"
+  - "packages/database/migrations/*revisions*.sql"
+  - "packages/database/migrations/*make-method-version*.sql"
 ---
 
 # Revision System

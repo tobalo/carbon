@@ -1,5 +1,8 @@
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import type { ActionFunctionArgs } from "react-router";
 import { getCompanySettings } from "~/modules/settings";
 
@@ -32,7 +35,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   try {
     const serviceRole = await getCarbonServiceRole();
-    const postPurchaseInvoice = await serviceRole.functions.invoke<{
+    const postPurchaseInvoice = await invokeCarbonServiceFunction<{
       receiptIds?: string[];
     }>("post-purchase-invoice", {
       body: {
@@ -65,7 +68,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       !companySettings.data?.purchasePriceUpdateTiming ||
       companySettings.data.purchasePriceUpdateTiming === "Purchase Invoice Post"
     ) {
-      const priceUpdate = await serviceRole.functions.invoke(
+      const priceUpdate = await invokeCarbonServiceFunction(
         "update-purchased-prices",
         {
           body: {

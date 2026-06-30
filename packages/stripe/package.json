@@ -2,12 +2,10 @@
   "name": "@carbon/stripe",
   "dependencies": {
     "@carbon/auth": "workspace:*",
-    "@carbon/database": "workspace:*",
     "@carbon/env": "workspace:*",
     "@carbon/kv": "workspace:*",
     "@carbon/lib": "workspace:*",
     "@carbon/utils": "workspace:*",
-    "@supabase/supabase-js": "catalog:",
     "stripe": "18.5.0"
   },
   "type": "module",

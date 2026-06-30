@@ -1,6 +1,6 @@
 import { $ } from "execa";
 
-import { client } from "./client";
+import { closeWorkspaceDatabase, getJobWorkspaces } from "./workspaces";
 
 type Workspace = {
   id: number;
@@ -10,14 +10,7 @@ type Workspace = {
 async function jobs(): Promise<void> {
   console.log("✅ 🌱 Starting background jobs sync");
 
-  const { data: workspaces, error } = await client
-    .from("workspaces")
-    .select("id, url_erp");
-
-  if (error) {
-    console.error("🔴 🍳 Failed to fetch workspaces", error);
-    process.exit(1);
-  }
+  const workspaces = await getJobWorkspaces();
 
   let hasErrors = false;
 
@@ -47,7 +40,9 @@ async function jobs(): Promise<void> {
   console.log("✅ All jobs synced successfully");
 }
 
-jobs().catch((error) => {
-  console.error("🔴 Unexpected error during jobs sync", error);
-  process.exit(1);
-});
+jobs()
+  .catch((error) => {
+    console.error("🔴 Unexpected error during jobs sync", error);
+    process.exitCode = 1;
+  })
+  .finally(closeWorkspaceDatabase);

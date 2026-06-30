@@ -4,9 +4,11 @@
   "version": "0.0.1",
   "description": "Deployment scripts for Carbon",
   "dependencies": {
-    "@supabase/supabase-js": "catalog:",
+    "@carbon/object-storage": "workspace:*",
+    "drizzle-orm": "0.45.2",
     "dotenv": "16.3.1",
     "execa": "8.0.1",
+    "pg": "8.20.0",
     "tsx": "catalog:"
   },
   "scripts": {
@@ -17,6 +19,7 @@
     "test": "echo \"no tests\""
   },
   "devDependencies": {
+    "@types/pg": "8.15.6",
     "sst": "catalog:"
   }
 }

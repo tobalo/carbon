@@ -1,7 +1,7 @@
+import type { CarbonClient } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getPreferenceHeaders } from "@carbon/utils";
 import { parseDateTime, toCalendarDateTime } from "@internationalized/date";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 import { MaintenanceKPIs } from "~/modules/resources/resources.models";
 import { groupDataByDay, groupDataByMonth } from "~/utils/chart";
@@ -491,7 +491,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 async function getCompletedDispatchesQuery(
-  client: SupabaseClient,
+  client: CarbonClient,
   {
     companyId,
     workCenterId,
@@ -523,7 +523,7 @@ async function getCompletedDispatchesQuery(
 }
 
 async function getReactiveDispatchesQuery(
-  client: SupabaseClient,
+  client: CarbonClient,
   {
     companyId,
     workCenterId,
@@ -554,7 +554,7 @@ async function getReactiveDispatchesQuery(
 }
 
 async function getProductionEventsQuery(
-  client: SupabaseClient,
+  client: CarbonClient,
   {
     companyId,
     workCenterId,
@@ -585,7 +585,7 @@ async function getProductionEventsQuery(
 }
 
 async function getReactiveDispatchesByWorkCenterQuery(
-  client: SupabaseClient,
+  client: CarbonClient,
   {
     companyId,
     start,
@@ -610,7 +610,7 @@ async function getReactiveDispatchesByWorkCenterQuery(
 }
 
 async function getDispatchItemsQuery(
-  client: SupabaseClient,
+  client: CarbonClient,
   {
     companyId,
     workCenterId,

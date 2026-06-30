@@ -1,8 +1,7 @@
-import { SupabaseClient } from "@supabase/supabase-js";
-import { Database } from "../lib/types.ts";
+import type { LegacyPostgrestClient } from "../lib/legacy-client.ts";
 
 export async function getDefaultPostingGroup(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string
 ) {
   return await client

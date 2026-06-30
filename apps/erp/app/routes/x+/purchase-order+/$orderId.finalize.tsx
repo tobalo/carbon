@@ -1,11 +1,18 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { PurchaseOrderEmail } from "@carbon/documents/email";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
 import { NotificationEvent } from "@carbon/notifications";
+import {
+  createSignedDownloadUrl,
+  uploadObject
+} from "@carbon/object-storage/server";
 import { PO_EMAIL_ATTACHMENT_LIMIT_MB } from "@carbon/utils";
 import { renderAsync } from "@react-email/components";
 import { parseAcceptLanguage } from "intl-parse-accept-language";
@@ -182,7 +189,7 @@ export async function action(args: ActionFunctionArgs) {
     companySettings.data?.purchasePriceUpdateTiming ===
     "Purchase Order Finalize"
   ) {
-    const priceUpdate = await serviceRole.functions.invoke(
+    const priceUpdate = await invokeCarbonServiceFunction(
       "update-purchased-prices",
       {
         body: {
@@ -221,21 +228,18 @@ export async function action(args: ActionFunctionArgs) {
 
     documentFilePath = `${companyId}/supplier-interaction/${purchaseOrder.data.supplierInteractionId}/${fileName}`;
 
-    const documentFileUpload = await serviceRole.storage
-      .from("private")
-      .upload(documentFilePath, file, {
+    try {
+      await uploadObject({
+        bucket: "private",
+        key: documentFilePath,
+        body: file,
         cacheControl: `${12 * 60 * 60}`,
-        contentType: "application/pdf",
-        upsert: true
+        contentType: "application/pdf"
       });
-
-    if (documentFileUpload.error) {
+    } catch (err) {
       throw redirect(
         path.to.purchaseOrder(orderId),
-        await flash(
-          request,
-          error(documentFileUpload.error, "Failed to upload file")
-        )
+        await flash(request, error(err, "Failed to upload file"))
       );
     }
 
@@ -345,13 +349,15 @@ export async function action(args: ActionFunctionArgs) {
           );
           for (const doc of docs) {
             const storagePath = `${companyId}/supplier-interaction/${interactionId}/${doc.name}`;
-            const { data: signedUrlData } = await serviceRole.storage
-              .from("private")
-              .createSignedUrl(storagePath, 3600);
-            if (signedUrlData?.signedUrl) {
+            const signedUrl = await createSignedDownloadUrl({
+              bucket: "private",
+              key: storagePath,
+              expiresIn: 3600
+            }).catch(() => null);
+            if (signedUrl) {
               attachments.push({
                 filename: doc.name,
-                path: signedUrlData.signedUrl
+                path: signedUrl
               });
             }
           }
@@ -371,13 +377,15 @@ export async function action(args: ActionFunctionArgs) {
         });
 
         for (const r of defaults) {
-          const { data: signedUrlData } = await serviceRole.storage
-            .from("private")
-            .createSignedUrl(r.path, 3600);
-          if (signedUrlData?.signedUrl) {
+          const signedUrl = await createSignedDownloadUrl({
+            bucket: "private",
+            key: r.path,
+            expiresIn: 3600
+          }).catch(() => null);
+          if (signedUrl) {
             attachments.push({
               filename: r.name,
-              path: signedUrlData.signedUrl
+              path: signedUrl
             });
           }
         }

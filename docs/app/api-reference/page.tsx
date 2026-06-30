@@ -27,12 +27,22 @@ const ENV = `# .env
 CARBON_API_URL=${apiBase}
 CARBON_API_KEY=<your-api-key>`;
 
-const INIT = `import { createClient } from '@supabase/supabase-js'
-
-const apiUrl = process.env.CARBON_API_URL
+const INIT = `const apiUrl = process.env.CARBON_API_URL
 const apiKey = process.env.CARBON_API_KEY
 
-export const carbon = createClient(apiUrl, apiKey)`;
+export async function listItems() {
+  const response = await fetch(\`\${apiUrl}/item?limit=100\`, {
+    headers: {
+      'carbon-key': apiKey
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(await response.text())
+  }
+
+  return response.json()
+}`;
 
 export default async function ApiIntroPage() {
   const [env, init] = await Promise.all([
@@ -49,29 +59,27 @@ export default async function ApiIntroPage() {
         table and view is an endpoint, with full read and write access.
       </Lead>
       <P>
-        There are three ways to call it: directly over HTTP, through the{" "}
-        <DocLink href="#client-libraries">JavaScript SDK</DocLink>, or from the{" "}
+        There are three ways to call it: directly over HTTP, from generated
+        clients using the OpenAPI schema, or from the{" "}
         <DocLink href="/mcp">MCP server</DocLink>. Start by creating an{" "}
         <DocLink href="/api-reference/authentication">API key</DocLink>.
       </P>
 
       <H2 id="client-libraries">Client libraries</H2>
       <P>
-        Carbon's API is standard REST, so it works from any language. The
-        recommended client is the JavaScript SDK, built on{" "}
-        <Code>supabase-js</Code>.
+        Carbon's API is standard HTTP with an OpenAPI-compatible schema, so it
+        works with any language's HTTP client or generated OpenAPI client.
       </P>
       <SdkCards />
 
       <H2 id="quickstart">Quickstart</H2>
       <P>Save your key and the API URL as environment variables:</P>
       <CodeBlock html={env} code={ENV} label=".env" />
-      <P>Then initialize the client:</P>
+      <P>Then call an endpoint:</P>
       <CodeBlock html={init} code={INIT} label="lib/carbon.ts" />
       <P>
-        You can now query any resource with <Code>carbon.from('…')</Code>. Pick
-        a resource from the sidebar for its endpoints and ready-to-copy samples
-        — pointed at your configured instance.
+        Pick a resource from the sidebar for its endpoints and ready-to-copy
+        samples — pointed at your configured instance.
       </P>
 
       <ContentFooter

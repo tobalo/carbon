@@ -14,10 +14,10 @@ import {
   useMount
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { LuX } from "react-icons/lu";
 import { useFetcher } from "react-router";
+import type { PostgrestResponse } from "~/types";
 import Filter from "./Filter";
 import type { ColumnFilter } from "./types";
 import { useFilters } from "./useFilters";

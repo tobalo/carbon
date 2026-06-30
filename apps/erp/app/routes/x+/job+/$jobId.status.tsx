@@ -1,6 +1,9 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -73,9 +76,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         selectedPurchaseOrdersBySupplierId ?? "{}"
       );
 
-      const serviceRole = getCarbonServiceRole();
       const [scheduler] = await Promise.all([
-        serviceRole.functions.invoke("schedule", {
+        invokeCarbonServiceFunction("schedule", {
           body: {
             jobId: id,
             companyId,
@@ -84,7 +86,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             direction: "backward"
           }
         }),
-        serviceRole.functions.invoke("create", {
+        invokeCarbonServiceFunction("create", {
           body: {
             type: "purchaseOrderFromJob",
             jobId: id,
@@ -133,8 +135,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (status === "Closed") {
-    const serviceRole = await getCarbonServiceRole();
-    await serviceRole.functions.invoke("close-job", {
+    await invokeCarbonServiceFunction("close-job", {
       body: { jobId: id, userId, companyId }
     });
   }

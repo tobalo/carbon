@@ -1,11 +1,10 @@
 /**
- * Extract the user-facing error message from a Supabase
- * `functions.invoke()` failure.
+ * Extract the user-facing error message from a Carbon function invocation
+ * failure.
  *
- * `supabase-js` wraps non-2xx edge-function responses in `FunctionsHttpError`
- * where the response body lives on `error.context: Response`. The body is
- * never parsed by the SDK, so callers that just read `error.message` get the
- * generic wrapper text ("Edge Function returned a non-2xx status code") and
+ * The current functions client wraps non-2xx edge-function responses with the
+ * response body on `error.context: Response`. The body is not parsed for
+ * callers, so reading `error.message` can return a generic wrapper text and
  * lose the real message we set inside the edge function (e.g.
  * `{ success: false, message: "Tracked entity not found" }`).
  *

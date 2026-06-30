@@ -33,6 +33,7 @@ import type { OptimisticFileObject } from "~/modules/shared";
 import { getDocumentType } from "~/modules/shared";
 import type { ModelUpload, StorageItem } from "~/types";
 import { path } from "~/utils/path";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 
 type DocumentsProps = {
@@ -99,9 +100,9 @@ const Documents = ({
 
   const deleteFile = useCallback(
     async (file: StorageItem) => {
-      const fileDelete = await carbon?.storage
-        .from("private")
-        .remove([getReadPath(file)]);
+      const fileDelete = await removePrivateFiles([getReadPath(file)], {
+        permission: writeBucketPermission
+      });
 
       if (!fileDelete || fileDelete.error) {
         toast.error(fileDelete?.error?.message || t`Error deleting file`);
@@ -111,7 +112,7 @@ const Documents = ({
       toast.success(t`${file.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [carbon?.storage, getReadPath, revalidator, t]
+    [getReadPath, revalidator, t, writeBucketPermission]
   );
 
   const downloadModel = useCallback(
@@ -190,20 +191,13 @@ const Documents = ({
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getWritePath({ name: file.name });
         toast.info(t`Uploading ${file.name}`);
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadPrivateFile(fileName, file, {
+          permission: writeBucketPermission,
+          cacheControl: `${12 * 60 * 60}`
+        });
 
         if (fileUpload.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -232,12 +226,12 @@ const Documents = ({
     },
     [
       getWritePath,
-      carbon,
       revalidator,
-      submit,
       sourceDocument,
       sourceDocumentId,
-      t
+      submit,
+      t,
+      writeBucketPermission
     ]
   );
 
@@ -261,7 +255,7 @@ const Documents = ({
             isDisabled={!canUpdate}
             leftIcon={<LuUpload />}
             onChange={async (e: ChangeEvent<HTMLInputElement>) => {
-              if (e.target.files && carbon && company) {
+              if (e.target.files && company) {
                 upload(Array.from(e.target.files));
               }
             }}

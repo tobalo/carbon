@@ -16,6 +16,28 @@ export default $config({
       vpc,
       forceUpgrade: "v2",
     });
+    const carbonRuntimeEnvironment = {
+      CARBON_API_URL: process.env.CARBON_API_URL,
+      CARBON_AUTH_JWT_SECRET: process.env.CARBON_AUTH_JWT_SECRET,
+      CARBON_DATABASE_URL: process.env.CARBON_DATABASE_URL,
+      CARBON_PUBLIC_KEY: process.env.CARBON_PUBLIC_KEY,
+      CARBON_SERVICE_ROLE_KEY: process.env.CARBON_SERVICE_ROLE_KEY,
+      CARBON_STORAGE_ACCESS_KEY_ID:
+        process.env.CARBON_STORAGE_ACCESS_KEY_ID,
+      CARBON_STORAGE_BUCKET: process.env.CARBON_STORAGE_BUCKET,
+      CARBON_STORAGE_BUCKET_PREFIX:
+        process.env.CARBON_STORAGE_BUCKET_PREFIX,
+      CARBON_STORAGE_ENDPOINT: process.env.CARBON_STORAGE_ENDPOINT,
+      CARBON_STORAGE_FORCE_PATH_STYLE:
+        process.env.CARBON_STORAGE_FORCE_PATH_STYLE,
+      CARBON_STORAGE_PUBLIC_URL: process.env.CARBON_STORAGE_PUBLIC_URL,
+      CARBON_STORAGE_REGION:
+        process.env.CARBON_STORAGE_REGION ?? process.env.AWS_REGION,
+      CARBON_STORAGE_SECRET_ACCESS_KEY:
+        process.env.CARBON_STORAGE_SECRET_ACCESS_KEY,
+      CARBON_STORAGE_SESSION_TOKEN: process.env.CARBON_STORAGE_SESSION_TOKEN,
+    };
+
     const erp = cluster.addService("CarbonERPService", {
       cpu: "2 vCPU",
       memory: "4 GB",
@@ -45,6 +67,7 @@ export default $config({
       },
       environment: {
         AUTH_PROVIDERS: process.env.AUTH_PROVIDERS,
+        ...carbonRuntimeEnvironment,
         CARBON_EDITION: process.env.CARBON_EDITION,
         CLOUDFLARE_TURNSTILE_SECRET_KEY:
           process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
@@ -86,11 +109,6 @@ export default $config({
         STRIPE_BYPASS_COMPANY_IDS: process.env.STRIPE_BYPASS_COMPANY_IDS,
         STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
         STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
-        SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
-        SUPABASE_DB_URL: process.env.SUPABASE_DB_URL,
-        SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        SUPABASE_URL: process.env.SUPABASE_URL,
         VERCEL_ENV: "production",
         VERCEL_URL: process.env.URL_ERP ?? "itar.carbon.ms",
         XERO_CLIENT_ID: process.env.XERO_CLIENT_ID,
@@ -142,6 +160,7 @@ export default $config({
       },
       environment: {
         AUTH_PROVIDERS: process.env.AUTH_PROVIDERS,
+        ...carbonRuntimeEnvironment,
         CARBON_EDITION: process.env.CARBON_EDITION,
         CLOUDFLARE_TURNSTILE_SECRET_KEY:
           process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
@@ -166,11 +185,6 @@ export default $config({
         RESEND_API_KEY: process.env.RESEND_API_KEY,
         RESEND_DOMAIN: process.env.RESEND_DOMAIN ?? "carbon.ms",
         SESSION_SECRET: process.env.SESSION_SECRET,
-        SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
-        SUPABASE_DB_URL: process.env.SUPABASE_DB_URL,
-        SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        SUPABASE_URL: process.env.SUPABASE_URL,
         VERCEL_ENV: "production",
         VERCEL_URL: process.env.URL_MES ?? "mes.itar.carbon.ms",
       },

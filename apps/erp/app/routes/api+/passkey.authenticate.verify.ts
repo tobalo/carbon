@@ -91,19 +91,18 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     }
 
-    const { data: authUser } = await serviceRole.auth.admin.getUserById(
-      credRow.userId
-    );
-    if (!authUser.user?.email) {
+    const { data: authUser } = await serviceRole
+      .from("user")
+      .select("email")
+      .eq("id", credRow.userId)
+      .single();
+    if (!authUser?.email) {
       return data(error(null, "Sign-in failed. Please try again."), {
         status: 401
       });
     }
 
-    const authSession = await signInWithPasskey(
-      credRow.userId,
-      authUser.user.email
-    );
+    const authSession = await signInWithPasskey(credRow.userId, authUser.email);
     if (!authSession) {
       return data(error(null, "Sign-in failed. Please try again."), {
         status: 500

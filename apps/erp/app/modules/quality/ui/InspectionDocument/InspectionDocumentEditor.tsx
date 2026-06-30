@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Button,
   HStack,
@@ -48,6 +47,7 @@ import type { BalloonRegionAnalysis } from "~/modules/quality/inspectionBalloonA
 import type { InspectionDocumentContent } from "~/modules/quality/types";
 import { procedureStepType } from "~/modules/shared/shared.models";
 import { path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import { cropInspectionAnchorToPngBlob } from "./cropInspectionAnchorToPng";
 import { buildInspectionDocumentPdfWithOverlaysBytes } from "./exportInspectionDocumentPdfWithOverlays";
 
@@ -587,7 +587,6 @@ export default function InspectionDocumentEditor({
     );
   }, 500);
 
-  const { carbon } = useCarbon();
   const user = useUser();
   const companyId = user.company.id;
 
@@ -2101,14 +2100,12 @@ export default function InspectionDocumentEditor({
 
   const uploadPdfAndSave = useCallback(
     async (file: File, options: { clearBalloons: boolean }) => {
-      if (!carbon) return;
-
       setUploading(true);
 
-      const storagePath = `${companyId}/inspectionDocument/${diagramId}/${nanoid()}.pdf`;
-      const result = await carbon.storage
-        .from("private")
-        .upload(storagePath, file);
+      const storagePath = `${companyId}/quality/inspectionDocument/${diagramId}/${nanoid()}.pdf`;
+      const result = await uploadPrivateFile(storagePath, file, {
+        permission: "quality"
+      });
 
       setUploading(false);
 
@@ -2156,14 +2153,14 @@ export default function InspectionDocumentEditor({
         action: path.to.saveInspectionDocument(diagramId)
       });
     },
-    [carbon, companyId, diagramId, featureRows, fetcher, t]
+    [companyId, diagramId, featureRows, fetcher, t]
   );
 
   const handlePdfUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       e.target.value = "";
-      if (!file || !carbon) return;
+      if (!file) return;
 
       const replacingExistingPdf = pdfUrl.trim() !== "";
       const shouldConfirmClearBalloons =
@@ -2177,7 +2174,7 @@ export default function InspectionDocumentEditor({
 
       await uploadPdfAndSave(file, { clearBalloons: false });
     },
-    [anchorRects, carbon, featureRows, pdfUrl, uploadPdfAndSave]
+    [anchorRects, featureRows, pdfUrl, uploadPdfAndSave]
   );
 
   const handleConfirmReplacePdf = useCallback(async () => {

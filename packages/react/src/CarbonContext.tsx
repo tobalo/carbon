@@ -1,11 +1,9 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createContext, useContext } from "react";
 import type { StoreApi } from "zustand";
 import { useStore } from "zustand";
 
 export interface ICarbonStore {
-  carbon: SupabaseClient<Database>;
+  carbon: any;
   accessToken: string;
   isRealtimeAuthSet: boolean;
   setAuthToken: (accessToken: string) => Promise<void>;

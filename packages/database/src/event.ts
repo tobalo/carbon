@@ -1,5 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import type { LegacyPostgrestClient } from "./legacy-client.ts";
 
 export const OperationSchema = z.enum([
   "INSERT",
@@ -91,7 +91,7 @@ export type SubscriptionResult = {
   table: string;
 };
 
-// Type for Supabase client with our custom RPC functions
+// Type for PostgREST client with our custom RPC functions
 // These RPC functions are defined in the migration
 type EventSystemRpcClient = {
   rpc(
@@ -120,7 +120,7 @@ type EventSystemRpcClient = {
 /**
  * Creates or updates an event system subscription using RPC.
  *
- * @param client - Supabase client (e.g., from getCarbonServiceRole())
+ * @param client - PostgREST client (e.g., from getCarbonServiceRole())
  * @param input - Subscription parameters
  * @returns The created/updated subscription
  * @throws Error if the RPC call fails
@@ -139,7 +139,7 @@ type EventSystemRpcClient = {
  * ```
  */
 export async function createEventSystemSubscription(
-  client: SupabaseClient | EventSystemRpcClient,
+  client: LegacyPostgrestClient | EventSystemRpcClient,
   input: CreateSubscriptionParams
 ): Promise<SubscriptionResult | undefined> {
   // 1. Runtime Validation
@@ -170,12 +170,12 @@ export async function createEventSystemSubscription(
 /**
  * Deletes an event system subscription by ID.
  *
- * @param client - Supabase client
+ * @param client - PostgREST client
  * @param subscriptionId - The ID of the subscription to delete
  * @throws Error if the RPC call fails
  */
 export async function deleteEventSystemSubscription(
-  client: SupabaseClient | EventSystemRpcClient,
+  client: LegacyPostgrestClient | EventSystemRpcClient,
   subscriptionId: string
 ): Promise<void> {
   const { error } = await (client as EventSystemRpcClient).rpc(
@@ -193,13 +193,13 @@ export async function deleteEventSystemSubscription(
 /**
  * Deletes all event system subscriptions with a given name for a company.
  *
- * @param client - Supabase client
+ * @param client - PostgREST client
  * @param companyId - The company ID
  * @param name - The subscription name to delete
  * @throws Error if the RPC call fails
  */
 export async function deleteEventSystemSubscriptionsByName(
-  client: SupabaseClient | EventSystemRpcClient,
+  client: LegacyPostgrestClient | EventSystemRpcClient,
   companyId: string,
   name: string
 ): Promise<void> {

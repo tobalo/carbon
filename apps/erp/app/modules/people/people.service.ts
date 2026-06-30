@@ -1,12 +1,12 @@
-import type { Database, Json } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
+import type { Json } from "@carbon/database";
+import { sanitize } from "@carbon/utils";
 import type { z } from "zod";
 import type { DataType } from "~/modules/shared";
 import type { Employee } from "~/modules/users";
 import { getEmployees } from "~/modules/users/users.service";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import type {
   departmentValidator,
   employeeJobValidator,
@@ -15,7 +15,7 @@ import type {
 } from "./people.models";
 
 export async function deleteAttribute(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   attributeId: string
 ) {
   return client
@@ -25,7 +25,7 @@ export async function deleteAttribute(
 }
 
 export async function deleteAttributeCategory(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   attributeCategoryId: string
 ) {
   return client
@@ -35,31 +35,22 @@ export async function deleteAttributeCategory(
 }
 
 export async function deleteDepartment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   departmentId: string
 ) {
   return client.from("department").delete().eq("id", departmentId);
 }
 
-export async function deleteHoliday(
-  client: SupabaseClient<Database>,
-  holidayId: string
-) {
+export async function deleteHoliday(client: CarbonClient, holidayId: string) {
   return client.from("holiday").delete().eq("id", holidayId);
 }
 
-export async function deleteShift(
-  client: SupabaseClient<Database>,
-  shiftId: string
-) {
+export async function deleteShift(client: CarbonClient, shiftId: string) {
   // TODO: Set all employeeShifts to null
   return client.from("shift").update({ active: false }).eq("id", shiftId);
 }
 
-export async function getAttribute(
-  client: SupabaseClient<Database>,
-  attributeId: string
-) {
+export async function getAttribute(client: CarbonClient, attributeId: string) {
   return client
     .from("userAttribute")
     .select("*, userAttributeCategory(name)")
@@ -69,7 +60,7 @@ export async function getAttribute(
 }
 
 async function getAttributes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userIds: string[]
 ) {
@@ -91,7 +82,7 @@ async function getAttributes(
 }
 
 export async function getAttributeCategories(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: { search: string | null } & GenericQueryFilters
 ) {
@@ -117,10 +108,7 @@ export async function getAttributeCategories(
   return query;
 }
 
-export async function getAttributeCategory(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getAttributeCategory(client: CarbonClient, id: string) {
   return client
     .from("userAttributeCategory")
     .select(
@@ -139,19 +127,19 @@ export async function getAttributeCategory(
     .single();
 }
 
-export async function getAttributeDataTypes(client: SupabaseClient<Database>) {
+export async function getAttributeDataTypes(client: CarbonClient) {
   return client.from("attributeDataType").select("*");
 }
 
 export async function getDepartment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   departmentId: string
 ) {
   return client.from("department").select("*").eq("id", departmentId).single();
 }
 
 export async function getDepartments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -176,7 +164,7 @@ export async function getDepartments(
 }
 
 export async function getDepartmentsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -187,7 +175,7 @@ export async function getDepartmentsList(
 }
 
 export async function getDepartmentsTree(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -198,7 +186,7 @@ export async function getDepartmentsTree(
 }
 
 export async function getEmployeeJob(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeId: string,
   companyId: string
 ) {
@@ -211,7 +199,7 @@ export async function getEmployeeJob(
 }
 
 export async function getEmployeeSummary(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeId: string,
   companyId: string
 ) {
@@ -223,15 +211,12 @@ export async function getEmployeeSummary(
     .single();
 }
 
-export async function getHoliday(
-  client: SupabaseClient<Database>,
-  holidayId: string
-) {
+export async function getHoliday(client: CarbonClient, holidayId: string) {
   return client.from("holiday").select("*").eq("id", holidayId).single();
 }
 
 export async function getHolidays(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -255,10 +240,7 @@ export async function getHolidays(
   return query;
 }
 
-export function getHolidayYears(
-  client: SupabaseClient<Database>,
-  companyId: string
-) {
+export function getHolidayYears(client: CarbonClient, companyId: string) {
   return client.from("holidayYears").select("year").eq("companyId", companyId);
 }
 
@@ -282,7 +264,7 @@ type Person = Employee & {
 };
 
 export async function getPeople(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -361,7 +343,7 @@ export async function getPeople(
 }
 
 export async function getContacts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -392,10 +374,7 @@ export async function getContacts(
     error: null
   };
 }
-export async function getShift(
-  client: SupabaseClient<Database>,
-  shiftId: string
-) {
+export async function getShift(client: CarbonClient, shiftId: string) {
   return client
     .from("shifts")
     .select("*")
@@ -405,7 +384,7 @@ export async function getShift(
 }
 
 export async function getShifts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -428,7 +407,7 @@ export async function getShifts(
 }
 
 export async function getShiftsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string | null
 ) {
   let query = client.from("shift").select(`id, name`).eq("active", true);
@@ -441,7 +420,7 @@ export async function getShiftsList(
 }
 
 export async function insertAttribute(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   attribute: {
     name: string;
     attributeDataTypeId: number;
@@ -470,7 +449,7 @@ export async function insertAttribute(
 }
 
 export async function insertAttributeCategory(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   attributeCategory: {
     name: string;
     emoji?: string;
@@ -487,7 +466,7 @@ export async function insertAttributeCategory(
 }
 
 export async function insertEmployeeJob(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   job: {
     id: string;
     companyId: string;
@@ -498,7 +477,7 @@ export async function insertEmployeeJob(
 }
 
 export async function updateAttribute(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   attribute: {
     id?: string;
     name: string;
@@ -522,7 +501,7 @@ export async function updateAttribute(
 }
 
 export async function updateAttributeCategory(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   attributeCategory: {
     id: string;
     name: string;
@@ -539,7 +518,7 @@ export async function updateAttributeCategory(
 }
 
 export async function updateAttributeSortOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   updates: {
     id: string;
     sortOrder: number;
@@ -553,7 +532,7 @@ export async function updateAttributeSortOrder(
 }
 
 export async function updateEmployeeJob(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeId: string,
   employeeJob: z.infer<typeof employeeJobValidator> & {
     companyId: string;
@@ -569,7 +548,7 @@ export async function updateEmployeeJob(
 }
 
 export async function upsertDepartment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   department:
     | (Omit<z.infer<typeof departmentValidator>, "id"> & {
         companyId: string;
@@ -592,7 +571,7 @@ export async function upsertDepartment(
 }
 
 export async function upsertHoliday(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   holiday:
     | (Omit<z.infer<typeof holidayValidator>, "id"> & {
         companyId: string;
@@ -612,7 +591,7 @@ export async function upsertHoliday(
 }
 
 export async function upsertShift(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shift:
     | (Omit<z.infer<typeof shiftValidator>, "id"> & {
         createdBy: string;
@@ -632,7 +611,7 @@ export async function upsertShift(
 }
 
 export async function clockIn(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -656,7 +635,7 @@ export async function clockIn(
 }
 
 export async function clockOut(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -684,7 +663,7 @@ export async function clockOut(
 }
 
 export async function createTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   entry: {
     employeeId: string;
     companyId: string;
@@ -702,14 +681,14 @@ export async function createTimeCardEntry(
 }
 
 export async function deleteTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   entryId: string
 ) {
   return client.from("timeCardEntry").delete().eq("id", entryId);
 }
 
 export async function getClockedInEmployees(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -721,7 +700,7 @@ export async function getClockedInEmployees(
 }
 
 export async function getOpenClockEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   employeeId: string,
   companyId: string
 ) {
@@ -735,7 +714,7 @@ export async function getOpenClockEntry(
 }
 
 export async function getRecentTimecards(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -747,7 +726,7 @@ export async function getRecentTimecards(
 }
 
 export async function getScheduledEmployeesToday(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   const { data } = await client
@@ -777,15 +756,12 @@ export async function getScheduledEmployeesToday(
   });
 }
 
-export async function getTimeCardEntry(
-  client: SupabaseClient<Database>,
-  entryId: string
-) {
+export async function getTimeCardEntry(client: CarbonClient, entryId: string) {
   return client.from("timeCardEntry").select("*").eq("id", entryId).single();
 }
 
 export async function getTimeCardEntries(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     employeeId: string;
     companyId: string;
@@ -811,7 +787,7 @@ export async function getTimeCardEntries(
 }
 
 export async function getTimecardEntries(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & { search: string | null }
 ) {
@@ -834,7 +810,7 @@ export async function getTimecardEntries(
 }
 
 export async function getWeeklyHoursForEmployees(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   employeeIds: string[]
 ): Promise<Record<string, number>> {
@@ -864,7 +840,7 @@ export async function getWeeklyHoursForEmployees(
 }
 
 export async function updateTimeCardEntry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     entryId: string;
     clockIn?: string;

@@ -4658,12 +4658,6 @@ msgstr "Failed to create webhook: {0}"
 msgid "Failed to create work center: {0}"
 msgstr "Failed to create work center: {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "Failed to delete file from old location"
-
-msgid "Failed to download file for moving"
-msgstr "Failed to download file for moving"
-
 msgid "Failed to fetch item costs"
 msgstr "Failed to fetch item costs"
 
@@ -4739,6 +4733,9 @@ msgstr "Failed to load supplier part details"
 msgid "Failed to load tracked entities"
 msgstr "Failed to load tracked entities"
 
+msgid "Failed to move file"
+msgstr "Failed to move file"
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "Failed to remove image: {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "Failed to upload CSV file."
 
 msgid "Failed to upload file"
 msgstr "Failed to upload file"
-
-msgid "Failed to upload file to new location"
-msgstr "Failed to upload file to new location"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "Stockout"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "Stop raising purchase orders after this date"
-
-msgid "Storage client not available"
-msgstr "Storage client not available"
 
 msgid "Storage Rules"
 msgstr "Storage Rules"

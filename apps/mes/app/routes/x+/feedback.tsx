@@ -1,10 +1,24 @@
-import { SUPABASE_URL } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { validator } from "@carbon/form";
 import { getSlackClient } from "@carbon/lib/slack.server";
+import { createSignedDownloadUrl } from "@carbon/object-storage/server";
 import type { ActionFunctionArgs } from "react-router";
 import { feedbackValidator } from "~/services/models";
+
+const getFeedbackAttachmentUrl = async (attachmentPath?: string) => {
+  if (!attachmentPath) return "None";
+
+  try {
+    return await createSignedDownloadUrl({
+      bucket: "feedback",
+      key: attachmentPath
+    });
+  } catch (error) {
+    console.error("Failed to create feedback attachment URL", error);
+    return "Attachment uploaded but URL generation failed";
+  }
+};
 
 export async function action({ request }: ActionFunctionArgs) {
   const { userId, companyId } = await requirePermissions(request, {});
@@ -51,6 +65,8 @@ export async function action({ request }: ActionFunctionArgs) {
     };
   }
 
+  const attachmentUrl = await getFeedbackAttachmentUrl(attachmentPath);
+
   let channel = "#feedback";
   if (company.data?.slackChannel) {
     channel = company.data.slackChannel;
@@ -80,11 +96,7 @@ export async function action({ request }: ActionFunctionArgs) {
           },
           {
             type: "mrkdwn",
-            text: `*Attachment:*\n${
-              attachmentPath
-                ? `${SUPABASE_URL}/storage/v1/object/public/feedback/${attachmentPath}`
-                : "None"
-            }`
+            text: `*Attachment:*\n${attachmentUrl}`
           }
         ]
       }

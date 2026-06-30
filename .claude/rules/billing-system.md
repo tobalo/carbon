@@ -3,7 +3,7 @@ description: Stripe billing, plans, and edition/plan gating for Carbon Cloud
 paths:
   - packages/stripe/**
   - packages/ee/src/plan*.ts
-  - packages/database/supabase/migrations/*billing*.sql
+  - packages/database/migrations/*billing*.sql
   - apps/erp/app/routes/api+/webhook.stripe.ts
 ---
 

@@ -5,10 +5,12 @@ import { repoRoot } from "../sources/migrations";
 
 async function main() {
   const connectionString =
-    process.env.DATABASE_URL ?? process.env.SUPABASE_DB_URL;
+    process.env.CARBON_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL;
   if (!connectionString) {
     console.error(
-      "Set DATABASE_URL (or SUPABASE_DB_URL) to the Postgres connection string."
+      "Set CARBON_DATABASE_URL, DATABASE_URL, or POSTGRES_URL to the Postgres connection string."
     );
     process.exit(2);
   }

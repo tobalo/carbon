@@ -30,7 +30,7 @@ or change docs **in that system, in its house style, grounded in real Carbon cod
 ## The prime directive — ground everything in source
 
 The **holy source of truth is the actual source code + the LATEST database migrations**
-(`packages/database/supabase/migrations/`, newest by timestamp) — NOT ERP/CMMS general knowledge, NOT
+(`packages/database/migrations/`, newest by timestamp) — NOT ERP/CMMS general knowledge, NOT
 `.claude/rules/` alone (it is often stale).
 
 - **Verify before you write.** Every entity, status enum *value*, and transition named in docs must exist

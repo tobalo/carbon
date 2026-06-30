@@ -1,9 +1,9 @@
 import { Combobox, Hidden, SelectControlled } from "@carbon/form";
 import { useMount, VStack } from "@carbon/react";
 import { useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import type { getQuoteLinesList } from "../../sales.service";
 

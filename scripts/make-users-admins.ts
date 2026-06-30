@@ -1,37 +1,53 @@
-// import type { User } from "@supabase/supabase-js";
-import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
-console.log(process.env.PROD_SUPABASE_URL);
+const apiUrl =
+  process.env.PROD_CARBON_API_URL ?? process.env.CARBON_API_URL;
+const serviceRoleKey =
+  process.env.PROD_CARBON_SERVICE_ROLE_KEY ??
+  process.env.CARBON_SERVICE_ROLE_KEY;
 
-const supabaseAdmin = createClient(
-  process.env.PROD_SUPABASE_URL!,
-  process.env.PROD_SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+if (!apiUrl) {
+  throw new Error("PROD_CARBON_API_URL or CARBON_API_URL must be set");
+}
+
+if (!serviceRoleKey) {
+  throw new Error(
+    "PROD_CARBON_SERVICE_ROLE_KEY or CARBON_SERVICE_ROLE_KEY must be set"
+  );
+}
+
+console.log(apiUrl);
+
+const usersUrl = new URL("/rest/v1/user", apiUrl);
+usersUrl.searchParams.set("select", "id,email");
+usersUrl.searchParams.set("email", "ilike.*@carbon.ms");
 
 (async () => {
-  const { data: users } = await supabaseAdmin
-    .from("user")
-    .select("id, email")
-    .ilike("email", "%@carbon.ms");
+  const response = await fetch(usersUrl, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+  });
 
-  if (!users) throw new Error("No users found");
+  if (!response.ok) {
+    throw new Error(
+      `${response.status} ${response.statusText}: ${await response.text()}`
+    );
+  }
+
+  const users = (await response.json()) as Array<{ id: string; email: string }>;
+
+  if (users.length === 0) throw new Error("No users found");
 
   const userIds = users.map((user) => user.id);
   const commaSeparatedIds = userIds.join(", ");
 
   console.log("User IDs:", commaSeparatedIds);
 
-  // Save to file
-  const fs = require("fs");
   fs.writeFileSync("user-ids.txt", commaSeparatedIds);
   console.log("User IDs saved to user-ids.txt");
 })();

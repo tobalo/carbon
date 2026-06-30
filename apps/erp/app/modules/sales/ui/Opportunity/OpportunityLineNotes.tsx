@@ -23,6 +23,7 @@ import { nanoid } from "nanoid";
 import { useState } from "react";
 import { usePermissions, useUser } from "~/hooks";
 import { getPrivateUrl } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 
 const OpportunityLineNotes = ({
   id,
@@ -62,7 +63,9 @@ const OpportunityLineNotes = ({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/opportunity-line/${id}/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "sales"
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);

@@ -1,11 +1,11 @@
 import {
   assertIsPost,
+  CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID,
+  CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID,
   carbonClient,
   error,
   magicLinkValidator,
-  RATE_LIMIT,
-  SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID,
-  SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID
+  RATE_LIMIT
 } from "@carbon/auth";
 import { sendMagicLink, verifyAuthSession } from "@carbon/auth/auth.server";
 import { flash, getAuthSession } from "@carbon/auth/session.server";
@@ -49,8 +49,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   return {
-    hasOutlookAuth: !!SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID,
-    hasGoogleAuth: !!SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID
+    hasOutlookAuth: !!CARBON_AUTH_EXTERNAL_AZURE_CLIENT_ID,
+    hasGoogleAuth: !!CARBON_AUTH_EXTERNAL_GOOGLE_CLIENT_ID
   };
 }
 
@@ -79,13 +79,13 @@ export async function action({ request }: ActionFunctionArgs) {
     return error(validation.error, "Invalid email address");
   }
 
-  const { email } = validation.data;
+  const { email, redirectTo } = validation.data;
   const user = await getUserByEmail(email);
 
   if (user.data && user.data.active) {
-    const magicLink = await sendMagicLink(email);
+    const magicLink = await sendMagicLink(email, redirectTo);
 
-    if (!magicLink) {
+    if (magicLink.error) {
       return data(
         error(magicLink, "Failed to send magic link"),
         await flash(request, error(magicLink, "Failed to send magic link"))

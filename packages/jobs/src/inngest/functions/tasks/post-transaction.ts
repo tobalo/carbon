@@ -1,5 +1,6 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { inngest } from "../../client";
+import { invokeCarbonFunction } from "../invoke-carbon-function";
 
 export const postTransactionFunction = inngest.createFunction(
   { id: "post-transactions", retries: 3 },
@@ -19,27 +20,24 @@ export const postTransactionFunction = inngest.createFunction(
         case "receipt":
           console.info(`Posting receipt ${payload.documentId}`);
           console.info(payload);
-          const postReceipt = await serviceRole.functions.invoke(
-            "post-receipt",
-            {
-              body: {
-                receiptId: payload.documentId,
-                userId: payload.userId,
-                companyId: payload.companyId
-              }
+          const postReceipt = await invokeCarbonFunction("post-receipt", {
+            body: {
+              receiptId: payload.documentId,
+              userId: payload.userId,
+              companyId: payload.companyId
             }
-          );
+          });
 
           result = {
             success: postReceipt.error === null,
-            message: postReceipt.error?.message
+            message: postReceipt.error?.message ?? ""
           };
 
           break;
         case "purchase-invoice":
           console.info(`Posting purchase invoice ${payload.documentId}`);
           console.info(payload);
-          const postPurchaseInvoice = await serviceRole.functions.invoke(
+          const postPurchaseInvoice = await invokeCarbonFunction(
             "post-purchase-invoice",
             {
               body: {
@@ -52,7 +50,7 @@ export const postTransactionFunction = inngest.createFunction(
 
           result = {
             success: postPurchaseInvoice.error === null,
-            message: postPurchaseInvoice.error?.message
+            message: postPurchaseInvoice.error?.message ?? ""
           };
 
           if (result.success) {
@@ -72,7 +70,7 @@ export const postTransactionFunction = inngest.createFunction(
                 `Updating pricing from invoice ${payload.documentId}`
               );
 
-              const priceUpdate = await serviceRole.functions.invoke(
+              const priceUpdate = await invokeCarbonFunction(
                 "update-purchased-prices",
                 {
                   body: {
@@ -86,7 +84,7 @@ export const postTransactionFunction = inngest.createFunction(
 
               result = {
                 success: priceUpdate.error === null,
-                message: priceUpdate.error?.message
+                message: priceUpdate.error?.message ?? ""
               };
             }
           }
@@ -96,20 +94,17 @@ export const postTransactionFunction = inngest.createFunction(
           console.info(`Posting shipment ${payload.documentId}`);
           console.info(payload);
 
-          const postShipment = await serviceRole.functions.invoke(
-            "post-shipment",
-            {
-              body: {
-                shipmentId: payload.documentId,
-                userId: payload.userId,
-                companyId: payload.companyId
-              }
+          const postShipment = await invokeCarbonFunction("post-shipment", {
+            body: {
+              shipmentId: payload.documentId,
+              userId: payload.userId,
+              companyId: payload.companyId
             }
-          );
+          });
 
           result = {
             success: postShipment.error === null,
-            message: postShipment.error?.message
+            message: postShipment.error?.message ?? ""
           };
 
           break;

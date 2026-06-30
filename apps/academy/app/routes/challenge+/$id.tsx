@@ -12,6 +12,7 @@ import {
 import type { ActionFunctionArgs } from "react-router";
 import { Form, Link, useActionData, useParams, useSubmit } from "react-router";
 import { useOptionalUser } from "~/hooks/useUser";
+import { insertChallengeAttempt } from "~/services/database.server";
 import { path } from "~/utils/path";
 import { findTopicContext } from "~/utils/video";
 
@@ -25,7 +26,7 @@ interface ActionData {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { client, userId } = await requirePermissions(request, {});
+  const { userId } = await requirePermissions(request, {});
   const formData = await request.formData();
   const reset = formData.get("reset");
 
@@ -61,14 +62,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const passed = correctAnswers === totalQuestions; // 100% to pass
 
-  const { error } = await client.from("challengeAttempt").insert({
-    userId,
-    courseId: course.id,
-    topicId,
-    passed
-  });
-
-  if (error) {
+  try {
+    await insertChallengeAttempt({
+      userId,
+      courseId: course.id,
+      topicId,
+      passed
+    });
+  } catch (error) {
     console.error(error);
   }
 

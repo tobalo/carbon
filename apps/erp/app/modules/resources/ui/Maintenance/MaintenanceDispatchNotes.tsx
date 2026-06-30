@@ -27,7 +27,6 @@ import {
 import { Editor } from "@carbon/react/Editor";
 import { convertKbToString } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import { nanoid } from "nanoid";
 import type { ChangeEvent } from "react";
 import { Suspense, useCallback, useState } from "react";
@@ -37,8 +36,9 @@ import { DocumentPreview, FileDropzone } from "~/components";
 import DocumentIcon from "~/components/DocumentIcon";
 import { usePermissions, useUser } from "~/hooks";
 import { getDocumentType } from "~/modules/shared";
-import type { StorageItem } from "~/types";
+import type { FileObject, StorageItem } from "~/types";
 import { getPrivateUrl, path } from "~/utils/path";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 
 export function MaintenanceDispatchNotes({
@@ -63,7 +63,9 @@ export function MaintenanceDispatchNotes({
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/maintenance/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "resources"
+    });
 
     if (result?.error) {
       toast.error("Failed to upload image");
@@ -195,7 +197,6 @@ function MaintenanceFilesContent({
   isReadOnly: boolean;
 }) {
   const { t } = useLingui();
-  const { carbon } = useCarbon();
   const { company } = useUser();
   const revalidator = useRevalidator();
 
@@ -208,20 +209,13 @@ function MaintenanceFilesContent({
 
   const upload = useCallback(
     async (filesToUpload: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of filesToUpload) {
         const filePath = getFilePath(file.name);
 
-        const result = await carbon.storage
-          .from("private")
-          .upload(filePath, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const result = await uploadPrivateFile(filePath, file, {
+          permission: "resources",
+          cacheControl: `${12 * 60 * 60}`
+        });
 
         if (result.error) {
           toast.error(t`Failed to upload file: ${file.name}`);
@@ -231,7 +225,7 @@ function MaintenanceFilesContent({
       }
       revalidator.revalidate();
     },
-    [carbon, getFilePath, revalidator, t]
+    [getFilePath, revalidator, t]
   );
 
   const download = useCallback(
@@ -259,13 +253,10 @@ function MaintenanceFilesContent({
 
   const deleteFile = useCallback(
     async (file: FileObject) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       const filePath = getFilePath(file.name);
-      const result = await carbon.storage.from("private").remove([filePath]);
+      const result = await removePrivateFiles([filePath], {
+        permission: "resources"
+      });
 
       if (result.error) {
         toast.error(result.error.message || "Error deleting file");
@@ -275,7 +266,7 @@ function MaintenanceFilesContent({
       toast.success(t`${file.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [carbon, getFilePath, revalidator, t]
+    [getFilePath, revalidator, t]
   );
 
   const onDrop = useCallback(

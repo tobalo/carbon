@@ -1,5 +1,4 @@
-import { SupabaseClient } from "@supabase/supabase-js";
-import { Database } from "./types.ts";
+import type { LegacyPostgrestClient } from "./legacy-client.ts";
 
 export type JobMethod = NonNullable<
   Awaited<ReturnType<typeof getJobMethodTreeArray>>["data"]
@@ -12,7 +11,7 @@ export type JobMethodTreeItem = {
 };
 
 export async function getJobMethodTree(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   methodId: string,
   parentMaterialId: string | null = null
 ) {
@@ -28,7 +27,7 @@ export async function getJobMethodTree(
 }
 
 export function getJobMethodTreeArray(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   methodId: string
 ) {
   return client.rpc("get_job_methods_by_method_id", {
@@ -100,7 +99,7 @@ export type QuoteMethodTreeItem = {
 };
 
 export async function getQuoteMethodTree(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   methodId: string,
   parentMaterialId: string | null = null
 ) {
@@ -116,7 +115,7 @@ export async function getQuoteMethodTree(
 }
 
 export function getQuoteMethodTreeArray(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   methodId: string
 ) {
   return client.rpc("get_quote_methods_by_method_id", {
@@ -325,7 +324,7 @@ const costCategoryKeys: CostCategoryKey[] = [
 type CostEffects = Record<CostCategoryKey, ((qty: number) => number)[]>;
 
 async function getSupplierPriceBreaksForItems(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   itemIds: string[]
 ): Promise<SupplierPriceMap> {
   if (!itemIds.length) return {};
@@ -449,7 +448,7 @@ function normalizeTimeToHours(
 }
 
 export async function calculateQuoteLinePrices(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   quoteId: string,
   quoteLineId: string,
   companyId: string,

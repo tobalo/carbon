@@ -1,8 +1,7 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 
 export interface McpContext {
-  client: SupabaseClient<Database>;
+  client: CarbonClient;
   companyId: string;
   companyGroupId: string;
   userId: string;

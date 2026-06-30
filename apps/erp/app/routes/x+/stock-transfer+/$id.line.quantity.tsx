@@ -1,5 +1,6 @@
 import { assertIsPost, error, notFound, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { trigger } from "@carbon/jobs";
 import type { ActionFunctionArgs } from "react-router";
@@ -91,18 +92,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // Call the post-stock-transfer function for inventory items
   const { data: transferResult, error: functionError } =
-    await client.functions.invoke("post-stock-transfer", {
-      body: JSON.stringify({
-        type: type,
-        stockTransferId: stockTransferLine.data.stockTransferId,
-        stockTransferLineId: lineId,
-        quantity: pickedQuantity,
-        locationId: locationId,
-        trackedEntityId: trackedEntityId,
-        userId,
-        companyId
-      })
-    });
+    await invokeCarbonServiceFunction<{ splitEntityId?: string }>(
+      "post-stock-transfer",
+      {
+        body: {
+          type: type,
+          stockTransferId: stockTransferLine.data.stockTransferId,
+          stockTransferLineId: lineId,
+          quantity: pickedQuantity,
+          locationId: locationId,
+          trackedEntityId: trackedEntityId,
+          userId,
+          companyId
+        }
+      }
+    );
 
   if (functionError) {
     return data(

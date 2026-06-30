@@ -1,4 +1,4 @@
-// Shared types for the Implementation Hub. App-agnostic: no Supabase/React
+// Shared types for the Implementation Hub. App-agnostic: no data-plane/React
 // Router imports here so the content templates + pure logic stay portable.
 
 import type { MessageDescriptor } from "@lingui/core";
@@ -155,7 +155,7 @@ export interface HubContacts {
 }
 
 // Minimal shape of a persisted toggle row — kept here so the pure logic does
-// not depend on the generated Supabase types.
+// not depend on generated database types.
 export interface CheckStateRow {
   itemKey: string;
   kind: StateKind;

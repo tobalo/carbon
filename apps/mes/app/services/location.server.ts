@@ -1,6 +1,5 @@
+import type { CarbonClient } from "@carbon/auth";
 import { notFound } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import * as cookie from "cookie";
 
 export function getCompanySettings(request: Request, companyId: string) {
@@ -24,7 +23,7 @@ export function setLocation(companyId: string, locationId: string) {
 
 export async function getLocation(
   request: Request,
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     userId: string;
     companyId: string;

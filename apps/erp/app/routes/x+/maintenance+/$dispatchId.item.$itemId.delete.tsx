@@ -1,6 +1,6 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
@@ -32,9 +32,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     message: "Cannot modify a locked dispatch. Reopen it first."
   });
 
-  const serviceRole = await getCarbonServiceRole();
-
-  const result = await serviceRole.functions.invoke("issue", {
+  const result = await invokeCarbonServiceFunction("issue", {
     body: {
       type: "maintenanceDispatchUnissue",
       maintenanceDispatchItemId: itemId,

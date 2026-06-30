@@ -1,6 +1,5 @@
+import type { CarbonClient } from "@carbon/auth";
 import { ONSHAPE_CLIENT_ID, ONSHAPE_CLIENT_SECRET } from "@carbon/auth";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 import type { OnshapeDocument } from "./document.type";
 import type { OnshapeElementType } from "./element.type";
@@ -140,7 +139,7 @@ export class OnshapeClient {
 }
 
 export async function getOnshapeClient(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string
 ): Promise<

@@ -12,10 +12,86 @@ import { format } from "https://deno.land/std@0.205.0/datetime/format.ts";
 import { corsHeaders } from "../lib/headers.ts";
 import { requirePermissions } from "../lib/supabase.ts";
 import { Database } from "../lib/types.ts";
+import { carbonApiUrl, carbonServiceRoleKey } from "../lib/env.ts";
 import { getNextSequence } from "../shared/get-next-sequence.ts";
 
 const pool = getConnectionPool(2);
 const db = getDatabaseClient<DB>(pool);
+
+type FunctionInvokeResult<T = unknown> = {
+  data: T | null;
+  error: { message: string } | null;
+  status: number;
+  statusText: string;
+};
+
+async function parseResponseBody(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function messageFromBody(body: unknown, fallback: string) {
+  if (body && typeof body === "object") {
+    const message = (body as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+    const error = (body as { error?: unknown }).error;
+    if (typeof error === "string") return error;
+  }
+  if (typeof body === "string" && body.length > 0) return body;
+  return fallback;
+}
+
+async function invokeCarbonFunction<T = unknown>(
+  req: Request,
+  name: string,
+  body: unknown
+): Promise<FunctionInvokeResult<T>> {
+  const apiUrl = carbonApiUrl();
+  const serviceRoleKey = carbonServiceRoleKey();
+  const authorization =
+    req.headers.get("Authorization") ??
+    (serviceRoleKey ? `Bearer ${serviceRoleKey}` : "");
+
+  const response = await fetch(
+    `${apiUrl}/functions/v1/${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  const payload = await parseResponseBody(response);
+
+  if (!response.ok) {
+    return {
+      data: null,
+      error: {
+        message: messageFromBody(
+          payload,
+          `Function ${name} returned ${response.status}`
+        ),
+      },
+      status: response.status,
+      statusText: response.statusText,
+    };
+  }
+
+  return {
+    data: payload as T,
+    error: null,
+    status: response.status,
+    statusText: response.statusText,
+  };
+}
 
 const payloadValidator = z.discriminatedUnion("type", [
   z.object({
@@ -1174,14 +1250,12 @@ serve(async (req: Request) => {
           insertedQuoteLines
             .filter((line) => line.methodType === "Make to Order")
             .map((line) =>
-              client.functions.invoke("get-method", {
-                body: {
-                  type: "itemToQuoteLine",
-                  sourceId: line.itemId,
-                  targetId: `${insertedQuoteId}:${line.id}`,
-                  companyId: companyId,
-                  userId: userId,
-                },
+              invokeCarbonFunction(req, "get-method", {
+                type: "itemToQuoteLine",
+                sourceId: line.itemId,
+                targetId: `${insertedQuoteId}:${line.id}`,
+                companyId: companyId,
+                userId: userId,
               })
             )
         );

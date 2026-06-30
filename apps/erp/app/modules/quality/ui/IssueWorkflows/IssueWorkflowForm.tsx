@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import { MultiSelect, Select, ValidatedForm } from "@carbon/form";
 import type { JSONContent } from "@carbon/react";
 import {
@@ -24,6 +23,7 @@ import { Hidden, Input, Submit } from "~/components/Form";
 import { usePermissions, useUser } from "~/hooks";
 import type { ListItem } from "~/types";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import {
   issueWorkflowValidator,
   nonConformanceApprovalRequirement,
@@ -125,23 +125,24 @@ const IssueWorkflowForm = ({
     setSelectedActionIds(selectedActionIds.filter((id) => id !== actionId));
   };
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/quality/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "quality"
+    });
 
-    if (result?.error) {
+    if (result.error) {
       toast.error(t`Failed to upload image`);
       throw new Error(result.error.message);
     }
 
-    if (!result?.data) {
+    if (!result.data) {
       throw new Error("Failed to upload image");
     }
 

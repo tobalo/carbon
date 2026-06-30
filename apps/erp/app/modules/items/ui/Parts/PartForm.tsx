@@ -21,7 +21,6 @@ import {
   supportedModelTypes
 } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
@@ -45,7 +44,9 @@ import {
 } from "~/components/Form";
 import { ReplenishmentSystemIcon } from "~/components/Icons";
 import { useNextItemId, usePermissions, useUser } from "~/hooks";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import {
   itemReplenishmentSystems,
   itemTrackingTypes,
@@ -91,7 +92,9 @@ const PartForm = ({ initialValues, type = "card", onClose }: PartFormProps) => {
     const fileName = `${companyId}/models/${modelId}.${fileExtension}`;
 
     const [fileUpload, recordInsert] = await Promise.all([
-      carbon.storage.from("private").upload(fileName, file),
+      uploadPrivateFile(fileName, file, {
+        permission: "parts"
+      }),
       carbon.from("modelUpload").insert({
         id: modelId,
         modelPath: fileName,

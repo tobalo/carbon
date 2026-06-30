@@ -83,20 +83,22 @@ export const meta: MetaFunction = () => {
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const {
     CARBON_EDITION,
+    CARBON_API_URL,
+    CARBON_PUBLIC_KEY,
+    CARBON_STORAGE_PUBLIC_URL,
     POSTHOG_API_HOST,
-    POSTHOG_PROJECT_PUBLIC_KEY,
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
+    POSTHOG_PROJECT_PUBLIC_KEY
   } = getBrowserEnv();
 
   return data(
     {
       env: {
         CARBON_EDITION,
+        CARBON_API_URL,
+        CARBON_PUBLIC_KEY,
+        CARBON_STORAGE_PUBLIC_URL,
         POSTHOG_API_HOST,
-        POSTHOG_PROJECT_PUBLIC_KEY,
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY
+        POSTHOG_PROJECT_PUBLIC_KEY
       },
       mode: getMode(request),
       theme: getTheme(request),

@@ -10,8 +10,9 @@
 
 import process from "node:process";
 import { parseArgs } from "node:util";
-import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
+import type { PoolClient } from "pg";
+import { getPostgresConnectionPool } from "./client.ts";
 import {
   accountDefaults,
   accounts,
@@ -31,10 +32,8 @@ import {
   scrapReasons,
   sequences,
   unitOfMeasures
-} from "../supabase/functions/lib/seed.data.ts";
-import { getPostgresConnectionPool } from "./client.ts";
+} from "./seed/seed.data.ts";
 import { seedPrinting } from "./seed-printing.ts";
-import type { Database } from "./types.ts";
 
 // Load environment variables
 dotenv.config();
@@ -53,6 +52,196 @@ function inferFirstNameFromEmail(email: string): string {
   const firstName = localPart.split(/[.+_-]/)[0]!;
   // Capitalize first letter, lowercase the rest
   return firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+}
+
+async function ensureDevelopmentAuthUser(
+  client: PoolClient,
+  email: string,
+  password: string
+): Promise<string> {
+  const confirmedAtColumn = await getAuthUsersConfirmedAtColumn(client);
+  const confirmedAtSet = confirmedAtColumn
+    ? `, "${confirmedAtColumn}" = COALESCE("${confirmedAtColumn}", now())`
+    : "";
+  const confirmedAtInsertColumn = confirmedAtColumn
+    ? `"${confirmedAtColumn}",`
+    : "";
+  const confirmedAtInsertValue = confirmedAtColumn ? "now()," : "";
+
+  const existingUser = await client.query<{ id: string }>(
+    `SELECT id::text FROM auth.users WHERE lower(email) = lower($1) LIMIT 1`,
+    [email]
+  );
+
+  if (existingUser.rows[0]?.id) {
+    const userId = existingUser.rows[0].id;
+    await client.query(
+      `
+      UPDATE auth.users
+      SET
+        encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')),
+        raw_app_meta_data = $3::jsonb,
+        updated_at = now()
+        ${confirmedAtSet}
+      WHERE id = $1::uuid
+      `,
+      [userId, password, authAppMetadata()]
+    );
+    await ensureAuthIdentity(client, userId, email);
+    await ensurePublicUser(client, userId, email);
+    return userId;
+  }
+
+  const newUser = await client.query<{ id: string }>(
+    `
+    INSERT INTO auth.users (
+      instance_id,
+      id,
+      aud,
+      role,
+      email,
+      encrypted_password,
+      ${confirmedAtInsertColumn}
+      raw_app_meta_data,
+      raw_user_meta_data,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      extensions.gen_random_uuid(),
+      'authenticated',
+      'authenticated',
+      $1,
+      extensions.crypt($2, extensions.gen_salt('bf')),
+      ${confirmedAtInsertValue}
+      $3::jsonb,
+      '{}'::jsonb,
+      now(),
+      now()
+    )
+    RETURNING id::text
+    `,
+    [email, password, authAppMetadata()]
+  );
+
+  const userId = newUser.rows[0]?.id;
+  if (!userId) {
+    throw new Error("Failed to create user: No user returned");
+  }
+
+  await ensureAuthIdentity(client, userId, email);
+  await ensurePublicUser(client, userId, email);
+  return userId;
+}
+
+async function getAuthUsersConfirmedAtColumn(
+  client: PoolClient
+): Promise<"email_confirmed_at" | "confirmed_at" | null> {
+  const result = await client.query<{ column_name: string }>(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND column_name IN ('email_confirmed_at', 'confirmed_at')
+    ORDER BY CASE column_name
+      WHEN 'email_confirmed_at' THEN 1
+      WHEN 'confirmed_at' THEN 2
+      ELSE 3
+    END
+    LIMIT 1
+    `
+  );
+
+  const columnName = result.rows[0]?.column_name;
+  return columnName === "email_confirmed_at" || columnName === "confirmed_at"
+    ? columnName
+    : null;
+}
+
+function authAppMetadata() {
+  return JSON.stringify({
+    role: "employee",
+    provider: "email",
+    providers: ["email"]
+  });
+}
+
+async function ensureAuthIdentity(
+  client: PoolClient,
+  userId: string,
+  email: string
+) {
+  const identitiesTable = await client.query<{ exists: boolean }>(
+    `SELECT to_regclass('auth.identities') IS NOT NULL AS "exists"`
+  );
+  if (!identitiesTable.rows[0]?.exists) return;
+
+  const columnsResult = await client.query<{ column_name: string }>(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'identities'
+    `
+  );
+  const columns = new Set(columnsResult.rows.map((row) => row.column_name));
+  const identityData = JSON.stringify({
+    sub: userId,
+    email,
+    email_verified: true,
+    phone_verified: false
+  });
+  const values: Record<string, unknown> = {
+    id: userId,
+    user_id: userId,
+    provider_id: userId,
+    identity_data: identityData,
+    provider: "email",
+    last_sign_in_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    email
+  };
+  const insertColumns = Object.keys(values).filter((column) =>
+    columns.has(column)
+  );
+
+  if (insertColumns.length === 0) return;
+
+  const quotedColumns = insertColumns.map((column) => `"${column}"`).join(", ");
+  const placeholders = insertColumns
+    .map((_, index) => `$${index + 1}`)
+    .join(", ");
+
+  await client.query(
+    `
+    INSERT INTO auth.identities (${quotedColumns})
+    VALUES (${placeholders})
+    ON CONFLICT DO NOTHING
+    `,
+    insertColumns.map((column) => values[column])
+  );
+}
+
+async function ensurePublicUser(
+  client: PoolClient,
+  userId: string,
+  email: string
+) {
+  await client.query(
+    `
+    INSERT INTO public."user" (id, email, active, "firstName", "lastName", about)
+    VALUES ($1, $2, true, '', '', '')
+    ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email
+    `,
+    [userId, email]
+  );
+
+  await client.query(
+    `INSERT INTO public."userPermission" (id) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [userId]
+  );
 }
 
 // Parse CLI arguments
@@ -103,74 +292,16 @@ async function seedDev() {
 
   console.log(`\nSeeding development environment for: ${email}\n`);
 
-  // Initialize Supabase admin client
-  const supabaseAdmin = createClient<Database>(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  );
-
   // Initialize PostgreSQL connection pool
   const pgPool = getPostgresConnectionPool(1);
   const client = await pgPool.connect();
 
   try {
-    // Step 1: Check if user already exists (via Supabase Auth API - cannot be in transaction)
+    // Step 1: Check if user already exists
     console.log("1. Checking for existing user...");
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u: any) => u.email === (email ?? "")
-    );
-
-    let userId: string;
-
-    if (existingUser) {
-      console.log(`   User ${email} already exists, using existing user.`);
-      userId = existingUser.id;
-
-      // Update password to known value
-      const { error: updateError } =
-        await supabaseAdmin.auth.admin.updateUserById(userId, {
-          password: DEV_PASSWORD
-        });
-      if (updateError) {
-        console.warn(
-          `   Warning: Could not update password: ${updateError.message}`
-        );
-      } else {
-        console.log(`   Password updated to: ${DEV_PASSWORD}`);
-      }
-    } else {
-      // Create new user
-      console.log("   Creating new user...");
-      const { data: newUser, error: createError } =
-        await supabaseAdmin.auth.admin.createUser({
-          email,
-          password: DEV_PASSWORD,
-          email_confirm: true,
-          app_metadata: {
-            role: "employee",
-            provider: "email",
-            providers: ["email"]
-          }
-        });
-
-      if (createError) {
-        throw new Error(`Failed to create user: ${createError.message}`);
-      }
-
-      if (!newUser.user) {
-        throw new Error("Failed to create user: No user returned");
-      }
-
-      userId = newUser.user.id;
-      console.log(`   User created with ID: ${userId}`);
-    }
+    const userId = await ensureDevelopmentAuthUser(client, email, DEV_PASSWORD);
+    console.log(`   User ready with ID: ${userId}`);
+    console.log(`   Password set to: ${DEV_PASSWORD}`);
 
     // Step 2: Update user's first name (inferred from email)
     const firstName = inferFirstNameFromEmail(email ?? "");

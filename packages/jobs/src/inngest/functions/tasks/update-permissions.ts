@@ -1,10 +1,9 @@
 import type { Result } from "@carbon/auth";
 import { error, getClaims, getPermissionCacheKey, success } from "@carbon/auth";
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import type { Database } from "@carbon/database";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "../../client";
+import type { LegacyPostgrestFunctionsClient } from "../legacy-client";
 
 export const updatePermissionsFunction = inngest.createFunction(
   { id: "update-permissions", retries: 3 },
@@ -32,7 +31,7 @@ export const updatePermissionsFunction = inngest.createFunction(
 );
 
 export async function updatePermissions(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   {
     id,
     permissions,
@@ -49,7 +48,7 @@ export async function updatePermissions(
   }
 ): Promise<Result> {
   if (await client.rpc("is_claims_admin")) {
-    const claims = await getClaims(client, id);
+    const claims = await getClaims(client as any, id);
 
     if (claims.error) return error(claims.error, "Failed to get claims");
 

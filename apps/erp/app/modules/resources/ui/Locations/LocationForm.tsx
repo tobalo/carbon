@@ -13,7 +13,6 @@ import {
   VStack
 } from "@carbon/react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { z } from "zod";
@@ -27,6 +26,7 @@ import {
 import AddressAutocomplete from "~/components/Form/AddressAutocomplete";
 import { usePermissions } from "~/hooks";
 import { locationValidator } from "~/modules/resources";
+import type { PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 
 type LocationFormProps = {

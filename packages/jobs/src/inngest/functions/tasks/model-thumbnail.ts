@@ -1,5 +1,6 @@
 import { getCarbonServiceRole } from "@carbon/auth/client.server";
-import { SUPABASE_ANON_KEY, SUPABASE_URL, VERCEL_URL } from "@carbon/env";
+import { CARBON_API_URL, CARBON_PUBLIC_KEY, VERCEL_URL } from "@carbon/env";
+import { uploadObject } from "@carbon/object-storage/server";
 import { inngest } from "../../client";
 
 export const modelThumbnailFunction = inngest.createFunction(
@@ -31,13 +32,13 @@ export const modelThumbnailFunction = inngest.createFunction(
       const client = getCarbonServiceRole();
 
       const url = getModelUrl(modelId);
-      const imageUrl = `${SUPABASE_URL}/functions/v1/thumbnail`;
+      const imageUrl = `${CARBON_API_URL}/functions/v1/thumbnail`;
 
       const response = await fetch(imageUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+          Authorization: `Bearer ${CARBON_PUBLIC_KEY}`
         },
         body: JSON.stringify({ url })
       });
@@ -47,35 +48,22 @@ export const modelThumbnailFunction = inngest.createFunction(
         throw new Error("Failed to generate thumbnail");
       }
 
-      const blob = new Blob([await response.arrayBuffer()], {
-        type: "image/png"
-      });
-
       const fileName = `${modelId}.png`;
-      const thumbnailFile = new File([blob], fileName, {
-        type: "image/png"
-      });
+      const thumbnailPath = `${companyId}/thumbnails/${modelId}/${fileName}`;
 
       console.log("Uploading thumbnail", { fileName });
 
-      const { data, error } = await client.storage
-        .from("private")
-        .upload(
-          `${companyId}/thumbnails/${modelId}/${fileName}`,
-          thumbnailFile,
-          {
-            upsert: true
-          }
-        );
-
-      if (error) {
-        console.error("Failed to upload thumbnail", { error });
-      }
+      await uploadObject({
+        bucket: "private",
+        key: thumbnailPath,
+        body: await response.arrayBuffer(),
+        contentType: "image/png"
+      });
 
       const result = await client
         .from("modelUpload")
         .update({
-          thumbnailPath: data?.path
+          thumbnailPath
         })
         .eq("id", modelId);
 

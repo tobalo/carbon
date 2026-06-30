@@ -4658,12 +4658,6 @@ msgstr "ウェブフックの作成に失敗しました: {0}"
 msgid "Failed to create work center: {0}"
 msgstr "ワークセンターの作成に失敗しました: {0}"
 
-msgid "Failed to delete file from old location"
-msgstr "古い場所からファイルを削除できませんでした"
-
-msgid "Failed to download file for moving"
-msgstr "ファイルの移動用ダウンロードに失敗しました"
-
 msgid "Failed to fetch item costs"
 msgstr "アイテムコストの取得に失敗しました"
 
@@ -4739,6 +4733,9 @@ msgstr "サプライヤー部品の詳細の読み込みに失敗しました"
 msgid "Failed to load tracked entities"
 msgstr "追跡対象エンティティの読み込みに失敗しました"
 
+msgid "Failed to move file"
+msgstr ""
+
 msgid "Failed to remove image: {errorMessage}"
 msgstr "画像の削除に失敗しました: {errorMessage}"
 
@@ -4802,9 +4799,6 @@ msgstr "CSVファイルのアップロードに失敗しました。"
 
 msgid "Failed to upload file"
 msgstr "ファイルのアップロードに失敗しました"
-
-msgid "Failed to upload file to new location"
-msgstr "新しい場所へのファイルアップロードに失敗しました"
 
 #. placeholder {0}: file.name
 #. placeholder {0}: fileUpload.name
@@ -10508,9 +10502,6 @@ msgstr "在庫切れ"
 
 msgid "Stop raising purchase orders after this date"
 msgstr "この日付以降、発注を停止します"
-
-msgid "Storage client not available"
-msgstr "ストレージクライアントが利用できません"
 
 msgid "Storage Rules"
 msgstr "保管ルール"

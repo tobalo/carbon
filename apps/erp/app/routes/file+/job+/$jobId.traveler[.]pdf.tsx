@@ -36,7 +36,7 @@ import {
   getDocumentTemplate,
   resolveSections
 } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { companyId } = await requirePermissions(request, {});
@@ -124,7 +124,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       // Get thumbnail if it exists
       let thumbnail: string | null = null;
       if (item.data.thumbnailPath || item.data.modelUpload?.thumbnailPath) {
-        thumbnail = await getBase64ImageFromSupabase(
+        thumbnail = await getBase64ImageFromStorage(
           serviceRole,
           item.data.thumbnailPath ?? item.data.modelUpload?.thumbnailPath ?? ""
         );

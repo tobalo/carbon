@@ -1,5 +1,4 @@
 import { useDisclosure, useOutsideClick } from "@carbon/react";
-import type { PostgrestError } from "@supabase/supabase-js";
 import debounce from "lodash/debounce";
 import words from "lodash/words";
 import type { AriaAttributes, ChangeEvent, KeyboardEvent } from "react";
@@ -13,8 +12,8 @@ import {
 } from "react";
 import { useFetcher } from "react-router";
 import type { Group, User } from "~/modules/users";
+import type { PostgrestError } from "~/types";
 import { path } from "~/utils/path";
-
 import type {
   IndividualOrGroup,
   OptionGroup,

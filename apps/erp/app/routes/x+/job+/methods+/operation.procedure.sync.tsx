@@ -1,6 +1,6 @@
 import { assertIsPost, error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validator } from "@carbon/form";
 import type { ActionFunctionArgs } from "react-router";
@@ -23,8 +23,7 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  const serviceRole = await getCarbonServiceRole();
-  const sync = await serviceRole.functions.invoke("get-method", {
+  const sync = await invokeCarbonServiceFunction("get-method", {
     body: {
       type: "procedureToOperation",
       sourceId: validation.data.procedureId,

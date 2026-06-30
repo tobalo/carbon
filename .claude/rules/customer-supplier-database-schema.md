@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/database/supabase/migrations/**"
+  - "packages/database/migrations/**"
   - "apps/erp/app/modules/sales/**"
   - "apps/erp/app/modules/purchasing/**"
 ---

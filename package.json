@@ -14,7 +14,6 @@
     "lint-staged": "16.4.0",
     "npm-run-all": "catalog:",
     "rimraf": "catalog:",
-    "supabase": "catalog:",
     "ts-morph": "22.0.0",
     "tsx": "catalog:",
     "turbo": "2.9.6",
@@ -38,7 +37,6 @@
     "ci:migrations": "pnpm --filter ci ci:migrations",
     "ci:deploy": "pnpm --filter ci ci:deploy",
     "clean": "turbo run clean && rimraf ./node_modules && rimraf ./pnpm-lock.yaml",
-    "db:function:new": "pnpm --filter @carbon/database db:function:new",
     "db:migrate": "crbn migrate",
     "db:migrate:new": "pnpm --filter @carbon/database db:migrate:new",
     "db:seed": "turbo run db:seed --no-cache",
@@ -58,7 +56,7 @@
     "lingui:compile": "lingui compile --namespace es",
     "lingui:extract": "lingui extract --clean",
     "lingui:clean": "node ./scripts/strip-po-headers.mjs",
-    "postinstall": "pnpm --filter @carbon/documents build",
+    "postinstall": "pnpm --filter @carbon/config build && pnpm --filter @carbon/documents build",
     "prepare": "pnpm exec husky install",
     "test": "turbo run test",
     "tool:new": "tsx scripts/create-tool.ts",
@@ -76,8 +74,10 @@
   ],
   "packageManager": "pnpm@10.33.4",
   "dependencies": {
+    "@carbon/object-storage": "workspace:*",
     "@opentelemetry/semantic-conventions": "1.40.0",
     "@react-router/remix-routes-option-adapter": "catalog:",
+    "axios": "catalog:",
     "cookie": "catalog:",
     "dompurify": "catalog:",
     "fast-uri": "3.1.0",
@@ -104,8 +104,7 @@
       "core-js",
       "esbuild",
       "protobufjs",
-      "sharp",
-      "supabase"
+      "sharp"
     ],
     "patchedDependencies": {
       "@ai-sdk-tools/store@1.2.0": "patches/@ai-sdk-tools__store@1.2.0.patch",

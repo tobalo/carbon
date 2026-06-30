@@ -1,6 +1,9 @@
 import { error } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import {
   dedupeViolations,
@@ -143,7 +146,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       .eq("id", companyId)
       .single();
 
-    const postReceipt = await serviceRole.functions.invoke("post-receipt", {
+    const postReceipt = await invokeCarbonServiceFunction("post-receipt", {
       body: {
         receiptId: receiptId,
         userId: userId,
@@ -175,7 +178,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       receiptMetadata.data?.sourceDocument === "Purchase Order" &&
       receiptMetadata.data?.sourceDocumentId
     ) {
-      const leadTimeUpdate = await serviceRole.functions.invoke(
+      const leadTimeUpdate = await invokeCarbonServiceFunction(
         "update-purchased-prices",
         {
           body: {

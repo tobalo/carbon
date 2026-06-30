@@ -2,7 +2,7 @@
 paths:
   - "apps/erp/app/modules/quality/ui/InboundInspections/**"
   - "apps/erp/app/modules/quality/quality.{server,service,models}.ts"
-  - "packages/database/supabase/migrations/*inbound-inspection*.sql"
+  - "packages/database/migrations/*inbound-inspection*.sql"
   - "packages/database/supabase/functions/post-receipt/index.ts"
 ---
 

@@ -1,6 +1,5 @@
+import type { CarbonClient } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LoaderFunctionArgs } from "react-router";
 import { QualityKPIs } from "~/modules/quality/quality.models";
 import { getCompanySettings } from "~/modules/settings";
@@ -381,7 +380,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 // --- Query Helpers ---
 
 async function getIssuesQuery(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     companyId,
     issueTypeId
@@ -405,7 +404,7 @@ async function getIssuesQuery(
 }
 
 async function getFilteredIssuesQuery(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   {
     companyId,
     start,
@@ -435,7 +434,7 @@ async function getFilteredIssuesQuery(
 }
 
 async function getIssueTypesMap(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ): Promise<Map<string, string>> {
   const result = await client

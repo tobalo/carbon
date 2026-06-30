@@ -1,11 +1,11 @@
-import type { Database, Json } from "@carbon/database";
+import type { CarbonClient } from "@carbon/auth";
+import type { Json } from "@carbon/database";
 import { getIntegrationConfigById, type IntegrationID } from "@carbon/ee";
 import { getIntegrationServerHooks } from "@carbon/ee/hooks.server";
 import { redis } from "@carbon/kv";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { sanitize } from "@carbon/utils";
 import type { z } from "zod";
 import type { Integration } from "~/modules/settings/types";
-import { sanitize } from "~/utils/supabase";
 import type { customFieldValidator } from "./settings.models";
 
 const INTEGRATION_CACHE_TTL = 3600;
@@ -56,7 +56,7 @@ export async function clearAllIntegrationCaches(): Promise<void> {
 }
 
 export async function deactivateIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     companyId: string;
@@ -85,7 +85,7 @@ export async function deactivateIntegration(
 }
 
 export async function deleteCustomField(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -104,7 +104,7 @@ interface CompanyIntegration {
 }
 
 export async function getCompanyIntegrations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ): Promise<CompanyIntegration[]> {
   const cacheKey = `integrations:${companyId}`;
@@ -205,7 +205,7 @@ export async function getCompanyIntegrations(
 }
 
 export async function hasIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   integrationId: string
 ): Promise<boolean> {
@@ -214,7 +214,7 @@ export async function hasIntegration(
 }
 
 export async function getCompanyIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   integrationId: string
 ): Promise<CompanyIntegration | null> {
@@ -226,7 +226,7 @@ export async function getCompanyIntegration(
 }
 
 export async function getSlackIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ): Promise<{ token: string; channelId?: string } | null> {
   const integration = await getCompanyIntegration(client, companyId, "slack");
@@ -248,14 +248,14 @@ export async function getSlackIntegration(
 }
 
 export async function hasSlackIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ): Promise<boolean> {
   return hasIntegration(client, companyId, "slack");
 }
 
 export async function upsertCompanyIntegration(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   update: {
     id: string;
     active: boolean;
@@ -282,7 +282,7 @@ export async function upsertCompanyIntegration(
 }
 
 export async function upsertCustomField(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   customField:
     | (Omit<z.infer<typeof customFieldValidator>, "id"> & {
         companyId: string;
@@ -324,7 +324,7 @@ export async function upsertCustomField(
 }
 
 export async function updateCustomFieldsSortOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   updates: {
     id: string;
     sortOrder: number;
@@ -391,7 +391,7 @@ export async function getIntegrationHealth(
 }
 
 export async function getIntegrationsWithHealth(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   const results = await client

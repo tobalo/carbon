@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSignedDownloadUrl } from "@carbon/object-storage/server";
 import { auditConfig, getAuditableTableNames } from "./audit.config.ts";
 import type {
   AuditLogArchive,
@@ -11,8 +11,9 @@ import {
   createEventSystemSubscription,
   deleteEventSystemSubscriptionsByName
 } from "./event.ts";
+import type { LegacyPostgrestClient } from "./legacy-client.ts";
 
-// Type for Supabase client with our custom RPC functions
+// Type for PostgREST client with our custom RPC functions
 type AuditRpcClient = {
   rpc(
     fn: "create_audit_log_table",
@@ -117,7 +118,7 @@ function sanitizeAuditEntries(entries: AuditLogEntry[]): AuditLogEntry[] {
  * (e.g., customerPayment, customerShipping) roll up into the parent entity view.
  */
 export async function getEntityAuditLog(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string,
   entityType: string,
   entityId: string,
@@ -149,7 +150,7 @@ export async function getEntityAuditLog(
  * Get audit log entries with filters (for global audit log view)
  */
 export async function getGlobalAuditLog(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string,
   filters?: AuditLogFilters
 ): Promise<AuditLogResponse> {
@@ -203,7 +204,7 @@ export async function getGlobalAuditLog(
  * Insert audit log entries (used by the audit handler task)
  */
 export async function insertAuditLogEntries(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string,
   entries: CreateAuditLogEntry[]
 ): Promise<number> {
@@ -229,7 +230,7 @@ export async function insertAuditLogEntries(
  * Creates the per-company audit log table and event subscriptions
  */
 export async function enableAuditLog(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string
 ): Promise<void> {
   // Create the per-company audit log table
@@ -273,7 +274,7 @@ export async function enableAuditLog(
  * Removes event subscriptions but keeps existing audit logs
  */
 export async function disableAuditLog(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string
 ): Promise<void> {
   // Update company flag
@@ -302,7 +303,7 @@ export async function disableAuditLog(
  * Check if audit logging is enabled for a company
  */
 export async function isAuditLogEnabled(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string
 ): Promise<boolean> {
   const { data, error } = await client
@@ -324,7 +325,7 @@ export async function isAuditLogEnabled(
  * Get list of archived audit log periods for a company
  */
 export async function getAuditLogArchives(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string
 ): Promise<AuditLogArchive[]> {
   const { data, error } = await client
@@ -344,7 +345,7 @@ export async function getAuditLogArchives(
  * Get a signed URL for downloading an archived audit log
  */
 export async function getArchiveDownloadUrl(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   archiveId: string
 ): Promise<string> {
   // First get the archive record to get the path
@@ -358,23 +359,23 @@ export async function getArchiveDownloadUrl(
     throw new Error(`Archive not found: ${fetchError?.message}`);
   }
 
-  // Generate signed URL (1 hour expiry)
-  const { data, error } = await client.storage
-    .from(auditConfig.archiveBucket)
-    .createSignedUrl((archive as { archivePath: string }).archivePath, 3600);
-
-  if (error || !data?.signedUrl) {
-    throw new Error(`Failed to generate download URL: ${error?.message}`);
+  try {
+    return await createSignedDownloadUrl({
+      bucket: auditConfig.archiveBucket,
+      key: (archive as { archivePath: string }).archivePath,
+      expiresIn: 3600
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to generate download URL: ${message}`);
   }
-
-  return data.signedUrl;
 }
 
 /**
  * Get audit logs for archival
  */
 export async function getAuditLogsForArchive(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string,
   cutoffDate: Date
 ): Promise<AuditLogEntry[]> {
@@ -398,7 +399,7 @@ export async function getAuditLogsForArchive(
  * Used by the archive task after successful export
  */
 export async function deleteOldAuditLogs(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string,
   cutoffDate: Date
 ): Promise<number> {
@@ -421,7 +422,7 @@ export async function deleteOldAuditLogs(
  * Record an archive in the tracking table
  */
 export async function recordAuditLogArchive(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   archive: Omit<AuditLogArchive, "id" | "createdAt">
 ): Promise<void> {
   const { error } = await client.from("auditLogArchive").insert(archive);
@@ -438,7 +439,7 @@ export async function recordAuditLogArchive(
  * company has already enabled audit logging.
  */
 export async function syncAuditSubscriptions(
-  client: SupabaseClient,
+  client: LegacyPostgrestClient,
   companyId: string
 ): Promise<void> {
   const allTables = getAuditableTableNames();

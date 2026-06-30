@@ -1,36 +1,41 @@
-import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
+
 const companyId = "********************";
 const apiKey = "crbn_******************";
-const publicApiKey =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxb2ppamlpamtuaGJneW9nbWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2MDU0MzksImV4cCI6MjAzOTE4MTQzOX0.JMzLs9Y4Y4kQ-jhQHrSqgNyHSZgrkwzBd1PwPbVPtbQ";
+const apiUrl = "https://rest.carbon.ms";
 
-const carbon = createClient("https://api.carbon.ms", publicApiKey, {
-  global: {
+async function carbonFetch(path: string) {
+  const response = await fetch(`${apiUrl}${path}`, {
     headers: {
       "carbon-key": apiKey,
     },
-  },
-});
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `${response.status} ${response.statusText}: ${await response.text()}`
+    );
+  }
+
+  return response;
+}
 
 (async () => {
-  const { data, error } = await carbon
-    .from("salesInvoice")
-    .select(
-      "*, salesInvoiceLine(*), salesInvoiceShipment(*), customer!salesInvoice_customerId_fkey(name, tags)"
-    )
-    .eq("companyId", companyId)
-    .limit(1000)
-    .order("createdAt", { ascending: false });
+  const params = new URLSearchParams({
+    companyId: `eq.${companyId}`,
+    limit: "1000",
+    order: "createdAt.desc",
+    select:
+      "*, salesInvoiceLine(*), salesInvoiceShipment(*), customer!salesInvoice_customerId_fkey(name, tags)",
+  });
+
+  const response = await carbonFetch(`/salesInvoice?${params.toString()}`);
+  const data = await response.json();
 
   if (data) {
     fs.writeFileSync(
       "sales-invoice-report.json",
       JSON.stringify(data, null, 2)
     );
-  }
-
-  if (error) {
-    console.error(error);
   }
 })();

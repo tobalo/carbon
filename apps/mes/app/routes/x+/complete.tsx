@@ -1,6 +1,9 @@
 import { assertIsPost, error, success } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
+import {
+  getCarbonServiceRole,
+  invokeCarbonServiceFunction
+} from "@carbon/auth/client.server";
 import { flash } from "@carbon/auth/session.server";
 import { validationError, validator } from "@carbon/form";
 import { trigger } from "@carbon/jobs";
@@ -121,7 +124,9 @@ export async function action({ request }: ActionFunctionArgs) {
       0);
 
   if (validation.data.trackingType === "Serial") {
-    const response = await serviceRole.functions.invoke("issue", {
+    const response = await invokeCarbonServiceFunction<{
+      newTrackedEntityId?: string;
+    }>("issue", {
       body: {
         type: "jobOperationSerialComplete",
         ...validation.data,
@@ -193,7 +198,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     return redirect(`${path.to.operation(validation.data.jobOperationId)}`);
   } else if (validation.data.trackingType === "Batch") {
-    const response = await serviceRole.functions.invoke("issue", {
+    const response = await invokeCarbonServiceFunction("issue", {
       body: {
         type: "jobOperationBatchComplete",
         ...validation.data,
@@ -272,7 +277,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const issue = await serviceRole.functions.invoke("issue", {
+    const issue = await invokeCarbonServiceFunction("issue", {
       body: {
         id: validation.data.jobOperationId,
         type: "jobOperation",

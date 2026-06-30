@@ -11,9 +11,9 @@ import {
   insertQuoteLines,
   OrderSchema
 } from "@carbon/ee/paperless-parts";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { inngest } from "../../client";
+import type { LegacyPostgrestFunctionsClient } from "../legacy-client";
 
 const payloadSchema = z.discriminatedUnion("type", [
   z.object({
@@ -773,7 +773,7 @@ export const paperlessPartsFunction = inngest.createFunction(
 );
 
 async function getNextSequence(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   table: string,
   companyId: string
 ) {
@@ -784,7 +784,7 @@ async function getNextSequence(
 }
 
 async function getCustomerPayment(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   customerId: string
 ) {
   return client
@@ -795,7 +795,7 @@ async function getCustomerPayment(
 }
 
 async function getCustomerShipping(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   customerId: string
 ) {
   return client
@@ -806,7 +806,7 @@ async function getCustomerShipping(
 }
 
 async function getCurrencyByCode(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   companyGroupId: string,
   currencyCode: string
 ) {
@@ -818,19 +818,22 @@ async function getCurrencyByCode(
     .single();
 }
 
-async function deleteQuote(client: SupabaseClient<Database>, quoteId: string) {
+async function deleteQuote(
+  client: LegacyPostgrestFunctionsClient,
+  quoteId: string
+) {
   return client.from("quote").delete().eq("id", quoteId);
 }
 
 async function deleteSalesOrder(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   salesOrderId: string
 ) {
   return client.from("salesOrder").delete().eq("id", salesOrderId);
 }
 
 async function upsertExternalLink(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestFunctionsClient,
   externalLink: {
     documentType: "Quote" | "SupplierQuote" | "Customer";
     documentId: string;

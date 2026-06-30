@@ -1,9 +1,8 @@
+import type { CarbonClient } from "@carbon/auth";
 import { requirePermissions } from "@carbon/auth/auth.server";
-import type { Database } from "@carbon/database";
 import { Button, Loading, useHydrated, VStack } from "@carbon/react";
 import { msg } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { ParentSize } from "@visx/responsive";
 import { ReactFlowProvider, useReactFlow, useStore } from "@xyflow/react";
 import XYFlowStyle from "@xyflow/react/dist/style.css?url";
@@ -188,7 +187,7 @@ function getEntityJobId(entity: TrackedEntity | undefined): string | null {
 }
 
 async function getJobReadableId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobId: string
 ): Promise<string> {
   const job = await client.from("job").select("jobId").eq("id", jobId).single();

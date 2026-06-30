@@ -32,7 +32,7 @@ import {
 import type { PurchasingRFQLine } from "~/modules/purchasing/types";
 import type { Company } from "~/modules/settings";
 import { getCompany } from "~/modules/settings";
-import { getBase64ImageFromSupabase } from "~/modules/shared";
+import { getBase64ImageFromStorage } from "~/modules/shared";
 
 export const meta = () => {
   return [{ title: "RFQ Preview" }];
@@ -81,7 +81,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       ? await Promise.all(
           Object.entries(thumbnailPaths).map(([lineId, path]) => {
             if (!path) return null;
-            return getBase64ImageFromSupabase(client, path).then((data) => ({
+            return getBase64ImageFromStorage(client, path).then((data) => ({
               id: lineId,
               data
             }));

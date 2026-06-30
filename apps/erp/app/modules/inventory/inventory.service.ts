@@ -1,15 +1,20 @@
+import type { CarbonClient } from "@carbon/auth";
+import { invokeCarbonServiceFunction } from "@carbon/auth/client.server";
 import type { Database, Json } from "@carbon/database";
 import { fetchAllFromTable } from "@carbon/database";
+import {
+  isListedFileObject,
+  listObjectsResult
+} from "@carbon/object-storage/server";
 import type { TrackedEntityAttributes } from "@carbon/utils";
+import { sanitize } from "@carbon/utils";
 import { getLocalTimeZone, now, today } from "@internationalized/date";
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 import type { z } from "zod";
 import { getNextSequence } from "~/modules/settings";
-import type { StorageItem } from "~/types";
+import type { PostgrestError, StorageItem } from "~/types";
 import type { GenericQueryFilters } from "~/utils/query";
 import { setGenericQueryFilters } from "~/utils/query";
-import { sanitize } from "~/utils/supabase";
 import { getItemStorageUnitQuantities } from "../items/items.service";
 import type {
   batchPropertyOrderValidator,
@@ -32,36 +37,27 @@ import {
   reconcileReceiptLineSerials
 } from "./inventory.models";
 
-export async function deleteBatchProperty(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function deleteBatchProperty(client: CarbonClient, id: string) {
   return client.from("batchProperty").delete().eq("id", id);
 }
 
-export async function deleteKanban(
-  client: SupabaseClient<Database>,
-  kanbanId: string
-) {
+export async function deleteKanban(client: CarbonClient, kanbanId: string) {
   return client.from("kanban").delete().eq("id", kanbanId);
 }
 
-export async function deleteReceipt(
-  client: SupabaseClient<Database>,
-  receiptId: string
-) {
+export async function deleteReceipt(client: CarbonClient, receiptId: string) {
   return client.from("receipt").delete().eq("id", receiptId);
 }
 
 export async function deleteReceiptLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   receiptLineId: string
 ) {
   return client.from("receiptLine").delete().eq("id", receiptLineId);
 }
 
 export async function deleteStorageUnit(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnitId: string
 ) {
   return client.from("storageUnit").delete().eq("id", storageUnitId);
@@ -71,7 +67,7 @@ export async function deleteStorageUnit(
  * Deletes a storage unit along with every descendant in its subtree.
  *
  * The `storageUnit_parentId_fkey` FK is `ON DELETE RESTRICT`, so you cannot
- * delete a parent while it still has children. Supabase evaluates FK
+ * delete a parent while it still has children. Postgres evaluates FK
  * constraints at statement end, so deleting the whole subtree in a single
  * `WHERE id IN (...)` statement is safe - all referencing rows go away in
  * the same transaction.
@@ -80,7 +76,7 @@ export async function deleteStorageUnit(
  * self + descendants thanks to `ancestorPath @> ARRAY[id]`).
  */
 export async function deleteStorageUnitCascade(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnitId: string
 ) {
   const descendants = await getStorageUnitDescendants(client, storageUnitId);
@@ -88,7 +84,7 @@ export async function deleteStorageUnitCascade(
 
   // storageUnits_recursive is a view, so every column is nominally nullable
   // in the generated types. Narrow `id` to a concrete string[] for
-  // Supabase's `.in()` signature.
+  // the PostgREST client's `.in()` signature.
   const ids = (descendants.data ?? [])
     .map((row) => row.id)
     .filter((id): id is string => id != null);
@@ -101,22 +97,19 @@ export async function deleteStorageUnitCascade(
   return client.from("storageUnit").delete().in("id", ids);
 }
 
-export async function deleteShipment(
-  client: SupabaseClient<Database>,
-  shipmentId: string
-) {
+export async function deleteShipment(client: CarbonClient, shipmentId: string) {
   return client.from("shipment").delete().eq("id", shipmentId);
 }
 
 export async function deleteShipmentLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipmentLineId: string
 ) {
   return client.from("shipmentLine").delete().eq("id", shipmentLineId);
 }
 
 export async function deleteShippingMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shippingMethodId: string
 ) {
   return client
@@ -126,14 +119,14 @@ export async function deleteShippingMethod(
 }
 
 export async function deleteStockTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferId: string
 ) {
   return client.from("stockTransfer").delete().eq("id", stockTransferId);
 }
 
 export async function deleteStockTransferLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferLineId: string
 ) {
   return client
@@ -143,21 +136,21 @@ export async function deleteStockTransferLine(
 }
 
 export async function deleteWarehouseTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transferId: string
 ) {
   return client.from("warehouseTransfer").delete().eq("id", transferId);
 }
 
 export async function deleteWarehouseTransferLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transferLineId: string
 ) {
   return client.from("warehouseTransferLine").delete().eq("id", transferLineId);
 }
 
 export async function getItemLedgerPage(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string,
   companyId: string,
   locationId: string,
@@ -206,7 +199,7 @@ export async function getItemLedgerPage(
  * inferred from a full page, so there's no whole-table count per request.
  */
 export async function getItemLedgerActivity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -254,7 +247,7 @@ export async function getItemLedgerActivity(
 }
 
 export async function getBatchProperties(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemIds: string[],
   companyId: string
 ) {
@@ -267,7 +260,7 @@ export async function getBatchProperties(
 }
 
 export async function getInventoryItems(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string,
   companyId: string,
   args: GenericQueryFilters & {
@@ -299,7 +292,7 @@ export async function getInventoryItems(
 }
 
 export async function getInventoryItemsCount(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string,
   companyId: string,
   args: GenericQueryFilters & {
@@ -326,7 +319,7 @@ export async function getInventoryItemsCount(
 }
 
 export async function getKanbans(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string,
   companyId: string,
   args: GenericQueryFilters & {
@@ -353,15 +346,12 @@ export async function getKanbans(
   return query;
 }
 
-export async function getKanban(
-  client: SupabaseClient<Database>,
-  kanbanId: string
-) {
+export async function getKanban(client: CarbonClient, kanbanId: string) {
   return client.from("kanbans").select("*").eq("id", kanbanId).single();
 }
 
 export async function getStockTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferId: string
 ) {
   return client
@@ -372,7 +362,7 @@ export async function getStockTransfer(
 }
 
 export async function getStockTransferLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferLineId: string
 ) {
   return client
@@ -383,7 +373,7 @@ export async function getStockTransferLine(
 }
 
 export async function getStockTransferLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferId: string
 ) {
   return client
@@ -395,7 +385,7 @@ export async function getStockTransferLines(
 }
 
 export async function getStockTransferTracking(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferId: string,
   companyId: string
 ) {
@@ -408,7 +398,7 @@ export async function getStockTransferTracking(
 }
 
 export async function getStockTransfers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -437,7 +427,7 @@ export async function getStockTransfers(
 }
 
 export async function getDefaultStorageUnitOrStorageUnitWithHighestQuantity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string,
   locationId: string,
   companyId: string
@@ -473,7 +463,7 @@ export async function getDefaultStorageUnitOrStorageUnitWithHighestQuantity(
 }
 
 export async function getReceipts(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -499,22 +489,16 @@ export async function getReceipts(
   return query;
 }
 
-export async function getReceipt(
-  client: SupabaseClient<Database>,
-  receiptId: string
-) {
+export async function getReceipt(client: CarbonClient, receiptId: string) {
   return client.from("receipt").select("*").eq("id", receiptId).single();
 }
 
-export async function getReceiptLines(
-  client: SupabaseClient<Database>,
-  receiptId: string
-) {
+export async function getReceiptLines(client: CarbonClient, receiptId: string) {
   return client.from("receiptLines").select("*").eq("receiptId", receiptId);
 }
 
 export async function getReceiptTracking(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   receiptId: string,
   companyId: string
 ) {
@@ -526,7 +510,7 @@ export async function getReceiptTracking(
 }
 
 export async function getReceiptLineTracking(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   receiptLineId: string,
   companyId: string
 ) {
@@ -546,7 +530,7 @@ export async function getReceiptLineTracking(
  * stays in lockstep with the post-time validation in ReceiptPostModal.
  */
 export async function reconcileReceiptSerialEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     receiptId: string;
     companyId: string;
@@ -597,18 +581,17 @@ export async function reconcileReceiptSerialEntities(
 }
 
 export async function getReceiptFiles(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   companyId: string,
   lineIds: string[]
 ): Promise<{ data: StorageItem[]; error: string | null }> {
   const promises = lineIds.map((lineId) =>
-    client.storage
-      .from("private")
-      .list(`${companyId}/inventory/${lineId}`)
-      .then((result) => ({
+    listObjectsResult("private", `${companyId}/inventory/${lineId}`).then(
+      (result) => ({
         ...result,
         lineId
-      }))
+      })
+    )
   );
 
   const results = await Promise.all(promises);
@@ -625,7 +608,7 @@ export async function getReceiptFiles(
   // Merge data arrays and add lineId as bucketName
   return {
     data: results.flatMap((result) =>
-      (result.data ?? []).map((file) => ({
+      (result.data ?? []).filter(isListedFileObject).map((file) => ({
         ...file,
         bucket: result.lineId
       }))
@@ -635,7 +618,7 @@ export async function getReceiptFiles(
 }
 
 export async function getSerialNumbersForItem(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -666,7 +649,7 @@ export async function getSerialNumbersForItem(
  * `excludeLineId` keeps the current line's own allocation visible.
  */
 export async function getAvailableTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -691,7 +674,7 @@ export async function getAvailableTrackedEntities(
  * the picker's default sort. Falls back to "Default" (smart) when unset.
  */
 export async function getPickOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { itemId: string; locationId: string; companyId: string }
 ): Promise<Database["public"]["Enums"]["pickMethodSortMethod"]> {
   const { data } = await client
@@ -705,7 +688,7 @@ export async function getPickOrder(
 }
 
 export async function getBatchNumbersForItem(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     itemId: string;
     companyId: string;
@@ -724,7 +707,7 @@ export async function getBatchNumbersForItem(
 }
 
 export async function getStorageUnitsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -736,7 +719,7 @@ export async function getStorageUnitsList(
 }
 
 export async function getStorageUnitsListForLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string
 ) {
@@ -756,7 +739,7 @@ export async function getStorageUnitsListForLocation(
 // and the full ancestorPath (root → node ids). Sort by ancestorPath so the
 // caller can render a flat list that visually nests by depth.
 export async function getStorageUnitsTreeForLocation(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string
 ) {
@@ -779,7 +762,7 @@ export async function getStorageUnitsTreeForLocation(
 }
 
 export async function getStorageUnits(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   locationId: string,
   companyId: string,
   args: GenericQueryFilters & {
@@ -808,7 +791,7 @@ export async function getStorageUnits(
 }
 
 export async function getStorageUnit(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnitId: string
 ) {
   return client
@@ -819,7 +802,7 @@ export async function getStorageUnit(
 }
 
 export async function getEffectiveWorkCenterId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnitId: string
 ) {
   return client.rpc("get_effective_work_center_id", {
@@ -830,7 +813,7 @@ export async function getEffectiveWorkCenterId(
 // Roots only (depth = 1). Honors search/filter/pagination so the table can
 // paginate top-level storage units while children load lazily on demand.
 export async function getStorageUnitRoots(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string,
   args: GenericQueryFilters & { search: string | null }
@@ -856,7 +839,7 @@ export async function getStorageUnitRoots(
 // Immediate children of a single parent (one level deep). Used by the lazy
 // expand handler in the StorageUnits table.
 export async function getStorageUnitChildren(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   parentId: string
 ) {
   return client
@@ -873,7 +856,7 @@ export async function getStorageUnitChildren(
 // the depth cap keeps very deep trees from loading their entire subtree
 // eagerly — anything below `maxDepth` still lazy-loads on demand.
 export async function getStorageUnitSubtrees(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string,
   rootIds: string[],
@@ -896,7 +879,7 @@ export async function getStorageUnitSubtrees(
 // Set of storageUnit ids that have at least one child in the given location.
 // Drives whether the table renders an expand chevron on a row.
 export async function getStorageUnitParentIdsWithChildren(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string
 ) {
@@ -921,7 +904,7 @@ export async function getStorageUnitParentIdsWithChildren(
 // flat ordered row set + the parentIds that should be pre-expanded so that
 // matches are visible to the user.
 export async function searchStorageUnitsWithAncestors(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string,
   search: string
@@ -971,7 +954,7 @@ export async function searchStorageUnitsWithAncestors(
 }
 
 export async function getStockMovements(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1002,7 +985,7 @@ export async function getStockMovements(
 }
 
 export async function getShipments(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1028,15 +1011,12 @@ export async function getShipments(
   return query;
 }
 
-export async function getShipment(
-  client: SupabaseClient<Database>,
-  shipmentId: string
-) {
+export async function getShipment(client: CarbonClient, shipmentId: string) {
   return client.from("shipment").select("*").eq("id", shipmentId).single();
 }
 
 export async function getShipmentLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipmentId: string
 ) {
   return client
@@ -1046,25 +1026,24 @@ export async function getShipmentLines(
 }
 
 export async function getShipmentLinesWithDetails(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipmentId: string
 ) {
   return client.from("shipmentLines").select("*").eq("shipmentId", shipmentId);
 }
 
 export async function getShipmentFiles(
-  client: SupabaseClient<Database>,
+  _client: CarbonClient,
   companyId: string,
   lineIds: string[]
 ): Promise<{ data: StorageItem[]; error: string | null }> {
   const promises = lineIds.map((lineId) =>
-    client.storage
-      .from("private")
-      .list(`${companyId}/inventory/${lineId}`)
-      .then((result) => ({
+    listObjectsResult("private", `${companyId}/inventory/${lineId}`).then(
+      (result) => ({
         ...result,
         lineId
-      }))
+      })
+    )
   );
 
   const results = await Promise.all(promises);
@@ -1081,7 +1060,7 @@ export async function getShipmentFiles(
   // Merge data arrays and add lineId as bucketName
   return {
     data: results.flatMap((result) =>
-      (result.data ?? []).map((file) => ({
+      (result.data ?? []).filter(isListedFileObject).map((file) => ({
         ...file,
         bucket: result.lineId
       }))
@@ -1091,7 +1070,7 @@ export async function getShipmentFiles(
 }
 
 export async function getShipmentRelatedItems(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipmentId: string,
   sourceDocumentId: string
 ) {
@@ -1116,7 +1095,7 @@ export async function getShipmentRelatedItems(
 }
 
 export async function getShipmentTracking(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipmentId: string,
   companyId: string
 ) {
@@ -1128,7 +1107,7 @@ export async function getShipmentTracking(
 }
 
 export async function getShipmentLineTracking(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipmentLineId: string,
   companyId: string
 ) {
@@ -1140,7 +1119,7 @@ export async function getShipmentLineTracking(
 }
 
 export async function getShippingMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shippingMethodId: string
 ) {
   return client
@@ -1151,7 +1130,7 @@ export async function getShippingMethod(
 }
 
 export async function getShippingMethods(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1178,7 +1157,7 @@ export async function getShippingMethods(
 }
 
 export async function getShippingMethodsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -1190,7 +1169,7 @@ export async function getShippingMethodsList(
 }
 
 export async function getShippingTermsList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return client
@@ -1202,7 +1181,7 @@ export async function getShippingTermsList(
 }
 
 export async function getTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1229,7 +1208,7 @@ export async function getTrackedEntities(
 }
 
 export async function getTrackedEntitiesByMakeMethodId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   jobMakeMethodId: string
 ) {
   return client
@@ -1240,7 +1219,7 @@ export async function getTrackedEntitiesByMakeMethodId(
 }
 
 export async function getTrackedEntity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   trackedEntityId: string
 ) {
   return client
@@ -1268,7 +1247,7 @@ export async function getTrackedEntity(
  *   ]
  */
 export async function updateTrackedEntityExpiry(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     trackedEntityId: string;
     expirationDate: string | null;
@@ -1324,7 +1303,7 @@ export async function updateTrackedEntityExpiry(
 }
 
 export async function getTrackedEntitiesByOperationId(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   operationId: string
 ) {
   const jobOperation = await client
@@ -1346,7 +1325,7 @@ export async function getTrackedEntitiesByOperationId(
 }
 
 export async function getWarehouseTransfers(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -1375,7 +1354,7 @@ export async function getWarehouseTransfers(
 }
 
 export async function getWarehouseTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transferId: string
 ) {
   return client
@@ -1388,7 +1367,7 @@ export async function getWarehouseTransfer(
 }
 
 export async function getWarehouseTransferLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transferId: string,
   lineId: string
 ) {
@@ -1403,7 +1382,7 @@ export async function getWarehouseTransferLine(
 }
 
 export async function getWarehouseTransferLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transferId: string
 ) {
   return client
@@ -1415,7 +1394,7 @@ export async function getWarehouseTransferLines(
 }
 
 export async function insertManualInventoryAdjustment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   inventoryAdjustment: z.infer<typeof inventoryAdjustmentValidator> & {
     companyId: string;
     createdBy: string;
@@ -1760,7 +1739,7 @@ export async function insertManualInventoryAdjustment(
 }
 
 export async function updateBatchPropertyOrder(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   data: Omit<
     z.infer<typeof batchPropertyOrderValidator>,
     "batchPropertyGroupId"
@@ -1773,7 +1752,7 @@ export async function updateBatchPropertyOrder(
 }
 
 export async function updateStockTransferStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     id: string;
     status: Database["public"]["Enums"]["stockTransferStatus"];
@@ -1795,7 +1774,7 @@ export async function updateStockTransferStatus(
 }
 
 export async function upsertBatchProperty(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   batchProperty: z.infer<typeof batchPropertyValidator> & {
     companyId: string;
     userId: string;
@@ -1822,7 +1801,7 @@ export async function upsertBatchProperty(
 }
 
 export async function upsertKanban(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   kanban:
     | (Omit<z.infer<typeof kanbanValidator>, "id"> & {
         companyId: string;
@@ -1856,7 +1835,7 @@ export async function upsertKanban(
 }
 
 export async function upsertReceipt(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   receipt:
     | (Omit<z.infer<typeof receiptValidator>, "id" | "receiptId"> & {
         receiptId: string;
@@ -1886,7 +1865,7 @@ export async function upsertReceipt(
 }
 
 export async function upsertStorageUnit(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnit:
     | (Omit<z.infer<typeof storageUnitValidator>, "id"> & {
         companyId: string;
@@ -1921,7 +1900,7 @@ export async function upsertStorageUnit(
 }
 
 export async function upsertShippingMethod(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shippingMethod:
     | (Omit<z.infer<typeof shippingMethodValidator>, "id"> & {
         companyId: string;
@@ -1950,7 +1929,7 @@ export async function upsertShippingMethod(
 }
 
 export async function upsertShipment(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   shipment:
     | (Omit<z.infer<typeof shipmentValidator>, "id" | "shipmentId"> & {
         shipmentId: string;
@@ -1980,7 +1959,7 @@ export async function upsertShipment(
 }
 
 export async function upsertStockTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransfer:
     | {
         locationId: string;
@@ -2017,7 +1996,7 @@ export async function upsertStockTransfer(
 }
 
 export async function upsertStockTransferLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   stockTransferLine:
     | (Omit<z.infer<typeof stockTransferLineValidator>, "id"> & {
         companyId: string;
@@ -2044,7 +2023,7 @@ export async function upsertStockTransferLine(
 }
 
 export async function upsertStockTransferLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     lines: z.infer<typeof stockTransferValidator>["lines"];
     stockTransferId: string;
@@ -2064,7 +2043,7 @@ export async function upsertStockTransferLines(
 }
 
 export async function upsertWarehouseTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transfer:
     | (Omit<z.infer<typeof warehouseTransferValidator>, "id" | "transferId"> & {
         transferId: string;
@@ -2098,7 +2077,7 @@ export async function upsertWarehouseTransfer(
 }
 
 export async function updateWarehouseTransferStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   transferId: string,
   status: Database["public"]["Tables"]["warehouseTransfer"]["Row"]["status"],
   updatedBy: string
@@ -2114,7 +2093,7 @@ export async function updateWarehouseTransferStatus(
 }
 
 export async function upsertWarehouseTransferLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   line:
     | Database["public"]["Tables"]["warehouseTransferLine"]["Insert"]
     | (Database["public"]["Tables"]["warehouseTransferLine"]["Update"] & {
@@ -2145,7 +2124,7 @@ export async function upsertWarehouseTransferLine(
 }
 
 export async function getDefaultStorageUnitForJob(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemId: string,
   locationId: string,
   companyId: string
@@ -2188,7 +2167,7 @@ export async function getDefaultStorageUnitForJob(
 // ----------------------------------------------------------------------------
 
 export async function getStorageUnitTree(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   locationId: string
 ) {
@@ -2203,7 +2182,7 @@ export async function getStorageUnitTree(
 }
 
 export async function getStorageUnitDescendants(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnitId: string
 ) {
   return client
@@ -2215,7 +2194,7 @@ export async function getStorageUnitDescendants(
 }
 
 export async function expandStorageUnitIdsWithDescendants(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageUnitIds: string[]
 ): Promise<string[]> {
   if (storageUnitIds.length === 0) return [];
@@ -2235,7 +2214,7 @@ export async function expandStorageUnitIdsWithDescendants(
 // ----------------------------------------------------------------------------
 
 export async function getStorageTypeUsage(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -2248,7 +2227,7 @@ export async function getStorageTypeUsage(
 }
 
 export async function deleteStorageTypeWithCascade(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   id: string,
   companyId: string
 ) {
@@ -2273,7 +2252,7 @@ export async function deleteStorageTypeWithCascade(
 }
 
 export async function getStorageTypes(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args?: GenericQueryFilters & { search: string | null }
 ) {
@@ -2292,15 +2271,12 @@ export async function getStorageTypes(
   return query;
 }
 
-export async function getStorageType(
-  client: SupabaseClient<Database>,
-  id: string
-) {
+export async function getStorageType(client: CarbonClient, id: string) {
   return client.from("storageType").select("*").eq("id", id).single();
 }
 
 export async function getStorageTypesList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string
 ) {
   return fetchAllFromTable<{
@@ -2312,7 +2288,7 @@ export async function getStorageTypesList(
 }
 
 export async function upsertStorageType(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   storageType:
     | (Omit<z.infer<typeof storageTypeValidator>, "id"> & {
         companyId: string;
@@ -2344,7 +2320,7 @@ export async function upsertStorageType(
 }
 
 export async function getShelfLifeForItems(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   itemIds: string[]
 ) {
   if (itemIds.length === 0) return { data: [], error: null };
@@ -2360,7 +2336,7 @@ export async function getShelfLifeForItems(
  * editing an existing batch / serial.
  */
 export async function getTrackedEntityExpirations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   trackedEntityIds: string[]
 ): Promise<Record<string, string | null>> {
   if (trackedEntityIds.length === 0) return {};
@@ -2382,7 +2358,7 @@ export async function getTrackedEntityExpirations(
 // ----------------------------------------------------------------------------
 
 export async function getPickingLists(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   args: GenericQueryFilters & {
     search: string | null;
@@ -2424,7 +2400,7 @@ export async function getPickingLists(
 }
 
 export async function getPickingList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ) {
   return client
@@ -2437,7 +2413,7 @@ export async function getPickingList(
 }
 
 export async function getPickingListLines(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ) {
   return client
@@ -2456,7 +2432,7 @@ export async function getPickingListLines(
  * pickingListLineId → availableQuantity.
  */
 export async function getPickingListAvailability(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ): Promise<Map<string, number>> {
   const result = await client.rpc("get_picking_list_availability", {
@@ -2488,7 +2464,7 @@ export type PickingListRecommendation = {
  * Returns a map of pickingListLineId → recommended lots (empty/partial if short).
  */
 export async function getPickingListRecommendations(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ): Promise<Record<string, PickingListRecommendation[]>> {
   const [linesResult, availableResult] = await Promise.all([
@@ -2554,10 +2530,7 @@ export async function getPickingListRecommendations(
   return recommendations;
 }
 
-export async function getPickingListLine(
-  client: SupabaseClient<Database>,
-  lineId: string
-) {
+export async function getPickingListLine(client: CarbonClient, lineId: string) {
   return client
     .from("pickingListLine")
     .select(
@@ -2568,7 +2541,7 @@ export async function getPickingListLine(
 }
 
 export async function getPickingListLineTrackedEntities(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   lineId: string
 ) {
   return client
@@ -2584,7 +2557,7 @@ export async function getPickingListLineTrackedEntities(
  * points the job material at lineside. `unpick` reverses it.
  */
 export async function setPickingListLineTrackedEntity(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     pickingListLineId: string;
     trackedEntityId: string;
@@ -2658,7 +2631,7 @@ export async function setPickingListLineTrackedEntity(
     if (isBatch) body.quantity = Math.max(1, args.quantity ?? 1);
   }
 
-  const result = await client.functions.invoke("post-picking", { body });
+  const result = await invokeCarbonServiceFunction("post-picking", { body });
   if (result.error) {
     const ctx = (result.error as { context?: Response })?.context;
     let message = "Failed to pick material";
@@ -2679,7 +2652,7 @@ export async function setPickingListLineTrackedEntity(
 }
 
 export async function upsertPickingList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingList:
     | (Omit<z.infer<typeof pickingListValidator>, "id" | "pickingListId"> & {
         pickingListId: string;
@@ -2713,7 +2686,7 @@ export async function upsertPickingList(
 }
 
 export async function updatePickingListStatus(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string,
   status: Database["public"]["Enums"]["pickingListStatus"],
   updatedBy: string
@@ -2729,7 +2702,7 @@ export async function updatePickingListStatus(
 }
 
 export async function upsertPickingListLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   line:
     | (Omit<z.infer<typeof pickingListLineValidator>, "id"> & {
         companyId: string;
@@ -2755,14 +2728,14 @@ export async function upsertPickingListLine(
 }
 
 export async function deletePickingList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   pickingListId: string
 ) {
   return client.from("pickingList").delete().eq("id", pickingListId);
 }
 
 export async function deletePickingListLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   lineId: string
 ) {
   return client.from("pickingListLine").delete().eq("id", lineId);
@@ -2773,7 +2746,7 @@ export async function deletePickingListLine(
 // ----------------------------------------------------------------------------
 
 export async function getPickingSchedule(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     locationId: string;
     companyId: string;
@@ -2796,7 +2769,7 @@ export async function getPickingSchedule(
  * source by on-hand.
  */
 async function getItemOnHandByStorageUnit(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: { itemId: string; locationId: string; companyId: string }
 ): Promise<Map<string, number>> {
   const quantities = await getItemStorageUnitQuantities(
@@ -2825,7 +2798,7 @@ async function getItemOnHandByStorageUnit(
  * "lineside" when it resolves to a work center via `get_effective_work_center_id`.
  */
 async function resolveWarehouseSource(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   onHandByUnit: Map<string, number>
 ): Promise<string | null> {
   // Consider candidates highest-on-hand first.
@@ -2845,7 +2818,7 @@ async function resolveWarehouseSource(
 }
 
 export async function generatePickingList(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     jobOperationIds: string[];
     locationId: string;
@@ -3061,7 +3034,7 @@ export async function generatePickingList(
  * Tracked items go through the scan flow and are rejected here.
  */
 export async function pickPickingListLine(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   args: {
     pickingListLineId: string;
     quantity: number;
@@ -3146,7 +3119,7 @@ export async function pickPickingListLine(
             companyId: pickingList.companyId
           };
 
-    const result = await client.functions.invoke("post-picking", { body });
+    const result = await invokeCarbonServiceFunction("post-picking", { body });
 
     if (result.error) {
       const ctx = (result.error as { context?: Response })?.context;
@@ -3185,7 +3158,7 @@ export async function pickPickingListLine(
 }
 
 export async function insertStockTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     locationId: string;
     lines: Array<{
@@ -3283,7 +3256,7 @@ export async function insertStockTransfer(
 }
 
 export async function insertWarehouseTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     fromLocationId: string;
     toLocationId: string;
@@ -3358,7 +3331,7 @@ export async function insertWarehouseTransfer(
 }
 
 export async function updateStockTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     locationId?: string;
@@ -3387,7 +3360,7 @@ export async function updateStockTransfer(
 }
 
 export async function updateWarehouseTransfer(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   input: {
     id: string;
     fromLocationId?: string;

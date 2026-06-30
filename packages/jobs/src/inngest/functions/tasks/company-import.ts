@@ -51,7 +51,7 @@ export const companyImportFunction = inngest.createFunction(
     } = event.data;
 
     // Onboarding demo templates reference shared assets at
-    // `_templates/<industryId>/` (uploaded once per workspace at deploy) rather
+    // `_templates/<industryId>/` (uploaded once to object storage) rather
     // than copying every file into this company's `{companyId}/` prefix. Real
     // backups have no industryId and stay self-contained (files embedded + copied).
     const referencedTemplate =
@@ -75,7 +75,7 @@ export const companyImportFunction = inngest.createFunction(
       }
 
       const name = backupNameFromSource(filePath);
-      const backup = await readBackup(client, companyId, name);
+      const backup = await readBackup(companyId, name);
 
       if (
         mode === "preserve" &&
@@ -373,12 +373,12 @@ export const companyImportFunction = inngest.createFunction(
       // reseed) to match the path columns rewritten above.
       //
       // A referenced template skips this entirely: its assets already live once
-      // per workspace at `_templates/<industryId>/` (the path columns above now
+      // in object storage at `_templates/<industryId>/` (the path columns above now
       // point there), so copying them into `{companyId}/` would defeat the
       // purpose.
       let storageUploaded = 0;
       if (!referencedTemplate) {
-        const assets = await restoreAssetsFromBackup(client, {
+        const assets = await restoreAssetsFromBackup({
           files: backup.manifest.storage,
           srcBucket: companyId,
           srcPrefix: backupAssetsDir(name),

@@ -119,6 +119,7 @@ import type { action as editQuoteOperationToolAction } from "~/routes/x+/quote+/
 import type { action as newQuoteOperationToolAction } from "~/routes/x+/quote+/methods+/operation.tool.new";
 import { useItems, useTools } from "~/stores";
 import { getPrivateUrl, path } from "~/utils/path";
+import { uploadPrivateFile } from "~/utils/storage.client";
 import { quoteOperationValidator } from "../../sales.models";
 import type { Quotation } from "../../types";
 
@@ -407,9 +408,9 @@ const QuoteBillOfProcess = ({
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
     const fileName = `${companyId}/opportunity-line/${selectedItemId}/${nanoid()}.${fileType}`;
-    const result = await carbon?.storage
-      .from("private")
-      .upload(fileName, file, { upsert: true });
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "sales"
+    });
 
     if (result?.error) {
       throw new Error(result.error.message);
@@ -609,7 +610,7 @@ const QuoteBillOfProcess = ({
         content: (
           <div className="flex flex-col">
             <div>
-              {permissions.can("update", "parts") ? (
+              {permissions.can("update", "sales") ? (
                 <Editor
                   initialValue={
                     workInstructions[item.id] ?? ({} as JSONContent)
@@ -953,16 +954,17 @@ function AttributesForm({
 
   const [description, setDescription] = useState<JSONContent>({});
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/opportunity-line/${operationId}/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "sales"
+    });
 
     if (result?.error) {
       toast.error(t`Failed to upload image`);
@@ -1260,16 +1262,17 @@ function AttributesListItem({
     attribute.description ?? {}
   );
 
-  const { carbon } = useCarbon();
   const {
     company: { id: companyId }
   } = useUser();
 
   const onUploadImage = async (file: File) => {
     const fileType = file.name.split(".").pop();
-    const fileName = `${companyId}/parts/${nanoid()}.${fileType}`;
+    const fileName = `${companyId}/opportunity-line/${operationId}/${nanoid()}.${fileType}`;
 
-    const result = await carbon?.storage.from("private").upload(fileName, file);
+    const result = await uploadPrivateFile(fileName, file, {
+      permission: "sales"
+    });
 
     if (result?.error) {
       toast.error("Failed to upload image");

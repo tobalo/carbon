@@ -1,5 +1,5 @@
-import { getCarbonServiceRole } from "@carbon/auth/client.server";
 import { inngest } from "../../client";
+import { invokeCarbonFunction } from "../invoke-carbon-function";
 
 /**
  * Unified scheduling function that handles both initial scheduling and rescheduling.
@@ -16,7 +16,6 @@ export const rescheduleJobFunction = inngest.createFunction(
   },
   { event: "carbon/reschedule-job" },
   async ({ event, step }) => {
-    const serviceRole = getCarbonServiceRole();
     const {
       jobId,
       companyId,
@@ -31,7 +30,12 @@ export const rescheduleJobFunction = inngest.createFunction(
       );
 
       try {
-        const { data, error } = await serviceRole.functions.invoke("schedule", {
+        const { data, error } = await invokeCarbonFunction<{
+          operationsScheduled: number;
+          workCentersAffected: unknown[];
+          conflictsDetected: number;
+          assemblyDepth: number;
+        }>("schedule", {
           body: {
             jobId,
             companyId,
@@ -47,17 +51,17 @@ export const rescheduleJobFunction = inngest.createFunction(
 
         console.info(
           `${mode === "initial" ? "Scheduled" : "Rescheduled"}: ` +
-            `${data.operationsScheduled} ops, ` +
-            `${data.workCentersAffected.length} WCs, ` +
-            `${data.conflictsDetected} conflicts`
+            `${data?.operationsScheduled ?? 0} ops, ` +
+            `${data?.workCentersAffected.length ?? 0} WCs, ` +
+            `${data?.conflictsDetected ?? 0} conflicts`
         );
 
         return {
           success: true,
-          operationsScheduled: data.operationsScheduled,
-          conflictsDetected: data.conflictsDetected,
-          workCentersAffected: data.workCentersAffected,
-          assemblyDepth: data.assemblyDepth
+          operationsScheduled: data?.operationsScheduled ?? 0,
+          conflictsDetected: data?.conflictsDetected ?? 0,
+          workCentersAffected: data?.workCentersAffected ?? [],
+          assemblyDepth: data?.assemblyDepth ?? 0
         };
       } catch (error) {
         console.error(

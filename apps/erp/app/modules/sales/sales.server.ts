@@ -1,11 +1,10 @@
-import type { Database } from "@carbon/database";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CarbonClient } from "@carbon/auth";
 import { getDatabaseClient } from "~/services/database.server";
 
 type BreakRow = { quantity: number; overridePrice: number; active: boolean };
 
 export async function duplicatePriceOverrides(
-  client: SupabaseClient<Database>,
+  client: CarbonClient,
   companyId: string,
   userId: string,
   source: { customerId?: string; customerTypeId?: string },

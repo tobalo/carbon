@@ -24,7 +24,6 @@ import {
 } from "@carbon/react";
 import { parseDate } from "@internationalized/date";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PostgrestResponse } from "@supabase/supabase-js";
 import { Suspense, useState } from "react";
 import {
   LuCalendar,
@@ -48,7 +47,7 @@ import {
   Supplier
 } from "~/components/Form";
 import { useDateFormatter, usePermissions } from "~/hooks";
-import type { ListItem } from "~/types";
+import type { ListItem, PostgrestResponse } from "~/types";
 import { path } from "~/utils/path";
 import { gaugeRole, gaugeValidator } from "../../quality.models";
 import type { GaugeCalibrationRecord } from "../../types";

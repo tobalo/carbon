@@ -1,4 +1,3 @@
-import { useCarbon } from "@carbon/auth";
 import {
   Card,
   CardAction,
@@ -22,7 +21,6 @@ import {
 } from "@carbon/react";
 import { convertKbToString } from "@carbon/utils";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { FileObject } from "@supabase/storage-js";
 import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 import { LuEllipsisVertical, LuUpload } from "react-icons/lu";
@@ -31,7 +29,9 @@ import { DocumentPreview, FileDropzone } from "~/components";
 import DocumentIcon from "~/components/DocumentIcon";
 import { useDateFormatter, usePermissions, useUser } from "~/hooks";
 import { getDocumentType } from "~/modules/shared";
+import type { FileObject } from "~/types";
 import { path } from "~/utils/path";
+import { removePrivateFiles, uploadPrivateFile } from "~/utils/storage.client";
 import { stripSpecialCharacters } from "~/utils/string";
 
 type SupplierInteractionDocumentsProps = {
@@ -204,11 +204,10 @@ export const useSupplierInteractionDocuments = ({
   const { t } = useLingui();
   const permissions = usePermissions();
   const { company } = useUser();
-  const { carbon } = useCarbon();
   const revalidator = useRevalidator();
   const submit = useSubmit();
 
-  const canDelete = permissions.can("delete", "sales"); // TODO: or is document owner
+  const canDelete = permissions.can("delete", "purchasing"); // TODO: or is document owner
 
   const getPath = useCallback(
     (attachment: { name: string }) => {
@@ -223,19 +222,19 @@ export const useSupplierInteractionDocuments = ({
 
   const deleteAttachment = useCallback(
     async (attachment: FileObject) => {
-      const result = await carbon?.storage
-        .from("private")
-        .remove([getPath(attachment)]);
+      const result = await removePrivateFiles([getPath(attachment)], {
+        permission: "purchasing"
+      });
 
-      if (!result || result.error) {
-        toast.error(result?.error?.message || "Error deleting file");
+      if (result.error) {
+        toast.error(result.error.message || "Error deleting file");
         return;
       }
 
       toast.success(`${attachment.name} deleted successfully`);
       revalidator.revalidate();
     },
-    [carbon?.storage, getPath, revalidator]
+    [getPath, revalidator]
   );
 
   const download = useCallback(
@@ -289,21 +288,14 @@ export const useSupplierInteractionDocuments = ({
 
   const upload = useCallback(
     async (files: File[]) => {
-      if (!carbon) {
-        toast.error(t`Carbon client not available`);
-        return;
-      }
-
       for (const file of files) {
         const fileName = getPath(file);
         toast.info(`Uploading ${file.name}`);
 
-        const fileUpload = await carbon.storage
-          .from("private")
-          .upload(fileName, file, {
-            cacheControl: `${12 * 60 * 60}`,
-            upsert: true
-          });
+        const fileUpload = await uploadPrivateFile(fileName, file, {
+          permission: "purchasing",
+          cacheControl: `${12 * 60 * 60}`
+        });
 
         if (fileUpload.error) {
           toast.error(`Failed to upload file: ${file.name}`);
@@ -318,7 +310,7 @@ export const useSupplierInteractionDocuments = ({
       }
       revalidator.revalidate();
     },
-    [getPath, createDocumentRecord, carbon, revalidator, t]
+    [getPath, createDocumentRecord, revalidator]
   );
 
   return {
@@ -333,21 +325,19 @@ export const useSupplierInteractionDocuments = ({
 const SupplierInteractionDocumentForm = (
   props: SupplierInteractionDocumentFormProps
 ) => {
-  const { company } = useUser();
-  const { carbon } = useCarbon();
   const permissions = usePermissions();
 
   const { upload } = useSupplierInteractionDocuments(props);
 
   const uploadFiles = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && carbon && company) {
+    if (e.target.files) {
       upload(Array.from(e.target.files));
     }
   };
 
   return (
     <File
-      isDisabled={!permissions.can("update", "sales")}
+      isDisabled={!permissions.can("update", "purchasing")}
       leftIcon={<LuUpload />}
       onChange={uploadFiles}
       multiple

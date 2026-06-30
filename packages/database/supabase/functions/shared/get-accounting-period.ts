@@ -1,8 +1,7 @@
-import { SupabaseClient } from "@supabase/supabase-js";
 import { format } from "https://deno.land/std@0.160.0/datetime/mod.ts";
 import { Kysely } from "kysely";
 import { DB } from "../lib/database.ts";
-import { Database } from "../lib/types.ts";
+import type { LegacyPostgrestClient } from "../lib/legacy-client.ts";
 
 // TODO: refactor to use @internationalized/date when npm:<package>@<version> is supported
 const isLeapYear = (year: number) => {
@@ -29,7 +28,7 @@ const daysInMonths: Record<number, number> = {
 // and updates the active accounting period/fiscal year
 
 export async function getCurrentAccountingPeriod<T>(
-  client: SupabaseClient<Database>,
+  client: LegacyPostgrestClient,
   companyId: string,
   db: Kysely<DB>
 ) {
